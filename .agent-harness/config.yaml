@@ -33,6 +33,7 @@ constraints:
   deployment:
     no_nacos: true
     no_service_discovery: true
+    no_redis: true
     single_node: true
 
 model:

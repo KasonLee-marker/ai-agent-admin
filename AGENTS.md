@@ -29,7 +29,17 @@
 | 对话调试 | 🔄 待开始 | P0 |
 | 数据集管理 | 🔄 待开始 | P1 |
 | 评估系统 | 🔄 待开始 | P1 |
+| 文档检索/RAG | 🔄 待开始 | P1 |
 | 可观测性 | 🔄 待开始 | P2 |
+
+## 技术栈
+
+- **后端**: Spring Boot 3.2.x + Spring AI
+- **前端**: React 18 + Ant Design
+- **主数据库**: MySQL / H2
+- **向量数据库**: PostgreSQL + pgvector
+- **Embedding**: text-embedding-v1 (DashScope) 等
+- **部署**: Docker Compose 单节点
 
 ## 任务工作流
 
