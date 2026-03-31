@@ -82,3 +82,10 @@ coverage/
 tmp/
 temp/
 *.tmp
+
+# Agent Harness Work Directory
+work/
+
+# Local environment
+.env.local
+.env.*.local
