@@ -1,0 +1,42 @@
+package com.aiagent.model.domain.repository;
+
+import com.aiagent.model.domain.entity.ModelConfig;
+import com.aiagent.model.domain.entity.ModelProvider;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface ModelConfigRepository extends JpaRepository<ModelConfig, String>, JpaSpecificationExecutor<ModelConfig> {
+
+    Optional<ModelConfig> findByIsDefaultTrue();
+
+    List<ModelConfig> findByProvider(ModelProvider provider);
+
+    List<ModelConfig> findByIsActiveTrue();
+
+    @Modifying
+    @Query("UPDATE ModelConfig m SET m.isDefault = false WHERE m.isDefault = true")
+    void clearDefaultModel();
+
+    @Modifying
+    @Query("UPDATE ModelConfig m SET m.isDefault = true WHERE m.id = :id")
+    void setDefaultModel(@Param("id") String id);
+
+    boolean existsByName(String name);
+
+    @Query("SELECT m FROM ModelConfig m WHERE " +
+           "(:provider IS NULL OR m.provider = :provider) AND " +
+           "(:isActive IS NULL OR m.isActive = :isActive) AND " +
+           "(:keyword IS NULL OR LOWER(m.name) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+           "LOWER(m.modelName) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+    List<ModelConfig> findByFilters(@Param("provider") ModelProvider provider,
+                                    @Param("isActive") Boolean isActive,
+                                    @Param("keyword") String keyword);
+}
