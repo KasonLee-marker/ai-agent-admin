@@ -26,7 +26,7 @@
 |------|------|--------|
 | Prompt 管理 | ✅ 已完成 | P0 |
 | 模型管理 | ✅ 已完成 | P0 |
-| 对话调试 | 🔄 待开始 | P0 |
+| 对话调试 | ✅ 已完成 | P0 |
 | 数据集管理 | 🔄 待开始 | P1 |
 | 评估系统 | 🔄 待开始 | P1 |
 | 文档检索/RAG | 🔄 待开始 | P1 |
@@ -39,11 +39,11 @@ ai-agent-admin/
 ├── pom.xml                          # Parent POM
 ├── admin-server-core/               # Core module (entities, enums, constants)
 │   └── src/main/java/com/aiagent/admin/domain/
-│       ├── entity/                  # PromptTemplate, PromptVersion, ModelConfig
-│       └── enums/                   # ModelProvider
+│       ├── entity/                  # PromptTemplate, PromptVersion, ModelConfig, ChatSession, ChatMessage
+│       └── enums/                   # ModelProvider, MessageRole
 ├── admin-server-runtime/            # Runtime module (services, repositories, controllers)
 │   └── src/main/java/com/aiagent/admin/
-│       ├── api/controller/          # PromptController, ModelController
+│       ├── api/controller/          # PromptController, ModelController, ChatController
 │       ├── api/dto/                 # Request/Response DTOs
 │       ├── api/exception/           # GlobalExceptionHandler
 │       ├── domain/repository/       # JPA Repositories
