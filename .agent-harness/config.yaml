@@ -1,0 +1,42 @@
+project:
+  name: ai-agent-admin
+  version: 1.0.0
+  type: spring-boot-react
+
+agents:
+  - name: coding-agent
+    responsibility: "后端/前端功能实现、Bug 修复"
+    constraints: ["backend", "frontend", "api"]
+  
+  - name: review-agent
+    responsibility: "代码审查、质量门禁"
+    constraints: ["read-only"]
+
+constraints:
+  architecture:
+    layers:
+      - name: domain
+        allowed_dependencies: []
+      - name: service
+        allowed_dependencies: [domain]
+      - name: api
+        allowed_dependencies: [service, domain]
+    forbidden_patterns:
+      - "*.service.* should not import *.api.*"
+      - "Direct database access from API layer"
+  
+  code_quality:
+    min_test_coverage: 70
+    max_line_length: 120
+    require_api_docs: true
+  
+  deployment:
+    no_nacos: true
+    no_service_discovery: true
+    single_node: true
+
+model:
+  provider: dashscope
+  model: qwen3.5-omni-plus-2026-03-15
+  api_key: ${DASHSCOPE_API_KEY}
+  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
