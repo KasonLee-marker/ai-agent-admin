@@ -19,7 +19,7 @@
 | 前端 | React + Ant Design | 18.x |
 | 数据库 | MySQL / H2 | 8.0+ |
 | 缓存 | Redis | 7.x |
-| AI 模型 | 百炼 DashScope | qwen3.5-omni-plus |
+| AI 模型 | Spring AI 支持的多供应商 | OpenAI、DashScope、DeepSeek 等 |
 
 ## 快速开始
 
@@ -87,18 +87,32 @@ ai-agent-admin/
 
 ## 配置说明
 
-### 百炼 API 配置
+### AI 模型配置
+
+Spring AI 支持多种模型供应商，在 `application.yml` 中配置：
 
 ```yaml
-# application.yml
+# OpenAI 示例
+spring:
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      base-url: https://api.openai.com
+      chat:
+        options:
+          model: gpt-4
+
+# 或 DashScope 示例
 spring:
   ai:
     alibaba:
       dashscope:
         api-key: ${DASHSCOPE_API_KEY}
         base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
-        model: qwen3.5-omni-plus-2026-03-15
 ```
+
+更多配置参考 [Spring AI 文档](https://docs.spring.io/spring-ai/reference/)。
+
 
 ### 数据库配置
 
@@ -154,6 +168,6 @@ Apache License 2.0
 
 ## 相关链接
 
+- [Spring AI](https://spring.io/projects/spring-ai)
 - [Spring AI Alibaba](https://github.com/alibaba/spring-ai-alibaba)
-- [百炼 DashScope](https://dashscope.aliyun.com/)
 - [Agent Harness 文档](./docs/agent-harness.md)
