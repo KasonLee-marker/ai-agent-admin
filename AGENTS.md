@@ -24,13 +24,66 @@
 
 | 模块 | 状态 | 优先级 |
 |------|------|--------|
-| Prompt 管理 | 🔄 待开始 | P0 |
-| 模型管理 | 🔄 待开始 | P0 |
-| 对话调试 | 🔄 待开始 | P0 |
+| Prompt 管理 | ✅ 已完成 | P0 |
+| 模型管理 | ✅ 已完成 | P0 |
+| 对话调试 | ✅ 已完成 | P0 |
 | 数据集管理 | 🔄 待开始 | P1 |
 | 评估系统 | 🔄 待开始 | P1 |
 | 文档检索/RAG | 🔄 待开始 | P1 |
 | 可观测性 | 🔄 待开始 | P2 |
+
+## 项目结构 (Multi-Module Maven)
+
+```
+ai-agent-admin/
+├── pom.xml                          # Parent POM
+├── admin-server-core/               # Core module (entities, enums, constants)
+│   └── src/main/java/com/aiagent/admin/domain/
+│       ├── entity/                  # PromptTemplate, PromptVersion, ModelConfig, ChatSession, ChatMessage
+│       └── enums/                   # ModelProvider, MessageRole
+├── admin-server-runtime/            # Runtime module (services, repositories, controllers)
+│   └── src/main/java/com/aiagent/admin/
+│       ├── api/controller/          # PromptController, ModelController, ChatController
+│       ├── api/dto/                 # Request/Response DTOs
+│       ├── api/exception/           # GlobalExceptionHandler
+│       ├── domain/repository/       # JPA Repositories
+│       ├── service/                 # Business services
+│       └── service/mapper/          # MapStruct mappers
+├── admin-server-start/              # Startup module (main class)
+│   └── src/main/java/com/aiagent/admin/AdminApplication.java
+└── frontend/                        # Frontend (React)
+```
+
+## 模块依赖关系
+
+```
+admin-server-start -> admin-server-runtime -> admin-server-core
+```
+
+## 技术栈
+
+- **后端**: Spring Boot 3.2.x + Spring AI 0.8.1
+- **前端**: React 18 + Ant Design
+- **主数据库**: H2 (dev) / PostgreSQL (prod)
+- **构建工具**: Maven 3.9+
+- **Java版本**: 17
+
+## 构建与运行
+
+```bash
+# 编译所有模块
+mvn clean compile
+
+# 运行测试
+mvn test
+
+# 打包
+mvn clean package
+
+# 运行应用
+cd admin-server-start
+mvn spring-boot:run
+```
 
 ## 技术栈
 

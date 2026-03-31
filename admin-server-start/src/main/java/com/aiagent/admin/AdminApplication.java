@@ -1,0 +1,18 @@
+package com.aiagent.admin;
+
+import com.ulisesbocchio.jasyptspringboot.annotation.EnableEncryptableProperties;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.domain.EntityScan;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+
+@SpringBootApplication(scanBasePackages = "com.aiagent.admin")
+@EntityScan(basePackages = "com.aiagent.admin.domain.entity")
+@EnableJpaRepositories(basePackages = "com.aiagent.admin.domain.repository")
+@EnableEncryptableProperties
+public class AdminApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(AdminApplication.class, args);
+    }
+}

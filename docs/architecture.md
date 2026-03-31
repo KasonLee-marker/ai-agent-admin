@@ -2,6 +2,8 @@
 
 ## 系统架构
 
+### 整体架构
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        前端层 (React 18)                     │
@@ -39,8 +41,8 @@
 ┌─────────────────────────────────────────────────────────────┐
 │                      数据层                                   │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
-│  │    MySQL    │  │ PostgreSQL  │  │   本地文件存储       │  │
-│  │  (主存储)    │  │ (向量+文档)  │  │   (数据集/日志)      │  │
+│  │    H2       │  │ PostgreSQL  │  │   本地文件存储       │  │
+│  │  (开发)      │  │ (生产+向量)  │  │   (数据集/日志)      │  │
 │  └─────────────┘  └─────────────┘  └─────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -48,6 +50,75 @@
 ┌─────────────────────────────────────────────────────────────┐
 │                    AI 模型层                                  │
 │         Spring AI 支持的多供应商 (OpenAI/DashScope等)         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 后端模块结构 (Multi-Module Maven)
+
+```
+ai-agent-admin/
+├── pom.xml                          # Parent POM - 依赖管理
+├── admin-server-core/               # 核心模块 - 实体、枚举、常量
+│   └── src/main/java/com/aiagent/admin/domain/
+│       ├── entity/
+│       │   ├── PromptTemplate.java  # Prompt 模板实体
+│       │   ├── PromptVersion.java   # Prompt 版本实体
+│       │   └── ModelConfig.java     # 模型配置实体
+│       └── enums/
+│           └── ModelProvider.java   # 模型供应商枚举
+├── admin-server-runtime/            # 运行时模块 - 业务逻辑
+│   └── src/main/java/com/aiagent/admin/
+│       ├── api/
+│       │   ├── controller/          # REST API 控制器
+│       │   │   ├── PromptController.java
+│       │   │   └── ModelController.java
+│       │   ├── dto/                 # 数据传输对象
+│       │   │   ├── PromptTemplateCreateRequest.java
+│       │   │   ├── PromptTemplateResponse.java
+│       │   │   ├── CreateModelRequest.java
+│       │   │   └── ModelResponse.java
+│       │   └── exception/
+│       │       └── GlobalExceptionHandler.java
+│       ├── domain/repository/       # JPA 仓储接口
+│       │   ├── PromptTemplateRepository.java
+│       │   ├── PromptVersionRepository.java
+│       │   └── ModelConfigRepository.java
+│       ├── service/                 # 业务服务层
+│       │   ├── PromptService.java
+│       │   ├── PromptServiceImpl.java
+│       │   ├── ModelConfigService.java
+│       │   ├── ModelService.java
+│       │   ├── EncryptionService.java
+│       │   ├── IdGenerator.java
+│       │   └── HealthCheckService.java
+│       └── service/mapper/          # MapStruct 映射器
+│           ├── PromptMapper.java
+│           └── ModelMapper.java
+└── admin-server-start/              # 启动模块
+    └── src/main/java/com/aiagent/admin/
+        └── AdminApplication.java    # Spring Boot 主类
+```
+
+### 模块依赖关系
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    模块依赖图                                │
+│                                                             │
+│   ┌──────────────────┐                                      │
+│   │ admin-server-start│  ← 启动入口                         │
+│   └────────┬─────────┘                                      │
+│            │ depends on                                     │
+│            ▼                                                │
+│   ┌──────────────────┐                                      │
+│   │admin-server-runtime│ ← 业务逻辑、API、仓储               │
+│   └────────┬─────────┘                                      │
+│            │ depends on                                     │
+│            ▼                                                │
+│   ┌──────────────────┐                                      │
+│   │ admin-server-core │ ← 实体、枚举、常量                   │
+│   └──────────────────┘                                      │
+│                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -98,13 +169,18 @@
 
 | 层级 | 技术 | 版本 |
 |------|------|------|
-| 后端框架 | Spring Boot | 3.2.x |
-| AI 框架 | Spring AI | 1.0.x |
-| 主数据库 | MySQL / H2 | 8.0+ |
+| 后端框架 | Spring Boot | 3.2.12 |
+| AI 框架 | Spring AI | 0.8.1 |
+| Java 版本 | OpenJDK | 17 |
+| 主数据库 | H2 (dev) / PostgreSQL (prod) | - |
 | 向量数据库 | PostgreSQL + pgvector | 15+ |
+| ORM 框架 | Spring Data JPA | - |
+| API 文档 | SpringDoc OpenAPI | 2.3.0 |
+| 对象映射 | MapStruct | 1.5.5 |
+| 加密 | Jasypt | 3.0.5 |
 | 前端 | React | 18.x |
 | UI 组件 | Ant Design | 5.x |
-| 构建工具 | Maven / npm | - |
+| 构建工具 | Maven | 3.9+ |
 
 ## 部署架构
 
@@ -112,8 +188,9 @@
 ┌─────────────────────────────────────────────┐
 │              Docker Compose                  │
 │  ┌─────────┐  ┌─────────┐  ┌─────────────┐ │
-│  │  App    │  │  MySQL  │  │ PostgreSQL  │ │
-│  │ Server  │  │         │  │  (pgvector) │ │
+│  │  App    │  │   H2    │  │ PostgreSQL  │ │
+│  │ Server  │  │  (dev)  │  │  (pgvector) │ │
+│  │ (JAR)   │  │         │  │   (prod)    │ │
 │  └─────────┘  └─────────┘  └─────────────┘ │
 │  ┌─────────┐                                │
 │  │  React  │                                │
@@ -123,6 +200,56 @@
 ```
 
 单节点部署，适合企业内网使用。
+
+## 构建与运行
+
+### 本地开发
+
+```bash
+# 1. 克隆项目
+git clone <repo-url>
+cd ai-agent-admin
+
+# 2. 编译所有模块
+mvn clean compile
+
+# 3. 运行测试
+mvn test
+
+# 4. 启动应用
+cd admin-server-start
+mvn spring-boot:run
+
+# 5. 访问 API 文档
+open http://localhost:8080/swagger-ui.html
+```
+
+### 生产打包
+
+```bash
+# 打包所有模块
+mvn clean package -DskipTests
+
+# 生成的 JAR 文件位置
+admin-server-start/target/admin-server-start-1.0.0-SNAPSHOT.jar
+```
+
+### Docker 部署
+
+```bash
+# 构建镜像
+docker build -t ai-agent-admin:latest .
+
+# 运行容器
+docker run -p 8080:8080 \
+  -e JASYPT_PASSWORD=your-secret \
+  -e DB_HOST=postgres \
+  -e DB_PORT=5432 \
+  -e DB_NAME=admindb \
+  -e DB_USER=admin \
+  -e DB_PASSWORD=secret \
+  ai-agent-admin:latest
+```
 
 ## RAG/文档检索设计
 
