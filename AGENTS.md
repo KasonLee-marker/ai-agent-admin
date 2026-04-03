@@ -27,10 +27,10 @@
 | Prompt 管理 | ✅ 已完成 | P0 |
 | 模型管理 | ✅ 已完成 | P0 |
 | 对话调试 | ✅ 已完成 | P0 |
-| 数据集管理 | 🔄 待开始 | P1 |
-| 评估系统 | 🔄 待开始 | P1 |
-| 文档检索/RAG | 🔄 待开始 | P1 |
-| 可观测性 | 🔄 待开始 | P2 |
+| 数据集管理 | ✅ 已完成 | P1 |
+| 评估系统 | ⏳ 待开始 | P1 |
+| 文档检索/RAG | ⏳ 待开始 | P1 |
+| 可观测性 | ⏳ 待开始 | P2 |
 
 ## 项目结构 (Multi-Module Maven)
 
@@ -39,11 +39,11 @@ ai-agent-admin/
 ├── pom.xml                          # Parent POM
 ├── admin-server-core/               # Core module (entities, enums, constants)
 │   └── src/main/java/com/aiagent/admin/domain/
-│       ├── entity/                  # PromptTemplate, PromptVersion, ModelConfig, ChatSession, ChatMessage
-│       └── enums/                   # ModelProvider, MessageRole
+│       ├── entity/                  # PromptTemplate, PromptVersion, ModelConfig, ChatSession, ChatMessage, Dataset, DatasetItem
+│       └── enums/                   # ModelProvider, MessageRole, DatasetStatus, DatasetItemStatus
 ├── admin-server-runtime/            # Runtime module (services, repositories, controllers)
 │   └── src/main/java/com/aiagent/admin/
-│       ├── api/controller/          # PromptController, ModelController, ChatController
+│       ├── api/controller/          # PromptController, ModelController, ChatController, DatasetController
 │       ├── api/dto/                 # Request/Response DTOs
 │       ├── api/exception/           # GlobalExceptionHandler
 │       ├── domain/repository/       # JPA Repositories
@@ -64,7 +64,8 @@ admin-server-start -> admin-server-runtime -> admin-server-core
 
 - **后端**: Spring Boot 3.2.x + Spring AI 0.8.1
 - **前端**: React 18 + Ant Design
-- **主数据库**: H2 (dev) / PostgreSQL (prod)
+- **主数据库**: PostgreSQL 15 + pgvector (prod) / H2 (dev)
+- **向量数据库**: PostgreSQL + pgvector
 - **构建工具**: Maven 3.9+
 - **Java版本**: 17
 
@@ -89,7 +90,7 @@ mvn spring-boot:run
 
 - **后端**: Spring Boot 3.2.x + Spring AI
 - **前端**: React 18 + Ant Design
-- **主数据库**: MySQL / H2
+- **主数据库**: PostgreSQL 15 + pgvector / H2 (dev)
 - **向量数据库**: PostgreSQL + pgvector
 - **Embedding**: text-embedding-v1 (DashScope) 等
 - **部署**: Docker Compose 单节点

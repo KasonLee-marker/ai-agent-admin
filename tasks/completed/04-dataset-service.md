@@ -26,6 +26,7 @@
 - [2025-04-03 17:15] 修复 DatasetControllerTest：添加缺失的 datasetId 字段
 - [2025-04-03 17:19] 所有 110 个单元测试通过
 - [2025-04-03 17:20] 测试覆盖率验证：DatasetServiceImpl 88%，DatasetController 96%，均 >70%
+- [2025-04-03 17:42] ✅ 任务完成，文档已更新，移动至 completed/
 
 ## Constraints
 - 遵循现有代码风格和架构分层

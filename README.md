@@ -18,9 +18,10 @@
 |------|------|------|
 | 后端 | Spring Boot + Spring AI | 3.2.x |
 | 前端 | React + Ant Design | 18.x |
-| 数据库 | MySQL / H2 | 8.0+ |
-| 向量数据库 | PostgreSQL + pgvector | 15+ |
+| 主数据库 | PostgreSQL + pgvector | 15+ |
+| 开发数据库 | H2 | - |
 | AI 模型 | Spring AI 支持的多供应商 | OpenAI、DashScope、DeepSeek 等 |
+| 构建工具 | Maven | 3.9+ |
 
 ## 快速开始
 
@@ -28,27 +29,53 @@
 
 - Java 17+
 - Node.js 18+
-- Maven 3.8+
+- Maven 3.9+
 - Docker & Docker Compose（可选）
 
-### 本地开发
+### 1. 克隆项目
 
 ```bash
-# 克隆项目
 git clone https://github.com/KasonLee-marker/ai-agent-admin.git
 cd ai-agent-admin
+```
+
+### 2. 初始化数据库（可选）
+
+```bash
+# 启动 PostgreSQL + pgvector
+docker run -d \
+  --name agentx-postgres \
+  -e POSTGRES_USER=agentx \
+  -e POSTGRES_DB=aiagent \
+  -p 5432:5432 \
+  pgvector/pgvector:pg15
+
+# 初始化数据库表结构
+docker exec -i agentx-postgres psql -U agentx -d aiagent < docs/database/schema.sql
+```
+
+详见 [docs/database/README.md](./docs/database/README.md)
+
+### 3. 本地开发
+
+```bash
+# 编译所有模块
+mvn clean compile
+
+# 运行测试
+mvn test
 
 # 启动后端（开发模式）
-cd src/backend
+cd admin-server-start
 mvn spring-boot:run -Dspring-boot.run.profiles=dev
 
-# 启动前端
-cd src/frontend
+# 启动前端（在另一个终端）
+cd frontend
 npm install
 npm run dev
 ```
 
-### Docker 部署
+### 4. Docker 部署
 
 ```bash
 # 启动所有服务
@@ -66,21 +93,27 @@ ai-agent-admin/
 ├── docs/                     # 文档
 │   ├── architecture.md       # 架构文档
 │   ├── api/                  # API 文档
+│   ├── database/             # 数据库配置和初始化脚本
 │   └── guides/               # 使用指南
-├── src/
-│   ├── backend/              # Spring Boot 后端
-│   │   ├── prompt-service/   # Prompt 管理服务
-│   │   ├── model-service/    # 模型管理服务
-│   │   ├── chat-service/     # 对话服务
-│   │   ├── dataset-service/  # 数据集服务
-│   │   └── eval-service/     # 评估服务
-│   └── frontend/             # React 前端
-│       └── src/
+├── admin-server-core/        # Core 模块（实体、枚举、常量）
+│   └── src/main/java/com/aiagent/admin/domain/
+│       ├── entity/           # PromptTemplate, ModelConfig, ChatSession, Dataset, DatasetItem...
+│       └── enums/            # ModelProvider, MessageRole...
+├── admin-server-runtime/     # Runtime 模块（业务逻辑、API、仓储）
+│   └── src/main/java/com/aiagent/admin/
+│       ├── api/controller/   # PromptController, ModelController, ChatController, DatasetController...
+│       ├── api/dto/          # Request/Response DTOs
+│       ├── domain/repository/# JPA Repositories
+│       ├── service/          # Business services
+│       └── service/mapper/   # MapStruct mappers
+├── admin-server-start/       # Startup 模块（Spring Boot 主类）
+│   └── src/main/java/com/aiagent/admin/AdminApplication.java
+├── frontend/                 # React 前端
+│   └── src/
 ├── tasks/                    # 任务跟踪
 │   ├── active/               # 进行中
 │   ├── completed/            # 已完成
 │   └── backlog/              # 待办
-├── tests/                    # 测试
 └── .agent-harness/           # Agent Harness 配置
     ├── config.yaml
     └── constraints/
@@ -117,22 +150,41 @@ spring:
 
 ### 数据库配置
 
+#### 开发环境（H2）
+
 ```yaml
-# 开发环境使用 H2
 spring:
   datasource:
     url: jdbc:h2:mem:aiagent
     driver-class-name: org.h2.Driver
     username: sa
     password:
-
-# 生产环境使用 MySQL
-# spring:
-#   datasource:
-#     url: jdbc:mysql://localhost:3306/aiagent
-#     username: root
-#     password: password
 ```
+
+#### 生产环境（PostgreSQL + pgvector）
+
+```yaml
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/aiagent
+    username: aiagent_admin
+    password: AiAgent@2026
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+```
+
+**数据库初始化**：
+```bash
+# 使用提供的 SQL 脚本初始化数据库
+docker exec -i agentx-postgres psql -U agentx -d aiagent < docs/database/schema.sql
+```
+
+详见 [docs/database/README.md](./docs/database/README.md)
 
 ## Agent Harness 工作流
 
@@ -149,10 +201,10 @@ spring:
 
 | 模块 | 状态 | 优先级 |
 |------|------|--------|
-| Prompt 管理 | 🔄 进行中 | P0 |
-| 模型管理 | ⏳ 待开始 | P0 |
-| 对话调试 | ⏳ 待开始 | P0 |
-| 数据集管理 | ⏳ 待开始 | P1 |
+| Prompt 管理 | ✅ 已完成 | P0 |
+| 模型管理 | ✅ 已完成 | P0 |
+| 对话调试 | ✅ 已完成 | P0 |
+| 数据集管理 | ✅ 已完成 | P1 |
 | 评估系统 | ⏳ 待开始 | P1 |
 | 文档检索/RAG | ⏳ 待开始 | P1 |
 | 可观测性 | ⏳ 待开始 | P2 |
