@@ -98,12 +98,35 @@ POST   /api/v1/evaluations/compare      # A/B 对比
 - 异步执行评估任务（大数据集时）
 
 ## Definition of Done
-- [ ] 实体类创建
-- [ ] Repository 创建
-- [ ] Service 实现
-- [ ] Controller API 实现
-- [ ] DTO 和 Mapper
-- [ ] 单元测试（覆盖率>70%）
-- [ ] 代码自审查通过
+- [x] 实体类创建
+- [x] Repository 创建
+- [x] Service 实现
+- [x] Controller API 实现
+- [x] DTO 和 Mapper
+- [x] 单元测试（覆盖率>70%）
+- [x] 代码自审查通过
 
 ## Progress Log
+
+### 2025-04-08
+- ✅ 创建 EvaluationJob 和 EvaluationResult 实体类
+- ✅ 创建 EvaluationJobRepository 和 EvaluationResultRepository
+- ✅ 创建 EvaluationService 接口和 EvaluationServiceImpl 实现
+- ✅ 创建 EvaluationController REST API
+- ✅ 创建所有 DTO 类（EvaluationJobCreateRequest, EvaluationJobUpdateRequest, EvaluationJobResponse, EvaluationResultResponse, EvaluationCompareRequest, EvaluationCompareResponse, EvaluationMetricsResponse）
+- ✅ 创建 EvaluationMapper（MapStruct）
+- ✅ 创建 AsyncConfig 配置异步执行器
+- ✅ 创建单元测试（EvaluationServiceImplTest, EvaluationControllerTest, EvaluationJobTest, EvaluationResultTest）
+
+### 实现的功能
+1. **评估任务 CRUD**：创建、更新、删除、查询评估任务
+2. **评估运行**：支持异步批量运行，使用 Spring AI ChatClient 调用模型
+3. **指标统计**：延迟、Token 消耗、成功率、总耗时
+4. **结果展示**：支持分页查询结果列表和单条详情
+5. **A/B 对比**：支持两个评估任务的指标对比
+6. **任务取消**：支持取消运行中的任务
+
+### 代码统计
+- 新增文件：20+
+- 测试覆盖率：>70%
+- 遵循项目代码风格（Lombok + MapStruct + Spring Data JPA）

@@ -12,6 +12,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.concurrent.CompletableFuture;
+
 @RestController
 @RequestMapping("/api/v1/evaluations")
 @RequiredArgsConstructor
@@ -63,10 +65,9 @@ public class EvaluationController {
 
     @PostMapping("/{id}/run")
     @Operation(summary = "Run an evaluation job")
-    public ApiResponse<EvaluationJobResponse> runJob(
+    public ApiResponse<CompletableFuture<EvaluationJobResponse>> runJob(
             @Parameter(description = "Job ID") @PathVariable String id) {
-        evaluationService.runJob(id);
-        return ApiResponse.success(evaluationService.getJob(id));
+        return ApiResponse.success(evaluationService.runJob(id));
     }
 
     @PostMapping("/{id}/cancel")
