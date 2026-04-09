@@ -1,4 +1,3 @@
-import client from './client'
 import {ApiResponse} from '@/types/api'
 
 export interface LoginRequest {

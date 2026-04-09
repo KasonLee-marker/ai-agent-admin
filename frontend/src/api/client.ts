@@ -1,5 +1,4 @@
-import axios, {AxiosInstance, AxiosError} from 'axios'
-import {ApiResponse} from '@/types/api'
+import axios, {AxiosError, AxiosInstance} from 'axios'
 
 const client: AxiosInstance = axios.create({
     baseURL: '/api/v1',
