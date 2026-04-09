@@ -4,12 +4,12 @@ spring:
   profiles:
     active: dev
 
-  # Database Configuration
+  # Database Configuration (PostgreSQL)
   datasource:
-    url: jdbc:h2:mem:admindb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
+    url: jdbc:postgresql://localhost:5432/admindb
+    driver-class-name: org.postgresql.Driver
+    username: adminuser
+    password: adminpass123
 
   # JPA Configuration
   jpa:
@@ -19,12 +19,12 @@ spring:
     properties:
       hibernate:
         format_sql: true
-        dialect: org.hibernate.dialect.H2Dialect
+        dialect: org.hibernate.dialect.PostgreSQLDialect
 
-  # H2 Console (dev only)
+  # H2 Console (disabled - using PostgreSQL)
   h2:
     console:
-      enabled: true
+      enabled: false
       path: /h2-console
 
   # Spring AI Configuration
