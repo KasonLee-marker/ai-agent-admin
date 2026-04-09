@@ -27,12 +27,14 @@ spring:
       enabled: false
       path: /h2-console
 
-  # Spring AI Configuration
+  # Spring AI Configuration (阿里云 DashScope)
   ai:
     openai:
-      api-key: ${OPENAI_API_KEY:}
-    ollama:
-      base-url: http://localhost:11434
+      base-url: https://coding.dashscope.aliyuncs.com/v1
+      api-key: ${ANTHROPIC_AUTH_TOKEN}
+      chat:
+        options:
+          model: claude-3-5-sonnet-20241022
 
 # Jasypt Configuration
 jasypt:
@@ -77,24 +79,3 @@ management:
   endpoint:
     health:
       show-details: when-authorized
-
----
-# Production Profile
-spring:
-  config:
-    activate:
-      on-profile: prod
-  datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:admindb}
-    driver-class-name: org.postgresql.Driver
-    username: ${DB_USER:adminuser}
-    password: ${DB_PASSWORD:}
-  jpa:
-    hibernate:
-      ddl-auto: validate
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-  h2:
-    console:
-      enabled: false

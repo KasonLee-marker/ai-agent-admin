@@ -37,13 +37,12 @@ public class ModelConfig {
     @Column(name = "base_url", length = 500)
     private String baseUrl;
 
-    @Column(precision = 3, scale = 2)
     private Double temperature;
 
     @Column(name = "max_tokens")
     private Integer maxTokens;
 
-    @Column(name = "top_p", precision = 3, scale = 2)
+    @Column(name = "top_p")
     private Double topP;
 
     @Column(name = "extra_params", length = 2000)

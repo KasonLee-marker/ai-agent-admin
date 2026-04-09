@@ -110,20 +110,70 @@ CREATE TABLE IF NOT EXISTS dataset_items (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ==================== 评估系统模块 ====================
+
+-- 评估任务表
+CREATE TABLE IF NOT EXISTS evaluation_jobs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(200) NOT NULL,
+    description VARCHAR(1000),
+    prompt_template_id UUID REFERENCES prompt_templates(id),
+    model_config_id UUID REFERENCES model_configs(id),
+    dataset_id UUID NOT NULL REFERENCES datasets(id),
+    status VARCHAR(20) DEFAULT 'PENDING',
+    total_items INTEGER DEFAULT 0,
+    completed_items INTEGER DEFAULT 0,
+    metrics JSONB,
+    started_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(100)
+);
+
+-- 评估结果表
+CREATE TABLE IF NOT EXISTS evaluation_results (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_id UUID NOT NULL REFERENCES evaluation_jobs(id) ON DELETE CASCADE,
+    dataset_item_id UUID REFERENCES dataset_items(id),
+    input TEXT NOT NULL,
+    expected_output TEXT,
+    actual_output TEXT,
+    latency_ms INTEGER,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    status VARCHAR(20) DEFAULT 'SUCCESS',
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ==================== 文档检索/RAG模块 ====================
 
 -- 文档表
 CREATE TABLE IF NOT EXISTS documents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(200) NOT NULL,
-    content TEXT,
-    file_type VARCHAR(50),
+    content_type VARCHAR(50),
     file_size BIGINT,
-    status VARCHAR(20) DEFAULT 'ACTIVE',
-    embedding vector(1536),
+    file_path VARCHAR(500),
+    total_chunks INTEGER DEFAULT 0,
+    embedding_model VARCHAR(100),
+    status VARCHAR(20) DEFAULT 'PROCESSING',
+    error_message TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(100)
+);
+
+-- 文档分块表（向量存储）
+CREATE TABLE IF NOT EXISTS document_chunks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    chunk_index INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    embedding VECTOR(1536),
+    metadata JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ==================== 索引 ====================
@@ -142,10 +192,15 @@ CREATE INDEX IF NOT EXISTS idx_dataset_category ON datasets(category);
 CREATE INDEX IF NOT EXISTS idx_dataset_items_dataset ON dataset_items(dataset_id);
 CREATE INDEX IF NOT EXISTS idx_dataset_items_version ON dataset_items(dataset_id, version);
 
+CREATE INDEX IF NOT EXISTS idx_evaluation_jobs_status ON evaluation_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_evaluation_jobs_dataset ON evaluation_jobs(dataset_id);
+CREATE INDEX IF NOT EXISTS idx_evaluation_results_job ON evaluation_results(job_id);
+
 CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
+CREATE INDEX IF NOT EXISTS idx_document_chunks_document ON document_chunks(document_id);
 
 -- 向量索引（用于相似度搜索）
-CREATE INDEX IF NOT EXISTS idx_documents_embedding ON documents USING ivfflat (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS idx_document_chunks_embedding ON document_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
 -- ==================== 初始数据 ====================
 
