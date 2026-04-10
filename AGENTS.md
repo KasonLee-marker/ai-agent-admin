@@ -28,7 +28,7 @@
 | 模型管理       | ✅ 已完成 | P0  |
 | 对话调试       | ✅ 已完成 | P0  |
 | 数据集管理      | ✅ 已完成 | P1  |
-| 评估系统       | ✅ 已完成 | P1  |
+| 评估系统       | ⏳ 进行中 | P1  |
 | 文档检索/RAG   | ✅ 已完成 | P1  |
 | 前端 (React) | ⏳ 开发中 | P1  |
 | 可观测性       | ⏳ 待开始 | P2  |
@@ -63,8 +63,8 @@ admin-server-start -> admin-server-runtime -> admin-server-core
 
 ## 技术栈
 
-- **后端**: Spring Boot 3.2.x + Spring AI 0.8.1
-- **前端**: React 18 + Ant Design
+- **后端**: Spring Boot 3.2.12 + Spring AI 0.8.1
+- **前端**: React 18 + Ant Design 5.x
 - **主数据库**: PostgreSQL 15 + pgvector (prod) / H2 (dev)
 - **向量数据库**: PostgreSQL + pgvector
 - **构建工具**: Maven 3.9+
@@ -89,8 +89,8 @@ mvn spring-boot:run
 
 ## 技术栈
 
-- **后端**: Spring Boot 3.2.x + Spring AI
-- **前端**: React 18 + Ant Design
+- **后端**: Spring Boot 3.2.12 + Spring AI 0.8.1
+- **前端**: React 18 + Ant Design 5.x
 - **主数据库**: PostgreSQL 15 + pgvector / H2 (dev)
 - **向量数据库**: PostgreSQL + pgvector
 - **Embedding**: text-embedding-v1 (DashScope) 等

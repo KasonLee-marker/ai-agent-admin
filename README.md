@@ -16,12 +16,13 @@
 
 | 层级 | 技术 | 版本 |
 |------|------|------|
-| 后端 | Spring Boot + Spring AI | 3.2.x |
-| 前端 | React + Ant Design | 18.x |
+| 后端 | Spring Boot + Spring AI | 3.2.12 + 0.8.1 |
+| 前端 | React + Ant Design | 18.x + 5.x |
 | 主数据库 | PostgreSQL + pgvector | 15+ |
 | 开发数据库 | H2 | - |
 | AI 模型 | Spring AI 支持的多供应商 | OpenAI、DashScope、DeepSeek 等 |
 | 构建工具 | Maven | 3.9+ |
+| Java 版本 | OpenJDK | 17 |
 
 ## 快速开始
 
@@ -218,8 +219,8 @@ docker exec -i agentx-postgres psql -U agentx -d aiagent < docs/database/schema.
 | 模型管理 | ✅ 已完成 | P0 |
 | 对话调试 | ✅ 已完成 | P0 |
 | 数据集管理 | ✅ 已完成 | P1 |
-| 评估系统 | ⏳ 待开始 | P1 |
-| 文档检索/RAG | ⏳ 待开始 | P1 |
+| 评估系统 | ⏳ 进行中 | P1 |
+| 文档检索/RAG | ✅ 已完成 | P1 |
 | 可观测性 | ⏳ 待开始 | P2 |
 
 ## 贡献指南

@@ -17,8 +17,8 @@
 - [ ] 批量操作（批量删除、批量分类）
 
 ### 技术需求
-- [ ] 使用 Spring Boot 3.2.x
-- [ ] 使用 JPA + MySQL/H2
+- [x] 使用 Spring Boot 3.2.12
+- [x] 使用 JPA + PostgreSQL/H2
 - [ ] RESTful API 设计
 - [ ] 单元测试覆盖率 > 70%
 - [ ] API 文档（OpenAPI/Swagger）

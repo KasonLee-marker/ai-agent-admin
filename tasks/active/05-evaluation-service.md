@@ -1,5 +1,7 @@
 # Task: 评估系统 MVP (Evaluation Service MVP)
 
+## 状态：⏳ 进行中
+
 ## Objective
 实现评估系统 MVP 版本，支持基础的评估任务创建、批量运行、结果展示。
 
