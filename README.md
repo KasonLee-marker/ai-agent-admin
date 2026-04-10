@@ -16,12 +16,13 @@
 
 | 层级 | 技术 | 版本 |
 |------|------|------|
-| 后端 | Spring Boot + Spring AI | 3.2.x |
-| 前端 | React + Ant Design | 18.x |
+| 后端 | Spring Boot + Spring AI | 3.2.12 + 0.8.1 |
+| 前端 | React + Ant Design | 18.x + 5.x |
 | 主数据库 | PostgreSQL + pgvector | 15+ |
 | 开发数据库 | H2 | - |
 | AI 模型 | Spring AI 支持的多供应商 | OpenAI、DashScope、DeepSeek 等 |
 | 构建工具 | Maven | 3.9+ |
+| Java 版本 | OpenJDK | 17 |
 
 ## 快速开始
 
@@ -39,18 +40,31 @@ git clone https://github.com/KasonLee-marker/ai-agent-admin.git
 cd ai-agent-admin
 ```
 
-### 2. 初始化数据库（可选）
+### 2. 初始化数据库
+
+#### 2.1 启动 PostgreSQL + pgvector
 
 ```bash
-# 启动 PostgreSQL + pgvector
+# 启动 PostgreSQL + pgvector（已内置向量插件）
 docker run -d \
   --name agentx-postgres \
   -e POSTGRES_USER=agentx \
   -e POSTGRES_DB=aiagent \
   -p 5432:5432 \
   pgvector/pgvector:pg15
+```
 
-# 初始化数据库表结构
+> **注意**: 使用 `pgvector/pgvector` 镜像已内置 pgvector 插件。如使用标准 PostgreSQL 镜像，需手动安装插件：
+> ```bash
+> # 在 PostgreSQL 容器中执行
+> apt-get update && apt-get install -y postgresql-15-pgvector
+> # 然后在数据库中启用
+> CREATE EXTENSION IF NOT EXISTS vector;
+> ```
+
+#### 2.2 初始化数据库表结构
+
+```bash
 docker exec -i agentx-postgres psql -U agentx -d aiagent < docs/database/schema.sql
 ```
 
@@ -205,8 +219,8 @@ docker exec -i agentx-postgres psql -U agentx -d aiagent < docs/database/schema.
 | 模型管理 | ✅ 已完成 | P0 |
 | 对话调试 | ✅ 已完成 | P0 |
 | 数据集管理 | ✅ 已完成 | P1 |
-| 评估系统 | ⏳ 待开始 | P1 |
-| 文档检索/RAG | ⏳ 待开始 | P1 |
+| 评估系统 | ⏳ 进行中 | P1 |
+| 文档检索/RAG | ✅ 已完成 | P1 |
 | 可观测性 | ⏳ 待开始 | P2 |
 
 ## 贡献指南

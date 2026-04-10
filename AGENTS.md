@@ -3,7 +3,7 @@
 ## 项目概述
 
 - **名称**: AI Agent Admin
-- **技术栈**: Spring Boot 3.x + Spring AI + React 18 + MySQL/H2
+- **技术栈**: Spring Boot 3.x + Spring AI + React 18 + PostgreSQL/H2
 - **目的**: 企业内网 AI Agent 管理平台（Prompt 管理、模型调用、对话调试、数据集管理、评估系统）
 
 ## 快速链接
@@ -28,7 +28,7 @@
 | 模型管理       | ✅ 已完成 | P0  |
 | 对话调试       | ✅ 已完成 | P0  |
 | 数据集管理      | ✅ 已完成 | P1  |
-| 评估系统       | ✅ 已完成 | P1  |
+| 评估系统       | ⏳ 进行中 | P1  |
 | 文档检索/RAG   | ✅ 已完成 | P1  |
 | 前端 (React) | ⏳ 开发中 | P1  |
 | 可观测性       | ⏳ 待开始 | P2  |
@@ -63,8 +63,8 @@ admin-server-start -> admin-server-runtime -> admin-server-core
 
 ## 技术栈
 
-- **后端**: Spring Boot 3.2.x + Spring AI 0.8.1
-- **前端**: React 18 + Ant Design
+- **后端**: Spring Boot 3.2.12 + Spring AI 0.8.1
+- **前端**: React 18 + Ant Design 5.x
 - **主数据库**: PostgreSQL 15 + pgvector (prod) / H2 (dev)
 - **向量数据库**: PostgreSQL + pgvector
 - **构建工具**: Maven 3.9+
@@ -89,8 +89,8 @@ mvn spring-boot:run
 
 ## 技术栈
 
-- **后端**: Spring Boot 3.2.x + Spring AI
-- **前端**: React 18 + Ant Design
+- **后端**: Spring Boot 3.2.12 + Spring AI 0.8.1
+- **前端**: React 18 + Ant Design 5.x
 - **主数据库**: PostgreSQL 15 + pgvector / H2 (dev)
 - **向量数据库**: PostgreSQL + pgvector
 - **Embedding**: text-embedding-v1 (DashScope) 等
@@ -115,6 +115,8 @@ mvn spring-boot:run
 - DashScope 阿里云 (https://dashscope.aliyuncs.com/compatible-mode/v1)
 - DeepSeek (https://api.deepseek.com/v1)
 - Ollama (本地 http://localhost:11434)
+
+> ⚠️ **安全提示**: 请将 API Key 配置在环境变量中，不要硬编码到代码或配置文件中。
 
 ## 沟通方式
 
