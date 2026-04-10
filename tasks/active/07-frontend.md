@@ -326,3 +326,24 @@ Completed:
 
 Next: 任务完成，可移动到 completed 目录
 Blockers: None
+
+### 2026-04-11 流式输出实现完成
+
+Status: [COMPLETE]
+Completed:
+
+- 安装 ai 和 @ai-sdk/react 包（用于参考，实际使用 react-markdown）
+- 实现 `sendMessageStream()` SSE 流式请求
+- 解析 SSE 格式 `data: xxx\n`，提取实际内容
+- 流式消息实时渲染到 Markdown
+- 临时消息 + 完成后刷新真实数据
+- 前端编译通过
+
+技术细节:
+
+- fetch + ReadableStream 读取 SSE
+- react-markdown + remark-gfm + rehype-highlight 实时渲染
+- 状态标识「生成中...」
+
+Next: 性能优化（可选）
+Blockers: None

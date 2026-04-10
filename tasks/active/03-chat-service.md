@@ -67,19 +67,57 @@
 
 ### API 端点
 
-| 方法 | 端点 | 描述 |
-|------|------|------|
-| POST | /api/v1/chat/sessions | 创建新会话 |
-| GET | /api/v1/chat/sessions | 获取会话列表（支持关键词搜索） |
-| GET | /api/v1/chat/sessions/{id} | 获取单个会话详情 |
-| DELETE | /api/v1/chat/sessions/{id} | 删除会话 |
-| POST | /api/v1/chat/messages | 发送消息并获取 AI 响应 |
-| GET | /api/v1/chat/sessions/{id}/messages | 获取会话所有消息 |
-| GET | /api/v1/chat/sessions/{id}/history | 获取对话历史（仅 USER 和 ASSISTANT） |
+| 方法     | 端点                                  | 描述                         |
+|--------|-------------------------------------|----------------------------|
+| POST   | /api/v1/chat/sessions               | 创建新会话                      |
+| GET    | /api/v1/chat/sessions               | 获取会话列表（支持关键词搜索）            |
+| GET    | /api/v1/chat/sessions/{id}          | 获取单个会话详情                   |
+| DELETE | /api/v1/chat/sessions/{id}          | 删除会话                       |
+| POST   | /api/v1/chat/messages               | 发送消息并获取 AI 响应（同步）          |
+| POST   | /api/v1/chat/messages/stream        | 发送消息并获取流式响应（SSE）           |
+| GET    | /api/v1/chat/sessions/{id}/messages | 获取会话所有消息                   |
+| GET    | /api/v1/chat/sessions/{id}/history  | 获取对话历史（仅 USER 和 ASSISTANT） |
 
 ### 核心功能
 1. **会话管理**: 创建、查询、删除对话会话
 2. **消息发送**: 支持调用百炼 API 获取 AI 响应
-3. **历史记录**: 保存和查询对话历史
-4. **模型切换**: 支持为不同会话配置不同模型
-5. **错误处理**: 模型调用失败时记录错误信息
+3. **流式输出**: SSE 流式返回，实时显示生成内容
+4. **历史记录**: 保存和查询对话历史
+5. **模型切换**: 支持为不同会话配置不同模型
+6. **错误处理**: 模型调用失败时记录错误信息
+
+## 流式输出实现 (2026-04-11)
+
+### 后端实现
+
+- `ChatServiceImpl.sendMessageStream()` 使用 `OpenAiChatClient.stream()` 返回 `Flux<String>`
+- SSE 格式: `data: xxx\n`
+- 流式完成后自动保存完整响应到数据库
+
+### 关键代码
+
+```java
+return chatClient.stream(prompt)
+    .map(response -> {
+        String content = response.getResult().getOutput().getContent();
+        if (content != null) {
+            fullResponse.append(content);
+            return content;
+        }
+        return "";
+    })
+    .doOnComplete(() -> saveAssistantMessage(session, modelConfig, fullResponse.toString()));
+```
+
+## 前端流式渲染 (2026-04-11)
+
+### 实现方案
+
+- fetch + ReadableStream 读取 SSE
+- react-markdown 实时渲染 Markdown
+- 临时消息显示 + 完成后刷新真实数据
+
+### 相关文件
+
+- `frontend/src/api/chat.ts` - `sendMessageStream()` SSE 解析
+- `frontend/src/pages/Chat/index.tsx` - 流式消息渲染
