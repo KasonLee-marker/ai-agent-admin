@@ -1,10 +1,6 @@
 package com.aiagent.admin.api.controller;
 
-import com.aiagent.admin.api.dto.ApiResponse;
-import com.aiagent.admin.api.dto.ChatRequest;
-import com.aiagent.admin.api.dto.ChatResponse;
-import com.aiagent.admin.api.dto.ChatSessionDTO;
-import com.aiagent.admin.api.dto.PageResponse;
+import com.aiagent.admin.api.dto.*;
 import com.aiagent.admin.service.ChatService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -14,7 +10,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 
@@ -73,6 +71,13 @@ public class ChatController {
     public ApiResponse<ChatResponse> sendMessage(
             @Valid @RequestBody ChatRequest request) {
         return ApiResponse.success(chatService.sendMessage(request));
+    }
+
+    @PostMapping(value = "/messages/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @Operation(summary = "Send a message and get streaming AI response")
+    public Flux<String> sendMessageStream(
+            @Valid @RequestBody ChatRequest request) {
+        return chatService.sendMessageStream(request);
     }
 
     @GetMapping("/sessions/{id}/messages")

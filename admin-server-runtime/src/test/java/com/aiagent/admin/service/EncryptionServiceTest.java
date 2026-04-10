@@ -1,5 +1,7 @@
 package com.aiagent.admin.service;
 
+import org.jasypt.encryption.pbe.PooledPBEStringEncryptor;
+import org.jasypt.encryption.pbe.config.SimpleStringPBEConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -9,6 +11,9 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * EncryptionService 单元测试
+ */
 @ExtendWith(MockitoExtension.class)
 class EncryptionServiceTest {
 
@@ -17,7 +22,9 @@ class EncryptionServiceTest {
 
     @BeforeEach
     void setUp() {
+        // 设置配置值并调用 init()
         ReflectionTestUtils.setField(encryptionService, "encryptorPassword", "test-password");
+        ReflectionTestUtils.setField(encryptionService, "algorithm", "PBEWITHHMACSHA512ANDAES_256");
         encryptionService.init();
     }
 
@@ -71,5 +78,43 @@ class EncryptionServiceTest {
 
         // Double encryption should return the same as single encryption
         assertEquals(encrypted1, encrypted2);
+    }
+
+    @Test
+    void testDecryptFailureReturnsOriginalValue() {
+        // 当解密失败时，应该返回原始加密值而不是抛出异常
+        String invalidEncrypted = "ENC(invalid-cipher-text)";
+
+        String result = encryptionService.decrypt(invalidEncrypted);
+        assertEquals(invalidEncrypted, result);
+    }
+
+    @Test
+    void testDecryptWithDifferentPassword() {
+        // 使用不同密码加密的值无法解密
+        String plainText = "test-key";
+
+        // 用 test-password 加密
+        String encrypted = encryptionService.encrypt(plainText);
+
+        // 创建一个新的 encryptor 用不同密码
+        PooledPBEStringEncryptor otherEncryptor = new PooledPBEStringEncryptor();
+        SimpleStringPBEConfig config = new SimpleStringPBEConfig();
+        config.setPassword("different-password");
+        config.setAlgorithm("PBEWITHHMACSHA512ANDAES_256");
+        config.setKeyObtentionIterations("1000");
+        config.setPoolSize("1");
+        config.setProviderName("SunJCE");
+        config.setSaltGeneratorClassName("org.jasypt.salt.RandomSaltGenerator");
+        config.setIvGeneratorClassName("org.jasypt.iv.RandomIvGenerator");
+        config.setStringOutputType("base64");
+        otherEncryptor.setConfig(config);
+
+        EncryptionService otherService = new EncryptionService();
+        ReflectionTestUtils.setField(otherService, "encryptor", otherEncryptor);
+
+        // 使用不同密码的 service 应该无法解密
+        String result = otherService.decrypt(encrypted);
+        assertEquals(encrypted, result); // 应该返回原始加密值
     }
 }

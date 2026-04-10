@@ -1,6 +1,6 @@
 import client from './client'
-import {ApiResponse, PageResponse, PageParams} from '@/types/api'
-import {ChatSession, ChatMessage, CreateSessionRequest, SendMessageRequest, MessageListResponse} from '@/types/chat'
+import {ApiResponse, PageParams, PageResponse} from '@/types/api'
+import {ChatMessage, ChatSession, CreateSessionRequest, MessageListResponse, SendMessageRequest} from '@/types/chat'
 
 const BASE_URL = '/chat'
 
@@ -39,4 +39,69 @@ export async function getSessionMessages(sessionId: string): Promise<ApiResponse
 // 获取对话历史
 export async function getConversationHistory(sessionId: string): Promise<ApiResponse<MessageListResponse>> {
     return client.get(`${BASE_URL}/sessions/${sessionId}/history`)
+}
+
+// 流式发送消息
+export async function sendMessageStream(
+    data: SendMessageRequest,
+    onChunk: (text: string) => void,
+    onComplete: () => void,
+    onError: (error: Error) => void
+): Promise<void> {
+    try {
+        const response = await fetch('/api/v1/chat/messages/stream', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data),
+        })
+
+        if (!response.ok) {
+            throw new Error(`HTTP error: ${response.status}`)
+        }
+
+        const reader = response.body?.getReader()
+        if (!reader) {
+            throw new Error('No response body')
+        }
+
+        const decoder = new TextDecoder()
+        let buffer = ''
+        let fullContent = ''
+
+        while (true) {
+            const {done, value} = await reader.read()
+            if (done) break
+
+            buffer += decoder.decode(value, {stream: true})
+
+            // 解析 SSE 格式: "data: xxx\n"
+            const lines = buffer.split('\n')
+            buffer = lines.pop() || '' // 保留不完整的行
+
+            for (const line of lines) {
+                if (line.startsWith('data:')) {
+                    const content = line.slice(5).trim()
+                    if (content) {
+                        fullContent += content
+                        onChunk(fullContent)
+                    }
+                }
+            }
+        }
+
+        // 处理剩余 buffer
+        if (buffer.startsWith('data:')) {
+            const content = buffer.slice(5).trim()
+            if (content) {
+                fullContent += content
+                onChunk(fullContent)
+            }
+        }
+
+        onComplete()
+    } catch (error) {
+        onError(error instanceof Error ? error : new Error('Unknown error'))
+    }
 }

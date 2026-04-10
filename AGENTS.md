@@ -106,11 +106,15 @@ mvn spring-boot:run
 
 ## 百炼 API 配置
 
-```yaml
-model: qwen3.5-omni-plus-2026-03-15
-api-key: sk-852f050ac5514871b39b3e8d7ffcc490
-base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
-```
+模型配置通过前端界面管理，用户需自行配置 API Key。
+
+支持的供应商:
+
+- OpenAI (https://api.openai.com/v1)
+- Anthropic (https://api.anthropic.com/v1)
+- DashScope 阿里云 (https://dashscope.aliyuncs.com/compatible-mode/v1)
+- DeepSeek (https://api.deepseek.com/v1)
+- Ollama (本地 http://localhost:11434)
 
 ## 沟通方式
 

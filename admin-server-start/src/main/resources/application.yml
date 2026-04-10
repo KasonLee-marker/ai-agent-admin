@@ -15,26 +15,16 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
         format_sql: true
-        dialect: org.hibernate.dialect.PostgreSQLDialect
 
   # H2 Console (disabled - using PostgreSQL)
   h2:
     console:
       enabled: false
       path: /h2-console
-
-  # Spring AI Configuration (阿里云 DashScope)
-  ai:
-    openai:
-      base-url: https://coding.dashscope.aliyuncs.com/v1
-      api-key: ${ANTHROPIC_AUTH_TOKEN}
-      chat:
-        options:
-          model: claude-3-5-sonnet-20241022
 
 # Jasypt Configuration
 jasypt:
@@ -59,7 +49,11 @@ logging:
   level:
     com.aiagent.admin: DEBUG
     org.springframework.web: INFO
-    org.springframework.ai: WARN
+    org.springframework.ai: INFO
+  file:
+    name: logs/ai-agent-admin.log
+  pattern:
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
 
 # SpringDoc OpenAPI
 springdoc:

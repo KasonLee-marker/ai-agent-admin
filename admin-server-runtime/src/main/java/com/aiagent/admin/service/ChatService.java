@@ -4,6 +4,7 @@ import com.aiagent.admin.api.dto.ChatRequest;
 import com.aiagent.admin.api.dto.ChatResponse;
 import com.aiagent.admin.api.dto.ChatSessionDTO;
 import org.springframework.data.domain.Pageable;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 
@@ -20,6 +21,14 @@ public interface ChatService {
     void deleteSession(String sessionId);
 
     ChatResponse sendMessage(ChatRequest request);
+
+    /**
+     * 流式发送消息
+     *
+     * @param request 请求
+     * @return 流式响应
+     */
+    Flux<String> sendMessageStream(ChatRequest request);
 
     List<ChatResponse> getSessionMessages(String sessionId);
 

@@ -1,12 +1,15 @@
 package com.aiagent.admin.service.mapper;
 
-import com.aiagent.admin.domain.entity.ModelConfig;
 import com.aiagent.admin.api.dto.CreateModelRequest;
 import com.aiagent.admin.api.dto.ModelResponse;
 import com.aiagent.admin.api.dto.UpdateModelRequest;
+import com.aiagent.admin.domain.entity.ModelConfig;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.mapstruct.*;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.MappingTarget;
+import org.mapstruct.ReportingPolicy;
 
 import java.util.Map;
 
@@ -30,6 +33,7 @@ public interface ModelMapper {
     @Mapping(target = "lastHealthCheck", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "apiKey", ignore = true)
     @Mapping(target = "extraParams", expression = "java(mapExtraParamsToString(request.getExtraParams()))")
     void updateEntityFromRequest(UpdateModelRequest request, @MappingTarget ModelConfig entity);
 

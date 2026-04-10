@@ -1,8 +1,8 @@
-import React, {useState, useEffect} from 'react'
-import {Table, Button, Space, Tag, Modal, Form, Input, Select, message, Popconfirm} from 'antd'
-import {PlusOutlined, EditOutlined, DeleteOutlined, HistoryOutlined} from '@ant-design/icons'
+import React, {useEffect, useState} from 'react'
+import {Button, Form, Input, message, Modal, Popconfirm, Space, Table, Tag} from 'antd'
+import {DeleteOutlined, EditOutlined, HistoryOutlined, PlusOutlined} from '@ant-design/icons'
 import type {ColumnsType} from 'antd/es/table'
-import {listPrompts, createPrompt, updatePrompt, deletePrompt} from '@/api/prompts'
+import {createPrompt, deletePrompt, listPrompts, updatePrompt} from '@/api/prompts'
 import {PromptTemplate, PromptTemplateCreateRequest} from '@/types/prompt'
 
 const PromptListPage: React.FC = () => {

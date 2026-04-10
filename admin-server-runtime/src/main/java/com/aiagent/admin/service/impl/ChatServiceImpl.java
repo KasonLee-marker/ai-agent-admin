@@ -27,6 +27,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Flux;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -139,7 +140,17 @@ public class ChatServiceImpl implements ChatService {
                     .isError(false)
                     .build();
         } catch (Exception e) {
-            log.error("Error calling AI model", e);
+            log.error("Error calling AI model: {}", e.getMessage(), e);
+
+            String errorMsg = e.getMessage();
+            if (errorMsg == null || errorMsg.isEmpty()) {
+                errorMsg = "Unknown error";
+            }
+
+            if (errorMsg.contains("404")) {
+                errorMsg = "模型可能不存在或 API endpoint 不正确: " + modelConfig.getModelName();
+            }
+
             assistantMessage = ChatMessage.builder()
                     .id(idGenerator.generateId())
                     .sessionId(session.getId())
@@ -147,7 +158,7 @@ public class ChatServiceImpl implements ChatService {
                     .content("")
                     .modelName(modelConfig.getModelName())
                     .isError(true)
-                    .errorMessage(e.getMessage())
+                    .errorMessage(errorMsg)
                     .build();
         }
 
@@ -179,17 +190,35 @@ public class ChatServiceImpl implements ChatService {
         messages.add(new UserMessage(userContent));
 
         Prompt prompt = new Prompt(messages);
-        
-        OpenAiChatClient chatClient = buildChatClient(modelConfig);
-        org.springframework.ai.chat.ChatResponse response = chatClient.call(prompt);
 
-        return response.getResult().getOutput().getContent();
+        try {
+            log.info("Calling AI model: name={}, modelName={}, baseUrl={}",
+                    modelConfig.getName(), modelConfig.getModelName(), modelConfig.getBaseUrl());
+
+            OpenAiChatClient chatClient = buildChatClient(modelConfig);
+            org.springframework.ai.chat.ChatResponse response = chatClient.call(prompt);
+            return response.getResult().getOutput().getContent();
+        } catch (Exception e) {
+            log.error("AI model call failed for model {} ({}): {}",
+                    modelConfig.getName(), modelConfig.getModelName(), e.getMessage(), e);
+
+            String errorMsg = e.getMessage();
+            if (errorMsg == null || errorMsg.isEmpty()) {
+                errorMsg = "Unknown error";
+            }
+
+            throw new RuntimeException("模型调用失败: " + errorMsg +
+                    " [模型: " + modelConfig.getModelName() +
+                    ", URL: " + modelConfig.getBaseUrl() + "]");
+        }
     }
 
     private OpenAiChatClient buildChatClient(ModelConfig config) {
         String apiKey = encryptionService.decrypt(config.getApiKey());
-        String baseUrl = config.getBaseUrl() != null ? config.getBaseUrl() : 
+        String baseUrl = config.getBaseUrl() != null ? config.getBaseUrl() :
             config.getProvider().getDefaultBaseUrl();
+
+        log.debug("Building chat client: model={}, baseUrl={}", config.getModelName(), baseUrl);
 
         OpenAiApi api = new OpenAiApi(baseUrl, apiKey);
 
@@ -255,5 +284,86 @@ public class ChatServiceImpl implements ChatService {
                 .errorMessage(message.getErrorMessage())
                 .createdAt(message.getCreatedAt())
                 .build();
+    }
+
+    @Override
+    @Transactional
+    public Flux<String> sendMessageStream(ChatRequest request) {
+        ChatSession session = chatSessionRepository.findById(request.getSessionId())
+                .orElseThrow(() -> new EntityNotFoundException("Chat session not found with id: " + request.getSessionId()));
+
+        final String modelId = request.getModelId() != null ? request.getModelId() : session.getModelId();
+        final ModelConfig modelConfig;
+        if (modelId == null) {
+            modelConfig = modelConfigRepository.findByIsDefaultTrue()
+                    .orElseThrow(() -> new IllegalStateException("No default model configured"));
+        } else {
+            modelConfig = modelConfigRepository.findById(modelId)
+                    .orElseThrow(() -> new EntityNotFoundException("Model not found with id: " + modelId));
+        }
+
+        // 保存用户消息
+        ChatMessage userMessage = ChatMessage.builder()
+                .id(idGenerator.generateId())
+                .sessionId(session.getId())
+                .role(MessageRole.USER)
+                .content(request.getContent())
+                .build();
+        chatMessageRepository.save(userMessage);
+
+        // 构建消息历史
+        List<org.springframework.ai.chat.messages.Message> messages = new ArrayList<>();
+        if (session.getSystemMessage() != null && !session.getSystemMessage().isEmpty()) {
+            messages.add(new SystemMessage(session.getSystemMessage()));
+        }
+        List<ChatMessage> history = chatMessageRepository.findConversationHistory(session.getId());
+        for (ChatMessage msg : history) {
+            if (msg.getRole() == MessageRole.USER) {
+                messages.add(new UserMessage(msg.getContent()));
+            } else if (msg.getRole() == MessageRole.ASSISTANT) {
+                messages.add(new AssistantMessage(msg.getContent()));
+            }
+        }
+        messages.add(new UserMessage(request.getContent()));
+
+        Prompt prompt = new Prompt(messages);
+        OpenAiChatClient chatClient = buildChatClient(modelConfig);
+
+        StringBuilder fullResponse = new StringBuilder();
+
+        return chatClient.stream(prompt)
+                .map(response -> {
+                    String content = response.getResult().getOutput().getContent();
+                    if (content != null) {
+                        fullResponse.append(content);
+                        return content;
+                    }
+                    return "";
+                })
+                .doOnComplete(() -> {
+                    // 流式完成后保存完整响应
+                    saveAssistantMessage(session, modelConfig, fullResponse.toString());
+                })
+                .doOnError(e -> {
+                    log.error("Stream error: {}", e.getMessage());
+                    saveAssistantMessage(session, modelConfig, "");
+                });
+    }
+
+    private void saveAssistantMessage(ChatSession session, ModelConfig modelConfig, String content) {
+        ChatMessage assistantMessage = ChatMessage.builder()
+                .id(idGenerator.generateId())
+                .sessionId(session.getId())
+                .role(MessageRole.ASSISTANT)
+                .content(content)
+                .modelName(modelConfig.getModelName())
+                .isError(content.isEmpty())
+                .errorMessage(content.isEmpty() ? "Stream failed" : null)
+                .build();
+        chatMessageRepository.save(assistantMessage);
+
+        session.setMessageCount((int) chatMessageRepository.countBySessionId(session.getId()));
+        session.setUpdatedAt(LocalDateTime.now());
+        chatSessionRepository.save(session);
     }
 }

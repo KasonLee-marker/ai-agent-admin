@@ -3,6 +3,7 @@ package com.aiagent.admin.api.controller;
 import com.aiagent.admin.api.dto.*;
 import com.aiagent.admin.domain.entity.ModelConfig;
 import com.aiagent.admin.domain.enums.ModelProvider;
+import com.aiagent.admin.service.EncryptionService;
 import com.aiagent.admin.service.HealthCheckService;
 import com.aiagent.admin.service.ModelConfigService;
 import com.aiagent.admin.service.ModelService;
@@ -11,14 +12,14 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/models")
 @RequiredArgsConstructor
@@ -28,76 +29,98 @@ public class ModelController {
     private final ModelConfigService modelConfigService;
     private final ModelService modelService;
     private final HealthCheckService healthCheckService;
+    private final EncryptionService encryptionService;
 
     @GetMapping
     @Operation(summary = "List all models with optional filters")
-    public ResponseEntity<List<ModelResponse>> listModels(
+    public ApiResponse<List<ModelResponse>> listModels(
             @RequestParam(required = false) String provider,
             @RequestParam(required = false) Boolean isActive,
             @RequestParam(required = false) String keyword) {
-        return ResponseEntity.ok(modelConfigService.findByFilters(provider, isActive, keyword));
+        return ApiResponse.success(modelConfigService.findByFilters(provider, isActive, keyword));
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Get model by ID")
-    public ResponseEntity<ModelResponse> getModel(
+    public ApiResponse<ModelResponse> getModel(
             @Parameter(description = "Model ID") @PathVariable String id) {
         return modelConfigService.findById(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+                .map(ApiResponse::success)
+                .orElse(ApiResponse.error(404, "Model not found"));
     }
 
     @PostMapping
     @Operation(summary = "Create a new model configuration")
-    public ResponseEntity<ModelResponse> createModel(
+    public ApiResponse<ModelResponse> createModel(
             @Valid @RequestBody CreateModelRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(modelConfigService.create(request));
+        return ApiResponse.success(modelConfigService.create(request));
     }
 
     @PutMapping("/{id}")
     @Operation(summary = "Update model configuration")
-    public ResponseEntity<ModelResponse> updateModel(
+    public ApiResponse<ModelResponse> updateModel(
             @Parameter(description = "Model ID") @PathVariable String id,
             @Valid @RequestBody UpdateModelRequest request) {
-        return ResponseEntity.ok(modelConfigService.update(id, request));
+        return ApiResponse.success(modelConfigService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
     @Operation(summary = "Delete model configuration")
-    public ResponseEntity<Void> deleteModel(
+    public ApiResponse<Void> deleteModel(
             @Parameter(description = "Model ID") @PathVariable String id) {
         modelConfigService.delete(id);
-        return ResponseEntity.noContent().build();
+        return ApiResponse.success();
     }
 
     @PostMapping("/{id}/test")
     @Operation(summary = "Test model connectivity (health check)")
-    public ResponseEntity<HealthCheckResponse> testModel(
+    public ApiResponse<HealthCheckResponse> testModel(
             @Parameter(description = "Model ID") @PathVariable String id) {
-        boolean isHealthy = healthCheckService.healthCheck(id);
-        return ResponseEntity.ok(new HealthCheckResponse(id, isHealthy));
+        try {
+            ModelConfig config = modelConfigService.findEntityById(id)
+                    .orElseThrow(() -> new IllegalArgumentException("Model not found"));
+
+            String apiKey = encryptionService.decrypt(config.getApiKey());
+            String baseUrl = config.getBaseUrl() != null ? config.getBaseUrl() : config.getProvider().getDefaultBaseUrl();
+
+            log.info("Testing model: name={}, model={}, baseUrl={}, provider={}",
+                    config.getName(), config.getModelName(), baseUrl, config.getProvider());
+
+            boolean isHealthy = healthCheckService.healthCheck(id);
+
+            HealthCheckResponse response = new HealthCheckResponse();
+            response.setModelId(id);
+            response.setHealthy(isHealthy);
+            response.setModelName(config.getModelName());
+            response.setBaseUrl(baseUrl);
+            response.setDetails(isHealthy ? "Connection successful" : "Connection failed - check model name and API endpoint compatibility");
+
+            return ApiResponse.success(response);
+        } catch (Exception e) {
+            log.error("Health check error: {}", e.getMessage());
+            return ApiResponse.error(500, "Health check failed: " + e.getMessage());
+        }
     }
 
     @PostMapping("/{id}/default")
     @Operation(summary = "Set model as default")
-    public ResponseEntity<Void> setDefaultModel(
+    public ApiResponse<Void> setDefaultModel(
             @Parameter(description = "Model ID") @PathVariable String id) {
         modelConfigService.setDefault(id);
-        return ResponseEntity.ok().build();
+        return ApiResponse.success();
     }
 
     @GetMapping("/default")
     @Operation(summary = "Get current default model")
-    public ResponseEntity<ModelResponse> getDefaultModel() {
+    public ApiResponse<ModelResponse> getDefaultModel() {
         return modelConfigService.findDefault()
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+                .map(ApiResponse::success)
+                .orElse(ApiResponse.error(404, "No default model configured"));
     }
 
     @GetMapping("/providers")
     @Operation(summary = "List all supported providers")
-    public ResponseEntity<List<ProviderResponse>> listProviders() {
+    public ApiResponse<List<ProviderResponse>> listProviders() {
         List<ProviderResponse> providers = Arrays.stream(ModelProvider.values())
                 .map(p -> new ProviderResponse(
                         p.name(),
@@ -106,42 +129,51 @@ public class ModelController {
                         p.getBuiltinModels()
                 ))
                 .collect(Collectors.toList());
-        return ResponseEntity.ok(providers);
+        return ApiResponse.success(providers);
     }
 
     @GetMapping("/providers/{provider}/builtin")
     @Operation(summary = "Get built-in models for a provider")
-    public ResponseEntity<List<ModelProvider.BuiltinModel>> getBuiltinModels(
+    public ApiResponse<List<ModelProvider.BuiltinModel>> getBuiltinModels(
             @Parameter(description = "Provider name") @PathVariable String provider) {
         try {
             ModelProvider p = ModelProvider.fromString(provider);
-            return ResponseEntity.ok(p.getBuiltinModels());
+            return ApiResponse.success(p.getBuiltinModels());
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.notFound().build();
+            return ApiResponse.error(404, "Provider not found: " + provider);
         }
     }
 
     @GetMapping("/active")
     @Operation(summary = "Get currently active model (for runtime switching)")
-    public ResponseEntity<ActiveModelResponse> getActiveModel() {
+    public ApiResponse<ActiveModelResponse> getActiveModel() {
         String activeId = modelService.getActiveModelId();
         if (activeId == null) {
-            return ResponseEntity.notFound().build();
+            return ApiResponse.error(404, "No active model");
         }
         return modelConfigService.findById(activeId)
-                .map(model -> ResponseEntity.ok(new ActiveModelResponse(activeId, model)))
-                .orElse(ResponseEntity.notFound().build());
+                .map(model -> ApiResponse.success(new ActiveModelResponse(activeId, model)))
+                .orElse(ApiResponse.error(404, "Active model not found"));
     }
 
     @PostMapping("/switch")
     @Operation(summary = "Switch to a different model at runtime")
-    public ResponseEntity<Void> switchModel(
+    public ApiResponse<Void> switchModel(
             @Valid @RequestBody SwitchModelRequest request) {
         modelService.switchModel(request.getModelId());
-        return ResponseEntity.ok().build();
+        return ApiResponse.success();
     }
 
     // Response DTOs
-    public record HealthCheckResponse(String modelId, boolean healthy) {}
+    @lombok.Data
+    @lombok.AllArgsConstructor
+    @lombok.NoArgsConstructor
+    public static class HealthCheckResponse {
+        private String modelId;
+        private boolean healthy;
+        private String modelName;
+        private String baseUrl;
+        private String details;
+    }
     public record ActiveModelResponse(String modelId, ModelResponse model) {}
 }

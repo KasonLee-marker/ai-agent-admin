@@ -34,8 +34,8 @@ public interface ModelConfigRepository extends JpaRepository<ModelConfig, String
     @Query("SELECT m FROM ModelConfig m WHERE " +
            "(:provider IS NULL OR m.provider = :provider) AND " +
            "(:isActive IS NULL OR m.isActive = :isActive) AND " +
-           "(:keyword IS NULL OR LOWER(m.name) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-           "LOWER(m.modelName) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+            "(:keyword IS NULL OR LOWER(m.name) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) OR " +
+            "LOWER(m.modelName) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')))")
     List<ModelConfig> findByFilters(@Param("provider") ModelProvider provider,
                                     @Param("isActive") Boolean isActive,
                                     @Param("keyword") String keyword);

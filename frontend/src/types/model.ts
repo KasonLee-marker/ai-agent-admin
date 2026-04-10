@@ -31,7 +31,7 @@ export interface ProviderInfo {
 export interface BuiltinModel {
     name: string;
     displayName: string;
-    maxTokens: number;
+    description: string;
 }
 
 // 创建请求

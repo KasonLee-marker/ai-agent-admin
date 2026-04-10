@@ -179,7 +179,6 @@ CREATE TABLE IF NOT EXISTS document_chunks (
 -- ==================== 索引 ====================
 
 CREATE INDEX IF NOT EXISTS idx_prompt_category ON prompt_templates(category);
-CREATE INDEX IF NOT EXISTS idx_prompt_tags ON prompt_templates USING gin(tags gin_trgm_ops);
 
 CREATE INDEX IF NOT EXISTS idx_model_provider ON model_configs(provider);
 CREATE INDEX IF NOT EXISTS idx_model_active ON model_configs(is_active);
@@ -201,13 +200,3 @@ CREATE INDEX IF NOT EXISTS idx_document_chunks_document ON document_chunks(docum
 
 -- 向量索引（用于相似度搜索）
 CREATE INDEX IF NOT EXISTS idx_document_chunks_embedding ON document_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
-
--- ==================== 初始数据 ====================
-
--- 插入默认模型配置（百炼 API）
-INSERT INTO model_configs (name, provider, model_name, api_key, base_url, is_default, is_active)
-VALUES ('DashScope Qwen', 'DASHSCOPE', 'qwen3.5-omni-plus-2026-03-15', 
-        'sk-852f050ac5514871b39b3e8d7ffcc490', 
-        'https://dashscope.aliyuncs.com/compatible-mode/v1', 
-        TRUE, TRUE)
-ON CONFLICT DO NOTHING;

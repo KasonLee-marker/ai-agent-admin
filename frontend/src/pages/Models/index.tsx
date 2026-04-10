@@ -1,31 +1,17 @@
-import React, {useState, useEffect} from 'react'
-import {
-    Table,
-    Button,
-    Space,
-    Tag,
-    Modal,
-    Form,
-    Input,
-    InputNumber,
-    Select,
-    Switch,
-    message,
-    Popconfirm,
-    Badge
-} from 'antd'
-import {PlusOutlined, EditOutlined, DeleteOutlined, CheckOutlined, ApiOutlined} from '@ant-design/icons'
+import React, {useEffect, useState} from 'react'
+import {Badge, Button, Form, Input, InputNumber, message, Modal, Popconfirm, Select, Space, Table, Tag} from 'antd'
+import {ApiOutlined, CheckOutlined, DeleteOutlined, EditOutlined, PlusOutlined} from '@ant-design/icons'
 import type {ColumnsType} from 'antd/es/table'
 import {
-    listModels,
     createModel,
-    updateModel,
     deleteModel,
-    testModel,
+    listModels,
+    listProviders,
     setDefaultModel,
-    listProviders
+    testModel,
+    updateModel
 } from '@/api/models'
-import {ModelConfig, CreateModelRequest, ProviderInfo} from '@/types/model'
+import {CreateModelRequest, ModelConfig, ProviderInfo} from '@/types/model'
 
 const ModelListPage: React.FC = () => {
     const [data, setData] = useState<ModelConfig[]>([])
@@ -60,6 +46,16 @@ const ModelListPage: React.FC = () => {
             }
         } catch {
             // ignore
+        }
+    }
+
+    // 当选择供应商时，自动填充默认 baseUrl
+    const handleProviderChange = (providerName: string) => {
+        const provider = providers.find(p => p.name === providerName)
+        if (provider) {
+            form.setFieldsValue({
+                baseUrl: provider.defaultBaseUrl
+            })
         }
     }
 
@@ -200,30 +196,35 @@ const ModelListPage: React.FC = () => {
                 width={600}
             >
                 <Form form={form} layout="vertical">
-                    <Form.Item name="name" label="名称" rules={[{required: true}]}>
-                        <Input/>
+                    <Form.Item name="name" label="配置名称" rules={[{required: true, message: '请输入配置名称'}]}>
+                        <Input placeholder="例如: 我的GPT-4"/>
                     </Form.Item>
-                    <Form.Item name="provider" label="供应商" rules={[{required: true}]}>
-                        <Select>
+                    <Form.Item name="provider" label="供应商" rules={[{required: true, message: '请选择供应商'}]}>
+                        <Select onChange={handleProviderChange} placeholder="选择供应商">
                             {providers.map(p => (
                                 <Select.Option key={p.name} value={p.name}>{p.displayName}</Select.Option>
                             ))}
                         </Select>
                     </Form.Item>
-                    <Form.Item name="modelName" label="模型名称" rules={[{required: true}]}>
-                        <Input/>
+                    <Form.Item name="modelName" label="模型名称" rules={[{required: true, message: '请输入模型名称'}]}>
+                        <Input placeholder="例如: gpt-4, claude-3-5-sonnet, qwen-max"/>
                     </Form.Item>
-                    <Form.Item name="baseUrl" label="API 地址">
-                        <Input/>
+                    <Form.Item name="baseUrl" label="API 地址" extra="选择供应商后自动填充默认地址，可修改">
+                        <Input placeholder="API Base URL"/>
                     </Form.Item>
-                    <Form.Item name="apiKey" label="API Key">
-                        <Input.Password/>
+                    <Form.Item
+                        name="apiKey"
+                        label="API Key"
+                        extra={editingModel ? '留空则保持原有 API Key 不变' : undefined}
+                        rules={[{required: !editingModel, message: '请输入 API Key'}]}
+                    >
+                        <Input.Password placeholder={editingModel ? '留空保持不变' : '输入您的 API Key'}/>
                     </Form.Item>
-                    <Form.Item name="temperature" label="Temperature">
-                        <InputNumber min={0} max={2} step={0.1}/>
+                    <Form.Item name="temperature" label="Temperature" extra="控制输出的随机性，0-2">
+                        <InputNumber min={0} max={2} step={0.1} defaultValue={0.7}/>
                     </Form.Item>
-                    <Form.Item name="maxTokens" label="Max Tokens">
-                        <InputNumber min={1} max={100000}/>
+                    <Form.Item name="maxTokens" label="Max Tokens" extra="最大输出长度">
+                        <InputNumber min={1} max={100000} defaultValue={2048}/>
                     </Form.Item>
                 </Form>
             </Modal>

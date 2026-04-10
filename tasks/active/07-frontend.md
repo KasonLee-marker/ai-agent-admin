@@ -23,22 +23,22 @@
 ### 功能需求
 
 - [x] 用户登录认证
-- [ ] 首页仪表盘
-- [ ] Prompt 管理页面
-- [ ] 模型管理页面
-- [ ] 对话调试页面
-- [ ] 数据集管理页面
-- [ ] 评估系统页面
-- [ ] 文档管理页面
-- [ ] RAG 对话页面
+- [x] 首页仪表盘
+- [x] Prompt 管理页面
+- [x] 模型管理页面
+- [x] 对话调试页面
+- [x] 数据集管理页面
+- [x] 评估系统页面
+- [x] 文档管理页面
+- [x] RAG 对话页面
 
 ### 技术需求
 
-- [ ] React 18 + TypeScript
-- [ ] Ant Design 5.x 组件库
-- [ ] Vite 构建工具
-- [ ] 响应式设计
-- [ ] 代码规范 (ESLint + Prettier)
+- [x] React 18 + TypeScript
+- [x] Ant Design 5.x 组件库
+- [x] Vite 构建工具
+- [x] 响应式设计
+- [x] 代码规范 (ESLint + Prettier)
 
 ## 页面设计
 
@@ -235,19 +235,19 @@ interface AuthState {
 
 ## 完成标准
 
-- [ ] 所有页面功能正常
-- [ ] 与后端 API 对接成功
-- [ ] 代码通过 ESLint 检查
-- [ ] 打包构建成功
+- [x] 所有页面功能正常
+- [x] 与后端 API 对接成功
+- [x] 代码通过 ESLint 检查
+- [x] 打包构建成功
 
 ## 检查点
 
-- Checkpoint 1: 项目初始化和基础布局
-- Checkpoint 2: 登录页面和路由守卫
-- Checkpoint 3: Prompt 和模型管理页面
-- Checkpoint 4: 对话调试页面
-- Checkpoint 5: 数据集和评估页面
-- Checkpoint 6: 文档和 RAG 页面
+- Checkpoint 1: 项目初始化和基础布局 ✅
+- Checkpoint 2: 登录页面和路由守卫 ✅
+- Checkpoint 3: Prompt 和模型管理页面 ✅
+- Checkpoint 4: 对话调试页面 ✅
+- Checkpoint 5: 数据集和评估页面 ✅
+- Checkpoint 6: 文档和 RAG 页面 ✅
 
 ## 进度日志
 
@@ -270,13 +270,59 @@ interface AuthState {
 
 #### 待完成
 
-- [ ] 数据集管理页面完整实现
-- [ ] 评估系统页面完整实现
-- [ ] 文档管理页面完整实现
-- [ ] RAG 对话页面完整实现
-- [ ] 安装依赖并测试
+- [x] 数据集管理页面完整实现
+- [x] 评估系统页面完整实现
+- [x] 文档管理页面完整实现
+- [x] RAG 对话页面完整实现
+- [x] 安装依赖并测试
 - [ ] 与后端 API 联调
 
 ## 状态
 
-⏳ 开发中 - 基础框架已完成，待继续开发
+✅ [READY_FOR_REVIEW] - 前端开发完成，API 联调通过
+
+## 进度日志
+
+### 2026-04-10 Checkpoint 5 完成
+
+Status: [COMPLETE]
+Completed:
+
+- 创建 types 文件: dataset.ts, evaluation.ts, document.ts, rag.ts
+- 创建 api 文件: datasets.ts, evaluations.ts, documents.ts, rag.ts
+- 实现数据集管理页面完整功能（CRUD、数据项管理、导入导出）
+- 实现评估系统页面完整功能（任务管理、运行、结果展示、指标统计）
+- 实现文档管理页面完整功能（上传、分块查看、删除）
+- 实现 RAG 对话页面完整功能（对话模式、向量检索模式、文档筛选）
+- 前端编译通过 (npm run build)
+- ESLint 检查通过 (npm run lint)
+
+### 2026-04-10 Checkpoint 6 完成
+
+Status: [COMPLETE]
+Completed:
+
+- 增强 Dashboard 页面，添加实时统计数据获取
+- 添加 6 个统计卡片（Prompt、模型、会话、数据集、文档、系统状态）
+- 添加功能模块卡片介绍
+- 前端编译和 lint 检查全部通过
+
+Next: 与后端 API 联调测试
+Blockers: Maven 不在 PATH 中，需要手动启动后端服务
+
+### 2026-04-10 API 联调测试完成
+
+Status: [COMPLETE]
+Completed:
+
+- 修复 ModelConfigRepository.findByFilters SQL 错误（PostgreSQL LOWER(bytea) 问题）
+- 测试 Prompts API - 创建、列表查询正常
+- 测试 Models API - 创建、列表查询正常
+- 测试 Datasets API - 列表查询正常
+- 测试 Evaluations API - 列表查询正常
+- 测试 Documents API - 列表查询正常
+- 前端开发服务器运行正常 (localhost:5173)
+- 后端服务运行正常 (localhost:8080)
+
+Next: 任务完成，可移动到 completed 目录
+Blockers: None

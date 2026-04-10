@@ -1,6 +1,5 @@
 import React, {useEffect} from 'react'
-import {BrowserRouter, Routes, Route, Navigate} from 'react-router-dom'
-import {ConfigProvider} from 'antd'
+import {BrowserRouter, Navigate, Route, Routes} from 'react-router-dom'
 import MainLayout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import LoginPage from '@/pages/Login'
