@@ -39,18 +39,31 @@ git clone https://github.com/KasonLee-marker/ai-agent-admin.git
 cd ai-agent-admin
 ```
 
-### 2. 初始化数据库（可选）
+### 2. 初始化数据库
+
+#### 2.1 启动 PostgreSQL + pgvector
 
 ```bash
-# 启动 PostgreSQL + pgvector
+# 启动 PostgreSQL + pgvector（已内置向量插件）
 docker run -d \
   --name agentx-postgres \
   -e POSTGRES_USER=agentx \
   -e POSTGRES_DB=aiagent \
   -p 5432:5432 \
   pgvector/pgvector:pg15
+```
 
-# 初始化数据库表结构
+> **注意**: 使用 `pgvector/pgvector` 镜像已内置 pgvector 插件。如使用标准 PostgreSQL 镜像，需手动安装插件：
+> ```bash
+> # 在 PostgreSQL 容器中执行
+> apt-get update && apt-get install -y postgresql-15-pgvector
+> # 然后在数据库中启用
+> CREATE EXTENSION IF NOT EXISTS vector;
+> ```
+
+#### 2.2 初始化数据库表结构
+
+```bash
 docker exec -i agentx-postgres psql -U agentx -d aiagent < docs/database/schema.sql
 ```
 

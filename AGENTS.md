@@ -3,7 +3,7 @@
 ## 项目概述
 
 - **名称**: AI Agent Admin
-- **技术栈**: Spring Boot 3.x + Spring AI + React 18 + MySQL/H2
+- **技术栈**: Spring Boot 3.x + Spring AI + React 18 + PostgreSQL/H2
 - **目的**: 企业内网 AI Agent 管理平台（Prompt 管理、模型调用、对话调试、数据集管理、评估系统）
 
 ## 快速链接
@@ -108,9 +108,11 @@ mvn spring-boot:run
 
 ```yaml
 model: qwen3.5-omni-plus-2026-03-15
-api-key: sk-852f050ac5514871b39b3e8d7ffcc490
+api-key: ${DASHSCOPE_API_KEY}
 base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
 ```
+
+> ⚠️ **安全提示**: 请将 API Key 配置在环境变量中，不要硬编码到代码或配置文件中。
 
 ## 沟通方式
 
