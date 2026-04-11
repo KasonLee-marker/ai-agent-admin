@@ -11,6 +11,7 @@ public class EvaluationJobResponse {
     private String description;
     private String promptTemplateId;
     private String promptTemplateName;
+    private Integer promptTemplateVersion;  // 使用的提示词模板版本号
     private String modelConfigId;
     private String modelConfigName;
     private String datasetId;

@@ -32,6 +32,7 @@ public interface EvaluationMapper {
     @Mapping(target = "startedAt", ignore = true)
     @Mapping(target = "completedAt", ignore = true)
     @Mapping(target = "errorMessage", ignore = true)
+    @Mapping(target = "promptTemplateVersion", ignore = true)  // 运行时设置
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     EvaluationJob toJobEntity(EvaluationJobCreateRequest request);

@@ -18,6 +18,7 @@ export interface VectorSearchResult {
 // RAG 对话请求
 export interface RagChatRequest {
     query: string;
+    promptTemplateId?: string;  // 提示词模板ID（可选）
     documentIds?: string[];
     topK?: number;
     sessionId?: string;

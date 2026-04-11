@@ -17,6 +17,23 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * 数据集管理 REST 控制器
+ * <p>
+ * 提供数据集和数据集项的管理 API：
+ * <ul>
+ *   <li>数据集创建、查询、更新、删除</li>
+ *   <li>数据集项（测试数据）管理</li>
+ *   <li>数据集导入导出（JSON/CSV）</li>
+ *   <li>版本管理</li>
+ * </ul>
+ * </p>
+ * <p>
+ * 数据集用于模型评估，存储输入数据和预期输出。
+ * </p>
+ *
+ * @see DatasetService
+ */
 @RestController
 @RequestMapping("/api/v1/datasets")
 @RequiredArgsConstructor

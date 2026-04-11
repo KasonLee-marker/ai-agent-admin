@@ -22,6 +22,7 @@ const DatasetPage: React.FC = () => {
     const [itemModalVisible, setItemModalVisible] = useState(false)
     const [editingDataset, setEditingDataset] = useState<Dataset | null>(null)
     const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null)
+    const [activeTab, setActiveTab] = useState<string>('list')  // 控制当前激活的tab
     const [form] = Form.useForm()
     const [itemForm] = Form.useForm()
 
@@ -99,6 +100,7 @@ const DatasetPage: React.FC = () => {
     const handleSelectDataset = (record: Dataset) => {
         setSelectedDataset(record)
         fetchItems(record.id)
+        setActiveTab('items')  // 自动切换到数据项tab
     }
 
     const handleCreateItem = () => {
@@ -206,7 +208,7 @@ const DatasetPage: React.FC = () => {
                 </Space>
             </div>
 
-            <Tabs defaultActiveKey="list" items={[
+            <Tabs activeKey={activeTab} onChange={setActiveTab} items={[
                 {
                     key: 'list',
                     label: '数据集列表',

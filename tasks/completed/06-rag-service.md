@@ -74,8 +74,15 @@
 
 ## 进度日志
 
+### 2026-04-11 模板联动增强
+
+- ✅ RagChatRequest 添加 promptTemplateId 字段
+- ✅ RagServiceImpl.chat() 支持根据模板ID加载系统消息
+- ✅ 前端 RAG 页面添加提示词模板选择下拉框
+- ✅ 移除 DEFAULT_SYSTEM_PROMPT 硬编码，改为可配置
+
 ### Checkpoint 1 - 待开始
 Status: [PENDING]
-Completed: 
+Completed:
 Next: 搭建 PostgreSQL + pgvector 环境
 Blockers: None

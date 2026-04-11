@@ -9,10 +9,28 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * 向量检索 REST 控制器
+ * <p>
+ * 提供向量相似度搜索 API：
+ * <ul>
+ *   <li>将查询文本转换为向量并搜索相似文档片段</li>
+ * </ul>
+ * </p>
+ * <p>
+ * 使用 PostgreSQL pgvector 进行向量存储和检索。
+ * 返回结果包含文档片段内容和相似度分数。
+ * </p>
+ *
+ * @see DocumentService
+ */
 @RestController
 @RequestMapping("/api/v1/vector")
 @RequiredArgsConstructor

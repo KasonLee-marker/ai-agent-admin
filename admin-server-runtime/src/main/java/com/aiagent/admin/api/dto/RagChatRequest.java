@@ -14,6 +14,9 @@ public class RagChatRequest {
     @NotBlank(message = "问题不能为空")
     private String question;
 
+    @Schema(description = "提示词模板ID（可选，优先级高于 systemPromptTemplate）")
+    private String promptTemplateId;
+
     @Schema(description = "检索结果数量", defaultValue = "5")
     @Min(value = 1, message = "topK最小为1")
     @Max(value = 20, message = "topK最大为20")
@@ -25,6 +28,6 @@ public class RagChatRequest {
     @Schema(description = "文档ID过滤（可选）")
     private String documentId;
 
-    @Schema(description = "系统提示词模板（可选）")
+    @Schema(description = "系统提示词模板（可选，promptTemplateId 存在时忽略）")
     private String systemPromptTemplate;
 }

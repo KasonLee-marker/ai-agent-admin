@@ -14,6 +14,22 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * 提示词模板管理 REST 控制器
+ * <p>
+ * 提供提示词模板的 CRUD 和版本管理 API：
+ * <ul>
+ *   <li>创建、查询、更新、删除模板</li>
+ *   <li>版本历史查询和版本回滚</li>
+ *   <li>按分类、标签、关键词筛选</li>
+ * </ul>
+ * </p>
+ * <p>
+ * 更新操作会自动创建新版本，支持完整的版本历史追踪。
+ * </p>
+ *
+ * @see PromptService
+ */
 @RestController
 @RequestMapping("/api/v1/prompts")
 @RequiredArgsConstructor

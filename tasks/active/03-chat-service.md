@@ -121,3 +121,28 @@ return chatClient.stream(prompt)
 
 - `frontend/src/api/chat.ts` - `sendMessageStream()` SSE 解析
 - `frontend/src/pages/Chat/index.tsx` - 流式消息渲染
+
+## 提示词模板联动 (2026-04-11)
+
+### 新增功能
+
+1. **会话创建时选择模板**：新建会话 Modal 添加提示词模板下拉框，选择后自动填充系统消息
+2. **会话编辑功能**：已有会话可通过编辑按钮修改标题、模型、模板、系统消息
+3. **后端 API**：新增 `PUT /api/v1/chat/sessions/{id}` 支持更新会话配置
+
+### 修改文件
+
+- `ChatController.java` - 新增 updateSession 端点
+- `ChatService.java` - 新增 updateSession 接口
+- `ChatServiceImpl.java` - 实现 updateSession + 加载模板内容
+- `ChatRequest.java` - 新增 UpdateSessionRequest DTO
+- `frontend/src/pages/Chat/index.tsx` - 编辑按钮 + 编辑 Modal
+- `frontend/src/api/chat.ts` - 新增 updateSession API
+
+### 占位符决策
+
+经讨论，对话调试场景的系统消息为静态角色定义，不需要 `{{input}}` 等占位符：
+
+- 用户输入本就作为 UserMessage 发送
+- 占位符替换会导致内容重复
+- 已移除前端占位符提示说明

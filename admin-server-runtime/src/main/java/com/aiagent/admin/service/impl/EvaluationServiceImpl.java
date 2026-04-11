@@ -29,6 +29,32 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * 评估服务实现类
+ * <p>
+ * 提供模型评估的核心功能：
+ * <ul>
+ *   <li>评估任务创建、更新、删除、查询</li>
+ *   <li>异步执行评估任务（使用 evaluationTaskExecutor）</li>
+ *   <li>评估结果收集和统计</li>
+ *   <li>评估任务取消支持</li>
+ *   <li>评估对比（比较两个任务的指标）</li>
+ * </ul>
+ * </p>
+ * <p>
+ * 评估流程：
+ * <ol>
+ *   <li>选择提示词模板、模型配置和数据集</li>
+ *   <li>遍历数据集项，渲染提示词并调用模型</li>
+ *   <li>收集响应、延迟、Token 使用等指标</li>
+ *   <li>生成评估报告和统计数据</li>
+ * </ol>
+ * </p>
+ *
+ * @see EvaluationService
+ * @see EvaluationJob
+ * @see EvaluationResult
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -43,9 +69,24 @@ public class EvaluationServiceImpl implements EvaluationService {
     private final EvaluationMapper evaluationMapper;
     private final EncryptionService encryptionService;
 
+    /**
+     * 提示词变量匹配模式：{{variableName}}
+     */
     private static final Pattern VARIABLE_PATTERN = Pattern.compile("\\{\\{([^}]+)\\}\\}");
+    /** 任务取消标记缓存，用于支持异步任务取消 */
     private final Map<String, Boolean> cancellationFlags = new ConcurrentHashMap<>();
 
+    /**
+     * 创建新的评估任务
+     * <p>
+     * 验证请求参数后创建评估任务实体。
+     * 需要指定提示词模板、模型配置和数据集。
+     * </p>
+     *
+     * @param request 创建任务请求
+     * @return 创建成功的任务响应 DTO
+     * @throws IllegalArgumentException 必要参数缺失时抛出
+     */
     @Override
     @Transactional
     public EvaluationJobResponse createJob(EvaluationJobCreateRequest request) {
@@ -56,6 +97,18 @@ public class EvaluationServiceImpl implements EvaluationService {
         return toJobResponseWithNames(saved);
     }
 
+    /**
+     * 更新评估任务配置
+     * <p>
+     * 不允许更新正在运行中的任务。
+     * </p>
+     *
+     * @param id      任务唯一标识
+     * @param request 更新请求
+     * @return 更新后的任务响应 DTO
+     * @throws EntityNotFoundException   任务不存在时抛出
+     * @throws IllegalStateException      任务正在运行时抛出
+     */
     @Override
     @Transactional
     public EvaluationJobResponse updateJob(String id, EvaluationJobUpdateRequest request) {
@@ -71,6 +124,17 @@ public class EvaluationServiceImpl implements EvaluationService {
         return toJobResponseWithNames(updated);
     }
 
+    /**
+     * 删除评估任务及其所有结果
+     * <p>
+     * 不允许删除正在运行中的任务。
+     * 同时删除任务实体和所有评估结果记录。
+     * </p>
+     *
+     * @param id 任务唯一标识
+     * @throws EntityNotFoundException  任务不存在时抛出
+     * @throws IllegalStateException     任务正在运行时抛出
+     */
     @Override
     @Transactional
     public void deleteJob(String id) {
@@ -85,6 +149,13 @@ public class EvaluationServiceImpl implements EvaluationService {
         evaluationJobRepository.delete(job);
     }
 
+    /**
+     * 根据ID获取评估任务详情
+     *
+     * @param id 任务唯一标识
+     * @return 任务响应 DTO（包含关联实体名称）
+     * @throws EntityNotFoundException 任务不存在时抛出
+     */
     @Override
     @Transactional(readOnly = true)
     public EvaluationJobResponse getJob(String id) {
@@ -93,6 +164,17 @@ public class EvaluationServiceImpl implements EvaluationService {
         return toJobResponseWithNames(entity);
     }
 
+    /**
+     * 分页查询评估任务列表
+     * <p>
+     * 支持按状态、关键词筛选，按创建时间倒序排列。
+     * </p>
+     *
+     * @param status   状态过滤条件（可选）
+     * @param keyword  搜索关键词（可选）
+     * @param pageable 分页参数
+     * @return 分页的任务响应 DTO
+     */
     @Override
     @Transactional(readOnly = true)
     public PageResponse<EvaluationJobResponse> listJobs(String status, String keyword, Pageable pageable) {
@@ -115,6 +197,29 @@ public class EvaluationServiceImpl implements EvaluationService {
         return PageResponse.from(responsePage);
     }
 
+    /**
+     * 异步执行评估任务
+     * <p>
+     * 使用 evaluationTaskExecutor 线程池异步执行评估。
+     * 执行流程：
+     * <ol>
+     *   <li>验证任务、提示词模板、模型配置、数据集存在</li>
+     *   <li>更新任务状态为 RUNNING</li>
+     *   <li>遍历数据集项，渲染提示词并调用模型</li>
+     *   <li>收集响应并保存评估结果</li>
+     *   <li>更新任务统计（成功/失败计数、延迟、Token）</li>
+     *   <li>完成后更新状态为 COMPLETED</li>
+     * </ol>
+     * </p>
+     * <p>
+     * 支持通过 cancelJob() 方法取消正在运行的任务。
+     * </p>
+     *
+     * @param id 任务唯一标识
+     * @return 异步执行结果（CompletableFuture）
+     * @throws EntityNotFoundException   任务或关联实体不存在时抛出
+     * @throws IllegalStateException      任务已在运行时抛出
+     */
     @Override
     @Async("evaluationTaskExecutor")
     public CompletableFuture<EvaluationJobResponse> runJob(String id) {
@@ -127,6 +232,9 @@ public class EvaluationServiceImpl implements EvaluationService {
 
         PromptTemplate promptTemplate = promptTemplateRepository.findById(job.getPromptTemplateId())
                 .orElseThrow(() -> new EntityNotFoundException("Prompt template not found"));
+
+        // 记录使用的提示词模板版本号（便于复现）
+        job.setPromptTemplateVersion(promptTemplate.getVersion());
 
         ModelConfig modelConfig = modelConfigRepository.findById(job.getModelConfigId())
                 .orElseThrow(() -> new EntityNotFoundException("Model config not found"));
@@ -179,6 +287,19 @@ public class EvaluationServiceImpl implements EvaluationService {
         return CompletableFuture.completedFuture(toJobResponseWithNames(saved));
     }
 
+    /**
+     * 评估单个数据集项
+     * <p>
+     * 渲染提示词模板并调用模型获取响应。
+     * 记录响应、延迟、Token 使用等指标到评估结果。
+     * 更新任务的统计计数器。
+     * </p>
+     *
+     * @param job             评估任务实体
+     * @param item            数据集项实体
+     * @param promptTemplate  提示词模板实体
+     * @param modelConfig     模型配置实体
+     */
     private void evaluateItem(EvaluationJob job, DatasetItem item, PromptTemplate promptTemplate, ModelConfig modelConfig) {
         long startTime = System.currentTimeMillis();
         String renderedPrompt = renderPrompt(promptTemplate.getContent(), item.getInput());
@@ -188,6 +309,7 @@ public class EvaluationServiceImpl implements EvaluationService {
                 .datasetItemId(item.getId())
                 .input(item.getInput())
                 .expectedOutput(item.getOutput())
+                .renderedPrompt(renderedPrompt)  // 保存渲染后的提示词便于复现
                 .status(EvaluationResult.ResultStatus.PENDING)
                 .build();
         
@@ -232,6 +354,16 @@ public class EvaluationServiceImpl implements EvaluationService {
         evaluationJobRepository.save(job);
     }
 
+    /**
+     * 构建 OpenAI ChatClient
+     * <p>
+     * 根据模型配置创建 OpenAiApi 和 OpenAiChatClient 实例。
+     * 配置参数包括：baseUrl、apiKey、modelName、temperature、maxTokens、topP。
+     * </p>
+     *
+     * @param config 模型配置实体
+     * @return 配置好的 OpenAiChatClient 实例
+     */
     private OpenAiChatClient buildChatClient(ModelConfig config) {
         String apiKey = encryptionService.decrypt(config.getApiKey());
         String baseUrl = config.getBaseUrl() != null ? config.getBaseUrl() : 
@@ -255,6 +387,20 @@ public class EvaluationServiceImpl implements EvaluationService {
         return new OpenAiChatClient(api, optionsBuilder.build());
     }
 
+    /**
+     * 渲染提示词模板
+     * <p>
+     * 支持两种输入格式：
+     * <ul>
+     *   <li>简单文本：直接替换 {{input}} 变量</li>
+     *   <li>JSON 格式：解析变量映射并替换所有模板变量</li>
+     * </ul>
+     * </p>
+     *
+     * @param template  提示词模板内容
+     * @param inputData 输入数据（文本或 JSON）
+     * @return 渲染后的提示词
+     */
     private String renderPrompt(String template, String inputData) {
         if (template == null || template.isEmpty()) {
             return inputData;
@@ -285,6 +431,16 @@ public class EvaluationServiceImpl implements EvaluationService {
         return result;
     }
 
+    /**
+     * 取消正在运行的评估任务
+     * <p>
+     * 设置取消标记，任务循环会在下一次迭代时检查并停止。
+     * </p>
+     *
+     * @param id 任务唯一标识
+     * @throws EntityNotFoundException  任务不存在时抛出
+     * @throws IllegalStateException     任务不在运行状态时抛出
+     */
     @Override
     public void cancelJob(String id) {
         EvaluationJob job = evaluationJobRepository.findById(id)
@@ -297,6 +453,16 @@ public class EvaluationServiceImpl implements EvaluationService {
         cancellationFlags.put(id, true);
     }
 
+    /**
+     * 分页查询评估任务的评估结果
+     * <p>
+     * 按创建时间升序排列，返回任务的评估结果列表。
+     * </p>
+     *
+     * @param jobId    任务唯一标识
+     * @param pageable 分页参数
+     * @return 分页的评估结果响应 DTO
+     */
     @Override
     @Transactional(readOnly = true)
     public PageResponse<EvaluationResultResponse> listResults(String jobId, Pageable pageable) {
@@ -305,6 +471,13 @@ public class EvaluationServiceImpl implements EvaluationService {
         return PageResponse.from(responsePage);
     }
 
+    /**
+     * 根据ID获取单个评估结果
+     *
+     * @param resultId 结果唯一标识
+     * @return 评估结果响应 DTO
+     * @throws EntityNotFoundException 结果不存在时抛出
+     */
     @Override
     @Transactional(readOnly = true)
     public EvaluationResultResponse getResult(String resultId) {
@@ -313,6 +486,16 @@ public class EvaluationServiceImpl implements EvaluationService {
         return evaluationMapper.toResultResponse(result);
     }
 
+    /**
+     * 获取评估任务的指标统计
+     * <p>
+     * 返回任务的汇总指标：成功率、平均延迟、Token 使用等。
+     * </p>
+     *
+     * @param jobId 任务唯一标识
+     * @return 指标响应 DTO
+     * @throws EntityNotFoundException 任务不存在时抛出
+     */
     @Override
     @Transactional(readOnly = true)
     public EvaluationMetricsResponse getMetrics(String jobId) {
@@ -321,6 +504,16 @@ public class EvaluationServiceImpl implements EvaluationService {
         return evaluationMapper.toMetricsResponse(job);
     }
 
+    /**
+     * 对比两个评估任务的指标
+     * <p>
+     * 返回两个任务的详细指标对比数据，用于分析模型或提示词的差异。
+     * </p>
+     *
+     * @param request 对比请求，包含两个任务的 ID
+     * @return 对比响应 DTO
+     * @throws EntityNotFoundException 任一任务不存在时抛出
+     */
     @Override
     @Transactional(readOnly = true)
     public EvaluationCompareResponse compareJobs(EvaluationCompareRequest request) {
@@ -338,6 +531,15 @@ public class EvaluationServiceImpl implements EvaluationService {
         return response;
     }
 
+    /**
+     * 验证评估任务创建请求参数
+     * <p>
+     * 检查必要参数：提示词模板 ID、模型配置 ID、数据集 ID。
+     * </p>
+     *
+     * @param request 创建任务请求
+     * @throws IllegalArgumentException 必要参数缺失时抛出
+     */
     private void validateJobRequest(EvaluationJobCreateRequest request) {
         if (request.getPromptTemplateId() == null || request.getPromptTemplateId().isEmpty()) {
             throw new IllegalArgumentException("Prompt template ID is required");
@@ -350,6 +552,21 @@ public class EvaluationServiceImpl implements EvaluationService {
         }
     }
 
+    /**
+     * 将评估任务实体转换为响应 DTO（包含关联实体名称）
+     * <p>
+     * 除了基本字段转换，还查询并填充：
+     * <ul>
+     *   <li>提示词模板名称</li>
+     *   <li>模型配置名称</li>
+     *   <li>数据集名称</li>
+     *   <li>计算的成功率和平均延迟</li>
+     * </ul>
+     * </p>
+     *
+     * @param job 评估任务实体
+     * @return 包含完整信息的任务响应 DTO
+     */
     private EvaluationJobResponse toJobResponseWithNames(EvaluationJob job) {
         EvaluationJobResponse response = evaluationMapper.toJobResponse(job);
         

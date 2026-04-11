@@ -49,6 +49,12 @@ public class EvaluationResult {
     @Column(name = "output_tokens")
     private Integer outputTokens;
 
+    /**
+     * 渲染后的提示词内容（保存便于复现和调试）
+     */
+    @Column(name = "rendered_prompt", length = 5000)
+    private String renderedPrompt;
+
     @Column(nullable = false)
     @Builder.Default
     @Enumerated(EnumType.STRING)

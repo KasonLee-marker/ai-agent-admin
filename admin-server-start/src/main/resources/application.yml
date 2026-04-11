@@ -16,6 +16,7 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: false
+    open-in-view: false
     properties:
       hibernate:
         format_sql: true
@@ -51,7 +52,7 @@ logging:
     org.springframework.web: INFO
     org.springframework.ai: INFO
   file:
-    name: logs/ai-agent-admin.log
+    name: ../../logs/ai-agent-admin/ai-agent-admin.log
   pattern:
     file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
 

@@ -19,6 +19,23 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * AI 模型配置管理 REST 控制器
+ * <p>
+ * 提供模型配置管理和运行时切换的 API：
+ * <ul>
+ *   <li>模型配置的 CRUD 操作</li>
+ *   <li>模型连通性测试（健康检查）</li>
+ *   <li>默认模型设置</li>
+ *   <li>支持的 Provider 和内置模型查询</li>
+ *   <li>运行时模型切换</li>
+ * </ul>
+ * </p>
+ *
+ * @see ModelConfigService
+ * @see ModelService
+ * @see HealthCheckService
+ */
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/models")

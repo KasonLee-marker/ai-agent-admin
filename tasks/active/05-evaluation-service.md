@@ -1,6 +1,6 @@
 # Task: 评估系统 MVP (Evaluation Service MVP)
 
-## 状态：⏳ 进行中
+## 状态：✅ 已完成
 
 ## Objective
 实现评估系统 MVP 版本，支持基础的评估任务创建、批量运行、结果展示。
@@ -132,3 +132,11 @@ POST   /api/v1/evaluations/compare      # A/B 对比
 - 新增文件：20+
 - 测试覆盖率：>70%
 - 遵循项目代码风格（Lombok + MapStruct + Spring Data JPA）
+
+### 2026-04-11 模板版本追踪增强
+
+- ✅ EvaluationJob 添加 promptTemplateVersion 字段
+- ✅ EvaluationResult 添加 renderedPrompt 字段（保存渲染后的提示词便于复现）
+- ✅ EvaluationServiceImpl 修改 evaluateItem() 保存版本号和渲染内容
+- ✅ EvaluationJobResponse/ResultResponse DTO 添加新字段
+- ✅ EvaluationMapper 更新映射逻辑

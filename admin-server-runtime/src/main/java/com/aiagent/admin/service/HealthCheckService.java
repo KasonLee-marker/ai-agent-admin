@@ -12,8 +12,23 @@ import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.stereotype.Service;
 
 /**
- * Health Check Service for AI models.
- * Actually tests the API connection by sending a simple prompt.
+ * AI 模型健康检查服务
+ * <p>
+ * 通过实际调用模型 API 来验证连接状态：
+ * <ul>
+ *   <li>发送简单测试消息验证 API 连通性</li>
+ *   <li>更新模型健康状态（HEALTHY/UNHEALTHY）</li>
+ *   <li>记录最后健康检查时间</li>
+ *   <li>批量检查所有活跃模型</li>
+ * </ul>
+ * </p>
+ * <p>
+ * 健康检查通过发送 "Hello" 测试消息来验证 API 可用性。
+ * 检查失败时自动更新模型状态为 UNHEALTHY。
+ * </p>
+ *
+ * @see ModelConfig
+ * @see EncryptionService
  */
 @Slf4j
 @Service
@@ -23,13 +38,24 @@ public class HealthCheckService {
     private final ModelConfigRepository modelConfigRepository;
     private final EncryptionService encryptionService;
 
+    /**
+     * 测试消息内容
+     */
     private static final String TEST_PROMPT = "Hello";
 
     /**
-     * Perform health check on a model by actually testing the API
+     * 对单个模型执行健康检查
+     * <p>
+     * 执行流程：
+     * <ol>
+     *   <li>验证模型存在且活跃</li>
+     *   <li>调用模型 API 发送测试消息</li>
+     *   <li>根据响应结果更新健康状态</li>
+     * </ol>
+     * </p>
      *
-     * @param modelId the model ID to check
-     * @return true if healthy, false otherwise
+     * @param modelId 模型配置唯一标识
+     * @return true 表示健康，false 表示不健康
      */
     public boolean healthCheck(String modelId) {
         try {
@@ -59,6 +85,13 @@ public class HealthCheckService {
 
     /**
      * 实际测试 API 连接
+     * <p>
+     * 创建 OpenAiChatClient 并发送简单的测试消息。
+     * 使用最小 Token 数（10）来降低测试成本。
+     * </p>
+     *
+     * @param config 模型配置实体
+     * @return true 表示连接成功，false 表示连接失败
      */
     private boolean testApiConnection(ModelConfig config) {
         try {
@@ -88,6 +121,15 @@ public class HealthCheckService {
         }
     }
 
+    /**
+     * 更新模型健康状态
+     * <p>
+     * 同时更新健康状态和最后检查时间。
+     * </p>
+     *
+     * @param modelId 模型配置唯一标识
+     * @param status  健康状态（HEALTHY/UNHEALTHY）
+     */
     private void updateHealthStatus(String modelId, ModelConfig.HealthStatus status) {
         modelConfigRepository.findById(modelId).ifPresent(config -> {
             config.setHealthStatus(status);
@@ -97,7 +139,11 @@ public class HealthCheckService {
     }
 
     /**
-     * Perform health check on all active models
+     * 批量检查所有活跃模型
+     * <p>
+     * 遍历所有活跃模型并执行健康检查。
+     * 检查过程中捕获异常避免影响后续模型检查。
+     * </p>
      */
     public void healthCheckAll() {
         modelConfigRepository.findByIsActiveTrue().forEach(config -> {

@@ -14,6 +14,26 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * 模型评估管理 REST 控制器
+ * <p>
+ * 提供模型评估任务的管理 API：
+ * <ul>
+ *   <li>评估任务创建、查询、更新、删除</li>
+ *   <li>异步执行评估任务</li>
+ *   <li>任务取消支持</li>
+ *   <li>评估结果查询</li>
+ *   <li>评估指标统计</li>
+ *   <li>评估对比（比较两个任务）</li>
+ * </ul>
+ * </p>
+ * <p>
+ * 评估任务使用指定的提示词模板、模型配置和数据集，
+ * 批量调用模型并收集性能指标。
+ * </p>
+ *
+ * @see EvaluationService
+ */
 @RestController
 @RequestMapping("/api/v1/evaluations")
 @RequiredArgsConstructor

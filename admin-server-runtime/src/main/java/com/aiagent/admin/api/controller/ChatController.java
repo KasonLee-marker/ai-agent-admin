@@ -16,6 +16,23 @@ import reactor.core.publisher.Flux;
 
 import java.util.List;
 
+/**
+ * 聊天调试 REST 控制器
+ * <p>
+ * 提供聊天会话和消息的管理 API：
+ * <ul>
+ *   <li>会话创建、查询、删除</li>
+ *   <li>消息发送（同步和流式响应）</li>
+ *   <li>会话历史查询</li>
+ * </ul>
+ * </p>
+ * <p>
+ * 流式响应通过 SSE（Server-Sent Events）格式输出，
+ * 端点为 POST /messages/stream，响应类型为 text/event-stream。
+ * </p>
+ *
+ * @see ChatService
+ */
 @RestController
 @RequestMapping("/api/v1/chat")
 @RequiredArgsConstructor
@@ -56,6 +73,14 @@ public class ChatController {
     public ApiResponse<ChatSessionDTO> getSession(
             @Parameter(description = "Session ID") @PathVariable String id) {
         return ApiResponse.success(chatService.getSession(id));
+    }
+
+    @PutMapping("/sessions/{id}")
+    @Operation(summary = "Update a chat session")
+    public ApiResponse<ChatSessionDTO> updateSession(
+            @Parameter(description = "Session ID") @PathVariable String id,
+            @Valid @RequestBody ChatRequest.UpdateSessionRequest request) {
+        return ApiResponse.success(chatService.updateSession(id, request));
     }
 
     @DeleteMapping("/sessions/{id}")

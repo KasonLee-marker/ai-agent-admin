@@ -3,8 +3,10 @@ import {Button, Card, Collapse, Divider, Empty, Input, Layout, List, message, Se
 import {ClearOutlined, FileTextOutlined, SendOutlined} from '@ant-design/icons'
 import {ragChat, vectorSearch} from '@/api/rag'
 import {listDocuments} from '@/api/documents'
+import {listPrompts} from '@/api/prompts'
 import {RagChatResponse, RagSource, VectorSearchResult} from '@/types/rag'
 import {Document} from '@/types/document'
+import {PromptTemplate} from '@/types/prompt'
 
 const {Sider, Content} = Layout
 
@@ -18,7 +20,9 @@ interface ChatMessage {
 
 const RagPage: React.FC = () => {
     const [documents, setDocuments] = useState<Document[]>([])
+    const [prompts, setPrompts] = useState<PromptTemplate[]>([])
     const [selectedDocIds, setSelectedDocIds] = useState<string[]>([])
+    const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null)
     const [messages, setMessages] = useState<ChatMessage[]>([])
     const [inputValue, setInputValue] = useState('')
     const [sending, setSending] = useState(false)
@@ -29,6 +33,7 @@ const RagPage: React.FC = () => {
 
     useEffect(() => {
         fetchDocuments()
+        fetchPrompts()
     }, [])
 
     useEffect(() => {
@@ -40,6 +45,17 @@ const RagPage: React.FC = () => {
             const res = await listDocuments()
             if (res.success) {
                 setDocuments(res.data.content?.filter(d => d.status === 'COMPLETED') || [])
+            }
+        } catch {
+            // ignore
+        }
+    }
+
+    const fetchPrompts = async () => {
+        try {
+            const res = await listPrompts()
+            if (res.success) {
+                setPrompts(res.data.content || [])
             }
         } catch {
             // ignore
@@ -63,6 +79,7 @@ const RagPage: React.FC = () => {
             if (mode === 'rag') {
                 const res = await ragChat({
                     query: userMessage.content,
+                    promptTemplateId: selectedPromptId || undefined,
                     documentIds: selectedDocIds.length > 0 ? selectedDocIds : undefined,
                     topK: 5,
                     sessionId: sessionId || undefined
@@ -179,6 +196,23 @@ const RagPage: React.FC = () => {
                             {value: 'rag', label: 'RAG 对话'},
                             {value: 'search', label: '向量检索'}
                         ]}
+                    />
+                </div>
+                <Divider style={{margin: '12px 0'}}/>
+                <div style={{padding: 16}}>
+                    <div style={{marginBottom: 12}}>
+                        <span style={{fontWeight: 500}}>提示词模板</span>
+                    </div>
+                    <Select
+                        allowClear
+                        placeholder="选择模板（可选）"
+                        value={selectedPromptId}
+                        onChange={setSelectedPromptId}
+                        style={{width: '100%'}}
+                        options={prompts.map(p => ({
+                            value: p.id,
+                            label: p.name
+                        }))}
                     />
                 </div>
                 <Divider style={{margin: '12px 0'}}/>

@@ -26,6 +26,11 @@ export async function deleteSession(id: string): Promise<ApiResponse<void>> {
     return client.delete(`${BASE_URL}/sessions/${id}`)
 }
 
+// 更新会话
+export async function updateSession(id: string, data: Partial<CreateSessionRequest>): Promise<ApiResponse<ChatSession>> {
+    return client.put(`${BASE_URL}/sessions/${id}`, data)
+}
+
 // 发送消息
 export async function sendMessage(data: SendMessageRequest): Promise<ApiResponse<ChatMessage>> {
     return client.post(`${BASE_URL}/messages`, data)

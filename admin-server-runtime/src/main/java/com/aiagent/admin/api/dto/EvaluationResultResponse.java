@@ -15,6 +15,7 @@ public class EvaluationResultResponse {
     private Integer latencyMs;
     private Integer inputTokens;
     private Integer outputTokens;
+    private String renderedPrompt;  // 渲染后的提示词内容
     private String status;
     private String errorMessage;
     private LocalDateTime createdAt;

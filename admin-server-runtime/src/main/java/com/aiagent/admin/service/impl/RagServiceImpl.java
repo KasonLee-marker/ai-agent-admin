@@ -5,10 +5,13 @@ import com.aiagent.admin.api.dto.RagChatResponse;
 import com.aiagent.admin.api.dto.VectorSearchRequest;
 import com.aiagent.admin.api.dto.VectorSearchResult;
 import com.aiagent.admin.domain.entity.ModelConfig;
+import com.aiagent.admin.domain.entity.PromptTemplate;
 import com.aiagent.admin.domain.repository.ModelConfigRepository;
+import com.aiagent.admin.domain.repository.PromptTemplateRepository;
 import com.aiagent.admin.service.DocumentService;
 import com.aiagent.admin.service.EncryptionService;
 import com.aiagent.admin.service.RagService;
+import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -22,6 +25,30 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * 检索增强生成（RAG）服务实现类
+ * <p>
+ * 提供基于文档检索的对话功能：
+ * <ul>
+ *   <li>向量相似度检索相关文档片段</li>
+ *   <li>构建包含检索上下文的提示词</li>
+ *   <li>调用 AI 模型生成回复</li>
+ * </ul>
+ * </p>
+ * <p>
+ * RAG 流程：
+ * <ol>
+ *   <li>将用户问题转换为查询</li>
+ *   <li>在向量数据库中检索 topK 个相似文档片段</li>
+ *   <li>将检索结果拼接成上下文文本</li>
+ *   <li>使用系统提示词模板构建完整 Prompt</li>
+ *   <li>调用模型生成最终回复</li>
+ * </ol>
+ * </p>
+ *
+ * @see RagService
+ * @see DocumentService
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -29,8 +56,12 @@ public class RagServiceImpl implements RagService {
 
     private final DocumentService documentService;
     private final ModelConfigRepository modelConfigRepository;
+    private final PromptTemplateRepository promptTemplateRepository;
     private final EncryptionService encryptionService;
 
+    /**
+     * 默认系统提示词模板，用于构建 RAG 上下文
+     */
     private static final String DEFAULT_SYSTEM_PROMPT = """
             你是一个智能助手，请根据以下参考信息回答用户的问题。
             如果参考信息中没有相关内容，请诚实地说"根据现有信息无法回答该问题"。
@@ -41,6 +72,22 @@ public class RagServiceImpl implements RagService {
             请基于以上参考信息回答用户问题。
             """;
 
+    /**
+     * 执行 RAG 对话
+     * <p>
+     * 执行流程：
+     * <ol>
+     *   <li>检索相关文档片段（向量相似度搜索）</li>
+     *   <li>构建上下文文本</li>
+     *   <li>生成系统提示词</li>
+     *   <li>获取模型配置</li>
+     *   <li>调用 LLM 生成回复</li>
+     * </ol>
+     * </p>
+     *
+     * @param request RAG 对话请求，包含问题、可选模型ID、topK 等
+     * @return RAG 对话响应，包含回答、来源文档、延迟等
+     */
     @Override
     public RagChatResponse chat(RagChatRequest request) {
         long startTime = System.currentTimeMillis();
@@ -59,9 +106,17 @@ public class RagServiceImpl implements RagService {
                 .collect(Collectors.joining("\n\n---\n\n"));
 
         // 3. Build system prompt
-        String systemPromptTemplate = request.getSystemPromptTemplate() != null
-                ? request.getSystemPromptTemplate()
-                : DEFAULT_SYSTEM_PROMPT;
+        // 优先级：promptTemplateId > systemPromptTemplate > DEFAULT_SYSTEM_PROMPT
+        String systemPromptTemplate;
+        if (request.getPromptTemplateId() != null && !request.getPromptTemplateId().isEmpty()) {
+            PromptTemplate template = promptTemplateRepository.findById(request.getPromptTemplateId())
+                    .orElseThrow(() -> new EntityNotFoundException("Prompt template not found with id: " + request.getPromptTemplateId()));
+            systemPromptTemplate = template.getContent();
+        } else if (request.getSystemPromptTemplate() != null && !request.getSystemPromptTemplate().isEmpty()) {
+            systemPromptTemplate = request.getSystemPromptTemplate();
+        } else {
+            systemPromptTemplate = DEFAULT_SYSTEM_PROMPT;
+        }
         String systemPrompt = systemPromptTemplate.replace("{context}", context);
 
         // 4. Get model configuration
@@ -93,6 +148,16 @@ public class RagServiceImpl implements RagService {
                 .build();
     }
 
+    /**
+     * 构建 OpenAI ChatClient
+     * <p>
+     * 根据模型配置创建 OpenAiApi 和 OpenAiChatClient 实例。
+     * 配置参数包括：baseUrl、apiKey、modelName、temperature、maxTokens。
+     * </p>
+     *
+     * @param config 模型配置实体
+     * @return 配置好的 OpenAiChatClient 实例
+     */
     private OpenAiChatClient buildChatClient(ModelConfig config) {
         String apiKey = encryptionService.decrypt(config.getApiKey());
         String baseUrl = config.getBaseUrl() != null ? config.getBaseUrl()

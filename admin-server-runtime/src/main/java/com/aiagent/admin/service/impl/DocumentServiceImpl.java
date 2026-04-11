@@ -29,9 +29,41 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * 文档管理服务实现类
+ * <p>
+ * 提供文档上传、处理和管理功能：
+ * <ul>
+ *   <li>文档上传（PDF、Word、纯文本、Markdown、CSV）</li>
+ *   <li>文本提取和分块</li>
+ *   <li>向量相似度检索</li>
+ *   <li>文档和分块的查询删除</li>
+ * </ul>
+ * </p>
+ * <p>
+ * 文档处理流程：
+ * <ol>
+ *   <li>验证文件类型</li>
+ *   <li>创建文档记录（状态：PROCESSING）</li>
+ *   <li>异步提取文本内容</li>
+ *   <li>将文本分块（默认 500 字符，重叠 50）</li>
+ *   <li>保存分块记录</li>
+ *   <li>更新文档状态（COMPLETED）</li>
+ * </ol>
+ * </p>
+ * <p>
+ * 注意：当前版本使用简单的文本匹配进行检索，
+ * 生产环境应使用 pgvector 进行真正的向量相似度搜索。
+ * </p>
+ *
+ * @see DocumentService
+ * @see DocumentChunk
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -43,9 +75,14 @@ public class DocumentServiceImpl implements DocumentService {
     private final DocumentChunkMapper documentChunkMapper;
     private final IdGenerator idGenerator;
 
+    /**
+     * 默认分块大小（字符数）
+     */
     private static final int DEFAULT_CHUNK_SIZE = 500;
+    /** 默认分块重叠大小（字符数） */
     private static final int DEFAULT_CHUNK_OVERLAP = 50;
 
+    /** 支持的文件内容类型集合 */
     private static final Set<String> SUPPORTED_CONTENT_TYPES = Set.of(
             "application/pdf",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -54,6 +91,19 @@ public class DocumentServiceImpl implements DocumentService {
             "text/csv"
     );
 
+    /**
+     * 上传文档并异步处理
+     * <p>
+     * 创建文档记录后异步执行文本提取和分块。
+     * 文档初始状态为 PROCESSING，处理完成后更新为 COMPLETED。
+     * </p>
+     *
+     * @param file      上传的文件
+     * @param name      文档名称（可选，默认使用文件名）
+     * @param createdBy 创建者标识
+     * @return 文档响应 DTO（状态为 PROCESSING）
+     * @throws IllegalArgumentException 文件类型不支持时抛出
+     */
     @Override
     @Transactional
     public DocumentResponse uploadDocument(MultipartFile file, String name, String createdBy) {
@@ -79,6 +129,17 @@ public class DocumentServiceImpl implements DocumentService {
         return documentMapper.toResponse(document);
     }
 
+    /**
+     * 异步处理文档（提取文本、分块、存储）
+     * <p>
+     * 使用 @Async 注解异步执行，避免阻塞上传响应。
+     * 处理流程：提取文本 → 分块 → 创建分块实体 → 保存 → 更新状态。
+     * 处理失败时更新文档状态为 FAILED 并记录错误信息。
+     * </p>
+     *
+     * @param documentId 文档唯一标识
+     * @param file       上传的文件
+     */
     @Async
     protected void processDocumentAsync(String documentId, MultipartFile file) {
         try {
@@ -129,6 +190,23 @@ public class DocumentServiceImpl implements DocumentService {
         }
     }
 
+    /**
+     * 根据文件类型提取文本内容
+     * <p>
+     * 支持的文件类型：
+     * <ul>
+     *   <li>PDF：使用 Apache PDFBox 提取</li>
+     *   <li>Word (.docx)：使用 Apache POI 提取</li>
+     *   <li>纯文本、Markdown、CSV：直接读取</li>
+     * </ul>
+     * </p>
+     *
+     * @param inputStream  文件输入流
+     * @param contentType  文件内容类型
+     * @return 提取的文本内容
+     * @throws IOException 文件读取失败时抛出
+     * @throws IllegalArgumentException 文件类型不支持时抛出
+     */
     private String extractText(InputStream inputStream, String contentType) throws IOException {
         return switch (contentType) {
             case "application/pdf" -> extractPdfText(inputStream);
@@ -140,6 +218,13 @@ public class DocumentServiceImpl implements DocumentService {
         };
     }
 
+    /**
+     * 使用 Apache PDFBox 提取 PDF 文件文本
+     *
+     * @param inputStream PDF 文件输入流
+     * @return 提取的文本内容
+     * @throws IOException 文件读取失败时抛出
+     */
     private String extractPdfText(InputStream inputStream) throws IOException {
         try (PDDocument pdfDocument = Loader.loadPDF(inputStream.readAllBytes())) {
             PDFTextStripper stripper = new PDFTextStripper();
@@ -147,6 +232,13 @@ public class DocumentServiceImpl implements DocumentService {
         }
     }
 
+    /**
+     * 使用 Apache POI 提取 Word 文件文本
+     *
+     * @param inputStream Word 文件输入流
+     * @return 提取的文本内容
+     * @throws IOException 文件读取失败时抛出
+     */
     private String extractWordText(InputStream inputStream) throws IOException {
         try (XWPFDocument doc = new XWPFDocument(inputStream)) {
             return doc.getParagraphs().stream()
@@ -155,6 +247,20 @@ public class DocumentServiceImpl implements DocumentService {
         }
     }
 
+    /**
+     * 将文本分割成固定大小的块
+     * <p>
+     * 分块策略：
+     * <ul>
+     *   <li>默认块大小：500 字符</li>
+     *   <li>块重叠：50 字符（避免边界信息丢失）</li>
+     *   <li>优先在句号、换行符或空格处分割</li>
+     * </ul>
+     * </p>
+     *
+     * @param text 要分割的文本
+     * @return 文本块列表
+     */
     private List<String> splitText(String text) {
         List<String> chunks = new ArrayList<>();
         if (text == null || text.isBlank()) {
@@ -193,6 +299,13 @@ public class DocumentServiceImpl implements DocumentService {
         return chunks;
     }
 
+    /**
+     * 根据ID获取文档详情
+     *
+     * @param documentId 文档唯一标识
+     * @return 文档响应 DTO
+     * @throws EntityNotFoundException 文档不存在时抛出
+     */
     @Override
     @Transactional(readOnly = true)
     public DocumentResponse getDocument(String documentId) {
@@ -201,6 +314,16 @@ public class DocumentServiceImpl implements DocumentService {
         return documentMapper.toResponse(document);
     }
 
+    /**
+     * 分页查询用户的文档列表
+     * <p>
+     * 按创建时间倒序排列。
+     * </p>
+     *
+     * @param createdBy 创建者标识
+     * @param pageable  分页参数
+     * @return 分页的文档响应 DTO
+     */
     @Override
     @Transactional(readOnly = true)
     public Page<DocumentResponse> listDocuments(String createdBy, Pageable pageable) {
@@ -208,6 +331,15 @@ public class DocumentServiceImpl implements DocumentService {
         return documents.map(documentMapper::toResponse);
     }
 
+    /**
+     * 删除文档及其所有分块
+     * <p>
+     * 先删除文档分块记录，再删除文档记录。
+     * </p>
+     *
+     * @param documentId 文档唯一标识
+     * @throws EntityNotFoundException 文档不存在时抛出
+     */
     @Override
     @Transactional
     public void deleteDocument(String documentId) {
@@ -223,6 +355,15 @@ public class DocumentServiceImpl implements DocumentService {
         log.info("Document deleted: {}", documentId);
     }
 
+    /**
+     * 获取文档的所有分块列表
+     * <p>
+     * 按分块索引升序排列。
+     * </p>
+     *
+     * @param documentId 文档唯一标识
+     * @return 分块响应 DTO 列表
+     */
     @Override
     @Transactional(readOnly = true)
     public List<DocumentChunkResponse> getDocumentChunks(String documentId) {
@@ -232,12 +373,31 @@ public class DocumentServiceImpl implements DocumentService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 获取文档处理状态
+     * <p>
+     * 用于轮询检查文档处理是否完成。
+     * </p>
+     *
+     * @param documentId 文档唯一标识
+     * @return 文档响应 DTO（包含状态信息）
+     */
     @Override
     @Transactional(readOnly = true)
     public DocumentResponse getDocumentStatus(String documentId) {
         return getDocument(documentId);
     }
 
+    /**
+     * 执行向量相似度搜索
+     * <p>
+     * 当前版本使用简单的文本匹配实现（包含关键词即匹配）。
+     * 生产环境应使用 pgvector 进行真正的向量 Embedding 和相似度搜索。
+     * </p>
+     *
+     * @param request 搜索请求，包含查询文本、topK、可选文档ID过滤
+     * @return 相似文档片段列表（包含内容和元数据）
+     */
     @Override
     public List<VectorSearchResult> searchSimilar(VectorSearchRequest request) {
         // Simple text-based search fallback
@@ -260,11 +420,22 @@ public class DocumentServiceImpl implements DocumentService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 获取系统支持的文件类型列表
+     *
+     * @return 支持的内容类型 MIME 列表
+     */
     @Override
     public List<String> getSupportedContentTypes() {
         return new ArrayList<>(SUPPORTED_CONTENT_TYPES);
     }
 
+    /**
+     * 检查文件类型是否支持
+     *
+     * @param contentType 文件内容类型
+     * @return 是否支持该类型
+     */
     private boolean isSupportedContentTypes(String contentType) {
         return contentType != null && SUPPORTED_CONTENT_TYPES.contains(contentType);
     }

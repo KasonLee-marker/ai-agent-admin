@@ -35,6 +35,12 @@ public class EvaluationJob {
     @Column(nullable = false, length = 100)
     private String promptTemplateId;
 
+    /**
+     * 使用的提示词模板版本号（记录评估时的版本，便于复现）
+     */
+    @Column(name = "prompt_template_version")
+    private Integer promptTemplateVersion;
+
     @Column(nullable = false, length = 100)
     private String modelConfigId;
 

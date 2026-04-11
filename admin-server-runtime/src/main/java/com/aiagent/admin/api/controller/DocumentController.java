@@ -1,6 +1,8 @@
 package com.aiagent.admin.api.controller;
 
-import com.aiagent.admin.api.dto.*;
+import com.aiagent.admin.api.dto.ApiResponse;
+import com.aiagent.admin.api.dto.DocumentChunkResponse;
+import com.aiagent.admin.api.dto.DocumentResponse;
 import com.aiagent.admin.service.DocumentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -16,6 +18,30 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
+/**
+ * 文档管理 REST 控制器
+ * <p>
+ * 提供文档上传和管理的 API：
+ * <ul>
+ *   <li>文档上传（自动提取文本、分块、向量化）</li>
+ *   <li>文档查询、删除</li>
+ *   <li>文档分块列表查询</li>
+ *   <li>处理状态查询</li>
+ *   <li>支持的文件类型查询</li>
+ * </ul>
+ * </p>
+ * <p>
+ * 文档上传后自动处理：
+ * <ol>
+ *   <li>提取文档文本内容</li>
+ *   <li>将文本分块（按段落或固定大小）</li>
+ *   <li>调用 Embedding 模型生成向量</li>
+ *   <li>存储向量到 PostgreSQL pgvector</li>
+ * </ol>
+ * </p>
+ *
+ * @see DocumentService
+ */
 @RestController
 @RequestMapping("/api/v1/documents")
 @RequiredArgsConstructor

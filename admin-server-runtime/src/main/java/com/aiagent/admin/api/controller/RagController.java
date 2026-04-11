@@ -9,8 +9,31 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 检索增强生成（RAG）REST 控制器
+ * <p>
+ * 提供基于文档检索的对话 API：
+ * <ul>
+ *   <li>RAG 对话：先检索相关文档片段，再生成回复</li>
+ * </ul>
+ * </p>
+ * <p>
+ * RAG 流程：
+ * <ol>
+ *   <li>将用户问题转换为向量</li>
+ *   <li>在向量数据库中检索相似文档片段</li>
+ *   <li>将检索结果作为上下文构建提示词</li>
+ *   <li>调用 AI 模型生成回复</li>
+ * </ol>
+ * </p>
+ *
+ * @see RagService
+ */
 @RestController
 @RequestMapping("/api/v1/rag")
 @RequiredArgsConstructor
