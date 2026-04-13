@@ -16,6 +16,18 @@ public class EvaluationJobResponse {
     private String modelConfigName;
     private String datasetId;
     private String datasetName;
+    /**
+     * 关联的知识库ID（用于RAG评估）
+     */
+    private String documentId;
+    /**
+     * 知识库名称
+     */
+    private String documentName;
+    /**
+     * 是否启用RAG评估模式
+     */
+    private Boolean enableRag;
     private String status;
     private Integer totalItems;
     private Integer completedItems;

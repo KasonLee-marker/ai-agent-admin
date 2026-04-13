@@ -1,6 +1,5 @@
 import React, {useEffect, useState} from 'react'
 import {
-    Badge,
     Button,
     Card,
     Col,
@@ -15,6 +14,7 @@ import {
     Space,
     Spin,
     Statistic,
+    Switch,
     Table,
     Tabs,
     Tag
@@ -25,6 +25,7 @@ import {
     EditOutlined,
     PlayCircleOutlined,
     PlusOutlined,
+    ReloadOutlined,
     StopOutlined
 } from '@ant-design/icons'
 import type {ColumnsType} from 'antd/es/table'
@@ -35,12 +36,14 @@ import {
     getEvaluationMetrics,
     getEvaluationResults,
     listEvaluations,
+    rerunEvaluation,
     runEvaluation,
     updateEvaluation
 } from '@/api/evaluations'
 import {listDatasets} from '@/api/datasets'
 import {listPrompts} from '@/api/prompts'
 import {listModels} from '@/api/models'
+import {listDocuments} from '@/api/documents'
 import {
     CreateEvaluationRequest,
     EvaluationJob,
@@ -59,11 +62,13 @@ const EvaluationPage: React.FC = () => {
     const [datasets, setDatasets] = useState<Dataset[]>([])
     const [prompts, setPrompts] = useState<PromptTemplate[]>([])
     const [models, setModels] = useState<ModelConfig[]>([])
+    const [documents, setDocuments] = useState<{ id: string, name: string }[]>([])
     const [loading, setLoading] = useState(false)
     const [resultsLoading, setResultsLoading] = useState(false)
     const [modalVisible, setModalVisible] = useState(false)
     const [editingEvaluation, setEditingEvaluation] = useState<EvaluationJob | null>(null)
     const [selectedEvaluation, setSelectedEvaluation] = useState<EvaluationJob | null>(null)
+    const [activeTab, setActiveTab] = useState<string>('list')
     const [form] = Form.useForm()
 
     useEffect(() => {
@@ -85,14 +90,16 @@ const EvaluationPage: React.FC = () => {
 
     const fetchOptions = async () => {
         try {
-            const [dsRes, ptRes, mdRes] = await Promise.all([
+            const [dsRes, ptRes, mdRes, docRes] = await Promise.all([
                 listDatasets(),
                 listPrompts(),
-                listModels()
+                listModels(),
+                listDocuments()
             ])
             if (dsRes.success) setDatasets(dsRes.data.content || [])
             if (ptRes.success) setPrompts(ptRes.data.content || [])
             if (mdRes.success) setModels(mdRes.data || [])
+            if (docRes.success) setDocuments((docRes.data.content || []).map(d => ({id: d.id, name: d.name})))
         } catch {
             // ignore
         }
@@ -159,6 +166,16 @@ const EvaluationPage: React.FC = () => {
         }
     }
 
+    const handleRerun = async (id: string) => {
+        try {
+            await rerunEvaluation(id)
+            message.success('重新评估任务已启动')
+            fetchEvaluations()
+        } catch {
+            message.error('重新评估失败')
+        }
+    }
+
     const handleSubmit = async () => {
         try {
             const values = await form.validateFields()
@@ -180,6 +197,7 @@ const EvaluationPage: React.FC = () => {
         setSelectedEvaluation(record)
         if (record.status === 'COMPLETED') {
             fetchResults(record.id)
+            setActiveTab('results')  // 自动切换到结果 Tab
         } else {
             setResults([])
             setMetrics(null)
@@ -228,8 +246,10 @@ const EvaluationPage: React.FC = () => {
         {
             title: '操作',
             key: 'action',
+            width: 280,
+            fixed: 'right',
             render: (_, record) => (
-                <Space>
+                <Space onClick={(e) => e.stopPropagation()}>
                     {record.status === 'PENDING' && (
                         <Button type="link" icon={<PlayCircleOutlined/>} onClick={() => handleRun(record.id)}>
                             运行
@@ -240,10 +260,16 @@ const EvaluationPage: React.FC = () => {
                             取消
                         </Button>
                     )}
-                    {record.status === 'COMPLETED' && (
-                        <Button type="link" icon={<BarChartOutlined/>} onClick={() => handleSelectEvaluation(record)}>
-                            结果
-                        </Button>
+                    {(record.status === 'COMPLETED' || record.status === 'FAILED' || record.status === 'CANCELLED') && (
+                        <>
+                            <Button type="link" icon={<ReloadOutlined/>} onClick={() => handleRerun(record.id)}>
+                                重新评估
+                            </Button>
+                            <Button type="link" icon={<BarChartOutlined/>}
+                                    onClick={() => handleSelectEvaluation(record)}>
+                                结果
+                            </Button>
+                        </>
                     )}
                     <Button type="link" icon={<EditOutlined/>} onClick={() => handleEdit(record)}>
                         编辑
@@ -259,21 +285,56 @@ const EvaluationPage: React.FC = () => {
     ]
 
     const resultColumns: ColumnsType<EvaluationResult> = [
-        {title: '序号', dataIndex: 'itemIndex', key: 'itemIndex', width: 60},
+        {title: '序号', key: 'index', width: 60, render: (_, __, index) => index + 1},
         {title: '输入', dataIndex: 'input', key: 'input', ellipsis: true},
         {title: '期望输出', dataIndex: 'expectedOutput', key: 'expectedOutput', ellipsis: true},
         {title: '实际输出', dataIndex: 'actualOutput', key: 'actualOutput', ellipsis: true},
         {
-            title: '得分',
+            title: 'AI得分',
             dataIndex: 'score',
             key: 'score',
+            width: 80,
             render: (score?: number) => score ?
-                <Tag color={score >= 0.8 ? 'success' : 'warning'}>{score.toFixed(2)}</Tag> : '-'
+                <Tag color={score >= 80 ? 'success' : score >= 50 ? 'warning' : 'error'}>{score.toFixed(0)}</Tag> : '-'
+        },
+        {
+            title: '相似度',
+            dataIndex: 'semanticSimilarity',
+            key: 'semanticSimilarity',
+            width: 80,
+            render: (sim?: number) => sim ?
+                <Tag
+                    color={sim >= 0.8 ? 'success' : sim >= 0.5 ? 'warning' : 'error'}>{(sim * 100).toFixed(0)}%</Tag> : '-'
+        },
+        {
+            title: '检索得分',
+            dataIndex: 'retrievalScore',
+            key: 'retrievalScore',
+            width: 80,
+            render: (score?: number) => score ?
+                <Tag
+                    color={score >= 0.8 ? 'success' : score >= 0.5 ? 'warning' : 'error'}>{(score * 100).toFixed(0)}%</Tag> : '-'
+        },
+        {
+            title: '忠实度',
+            dataIndex: 'faithfulness',
+            key: 'faithfulness',
+            width: 80,
+            render: (f?: number) => f ?
+                <Tag color={f >= 0.8 ? 'success' : f >= 0.5 ? 'warning' : 'error'}>{(f * 100).toFixed(0)}%</Tag> : '-'
+        },
+        {
+            title: '评分理由',
+            dataIndex: 'scoreReason',
+            key: 'scoreReason',
+            ellipsis: true,
+            render: (reason?: string) => reason || '-'
         },
         {
             title: '耗时',
             dataIndex: 'latencyMs',
             key: 'latencyMs',
+            width: 80,
             render: (ms?: number) => ms ? `${ms}ms` : '-'
         }
     ]
@@ -281,13 +342,28 @@ const EvaluationPage: React.FC = () => {
     return (
         <div>
             <div style={{marginBottom: 16, display: 'flex', justifyContent: 'space-between'}}>
-                <h2>评估系统</h2>
-                <Button type="primary" icon={<PlusOutlined/>} onClick={handleCreate}>
-                    新建评估任务
-                </Button>
+                <div>
+                    <h2 style={{marginBottom: 0}}>评估系统</h2>
+                    <p style={{color: '#666', marginTop: 4}}>选择提示词、模型和数据集运行评估任务，对比不同配置的效果</p>
+                </div>
+                <Space>
+                    {activeTab === 'results' && selectedEvaluation && (
+                        <Button onClick={() => {
+                            setActiveTab('list');
+                            setSelectedEvaluation(null);
+                            setResults([]);
+                            setMetrics(null);
+                        }}>
+                            返回列表
+                        </Button>
+                    )}
+                    <Button type="primary" icon={<PlusOutlined/>} onClick={handleCreate}>
+                        新建评估任务
+                    </Button>
+                </Space>
             </div>
 
-            <Tabs defaultActiveKey="list" items={[
+            <Tabs activeKey={activeTab} onChange={setActiveTab} items={[
                 {
                     key: 'list',
                     label: '评估任务列表',
@@ -297,6 +373,7 @@ const EvaluationPage: React.FC = () => {
                             dataSource={evaluations}
                             rowKey="id"
                             loading={loading}
+                            scroll={{x: 1000}}
                             onRow={(record) => ({
                                 onClick: () => handleSelectEvaluation(record),
                                 style: {cursor: 'pointer'}
@@ -304,66 +381,47 @@ const EvaluationPage: React.FC = () => {
                         />
                     )
                 },
-                {
+                ...(selectedEvaluation && selectedEvaluation.status === 'COMPLETED' ? [{
                     key: 'results',
-                    label: selectedEvaluation ? `${selectedEvaluation.name} - 结果` : '评估结果（请选择任务）',
-                    children: selectedEvaluation ? (
-                        selectedEvaluation.status === 'COMPLETED' ? (
-                            <Spin spinning={resultsLoading}>
-                                <Card>
-                                    <Row gutter={16} style={{marginBottom: 24}}>
-                                        <Col span={4}>
-                                            <Statistic title="总数" value={metrics?.totalItems || 0}/>
-                                        </Col>
-                                        <Col span={4}>
-                                            <Statistic title="通过数" value={metrics?.passedItems || 0}
-                                                       valueStyle={{color: '#3f8600'}}/>
-                                        </Col>
-                                        <Col span={4}>
-                                            <Statistic title="失败数" value={metrics?.failedItems || 0}
-                                                       valueStyle={{color: '#cf1322'}}/>
-                                        </Col>
-                                        <Col span={4}>
-                                            <Statistic title="通过率" value={metrics?.passRate || 0} suffix="%"
-                                                       precision={1}/>
-                                        </Col>
-                                        <Col span={4}>
-                                            <Statistic title="平均耗时" value={metrics?.averageLatencyMs || 0}
-                                                       suffix="ms"/>
-                                        </Col>
-                                        <Col span={4}>
-                                            <Statistic title="平均得分" value={metrics?.averageScore || 0}
-                                                       precision={2}/>
-                                        </Col>
-                                    </Row>
-                                    <Table
-                                        columns={resultColumns}
-                                        dataSource={results}
-                                        rowKey="id"
-                                        pagination={{pageSize: 10}}
-                                    />
-                                </Card>
-                            </Spin>
-                        ) : (
+                    label: `${selectedEvaluation.name} - 结果`,
+                    children: (
+                        <Spin spinning={resultsLoading}>
                             <Card>
-                                <div style={{textAlign: 'center', padding: 40}}>
-                                    <Badge
-                                        status={statusMap[selectedEvaluation.status]?.color === 'success' ? 'success' : 'processing'}
-                                        text={statusMap[selectedEvaluation.status]?.text}/>
-                                    <br/>
-                                    <Progress percent={getProgress(selectedEvaluation)}
-                                              style={{maxWidth: 200, margin: '16px auto'}}/>
-                                </div>
+                                <Row gutter={16} style={{marginBottom: 24}}>
+                                    <Col span={4}>
+                                        <Statistic title="总数" value={metrics?.totalItems || 0}/>
+                                    </Col>
+                                    <Col span={4}>
+                                        <Statistic title="通过数" value={metrics?.passedItems || 0}
+                                                   valueStyle={{color: '#3f8600'}}/>
+                                    </Col>
+                                    <Col span={4}>
+                                        <Statistic title="失败数" value={metrics?.failedItems || 0}
+                                                   valueStyle={{color: '#cf1322'}}/>
+                                    </Col>
+                                    <Col span={4}>
+                                        <Statistic title="通过率" value={metrics?.passRate || 0} suffix="%"
+                                                   precision={1}/>
+                                    </Col>
+                                    <Col span={4}>
+                                        <Statistic title="平均耗时" value={metrics?.averageLatencyMs || 0}
+                                                   suffix="ms"/>
+                                    </Col>
+                                    <Col span={4}>
+                                        <Statistic title="平均得分" value={metrics?.averageScore || 0}
+                                                   precision={2}/>
+                                    </Col>
+                                </Row>
+                                <Table
+                                    columns={resultColumns}
+                                    dataSource={results}
+                                    rowKey="id"
+                                    pagination={{pageSize: 10}}
+                                />
                             </Card>
-                        )
-                    ) : (
-                        <Card>
-                            <div style={{textAlign: 'center', padding: 40}}>
-                                请从左侧列表选择一个评估任务查看结果
-                            </div>
-                        </Card>
+                        </Spin>
                     )
-                }
+                }] : [])
             ]}/>
 
             <Modal
@@ -387,19 +445,32 @@ const EvaluationPage: React.FC = () => {
                             ))}
                         </Select>
                     </Form.Item>
-                    <Form.Item name="promptId" label="Prompt模板">
+                    <Form.Item name="promptTemplateId" label="Prompt模板">
                         <Select allowClear>
                             {prompts.map(p => (
                                 <Select.Option key={p.id} value={p.id}>{p.name}</Select.Option>
                             ))}
                         </Select>
                     </Form.Item>
-                    <Form.Item name="modelId" label="模型">
+                    <Form.Item name="modelConfigId" label="模型">
                         <Select allowClear>
                             {models.map(m => (
                                 <Select.Option key={m.id} value={m.id}>{m.name}</Select.Option>
                             ))}
                         </Select>
+                    </Form.Item>
+                    <Form.Item name="documentId" label="知识库（RAG评估）"
+                               help="选择后评估时会检索知识库内容">
+                        <Select allowClear>
+                            {documents.map(d => (
+                                <Select.Option key={d.id} value={d.id}>{d.name}</Select.Option>
+                            ))}
+                        </Select>
+                    </Form.Item>
+                    <Form.Item name="enableRag" label="启用RAG评估"
+                               valuePropName="checked"
+                               help="启用后计算检索指标和语义相似度">
+                        <Switch/>
                     </Form.Item>
                 </Form>
             </Modal>

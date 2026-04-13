@@ -46,6 +46,11 @@ export async function cancelEvaluation(id: string): Promise<ApiResponse<Evaluati
     return client.post(`${BASE_URL}/${id}/cancel`)
 }
 
+// 重新评估（删除之前的结果并重新运行）
+export async function rerunEvaluation(id: string): Promise<ApiResponse<EvaluationJob>> {
+    return client.post(`${BASE_URL}/${id}/rerun`)
+}
+
 // 获取评估结果
 export async function getEvaluationResults(id: string, params?: PageParams): Promise<ApiResponse<PageResponse<EvaluationResult>>> {
     return client.get(`${BASE_URL}/${id}/results`, {params})

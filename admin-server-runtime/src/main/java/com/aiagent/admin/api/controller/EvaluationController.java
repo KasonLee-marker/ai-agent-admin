@@ -98,6 +98,13 @@ public class EvaluationController {
         return ApiResponse.success();
     }
 
+    @PostMapping("/{id}/rerun")
+    @Operation(summary = "Rerun an evaluation job (delete previous results and run again)")
+    public ApiResponse<CompletableFuture<EvaluationJobResponse>> rerunJob(
+            @Parameter(description = "Job ID") @PathVariable String id) {
+        return ApiResponse.success(evaluationService.rerunJob(id));
+    }
+
     @GetMapping("/{id}/results")
     @Operation(summary = "Get evaluation results for a job")
     public ApiResponse<PageResponse<EvaluationResultResponse>> listResults(

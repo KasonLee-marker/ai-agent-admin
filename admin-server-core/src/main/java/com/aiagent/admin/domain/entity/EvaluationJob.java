@@ -47,6 +47,31 @@ public class EvaluationJob {
     @Column(nullable = false, length = 100)
     private String datasetId;
 
+    /**
+     * 关联的知识库ID（用于RAG评估）
+     * <p>
+     * 设置后，评估时会从该知识库检索相关文档作为上下文。
+     * </p>
+     */
+    @Column(name = "document_id", length = 100)
+    private String documentId;
+
+    /**
+     * 是否启用RAG评估模式
+     * <p>
+     * 启用后，评估流程会：
+     * <ol>
+     *   <li>检索相关文档片段</li>
+     *   <li>计算检索评估指标（Recall、Precision等）</li>
+     *   <li>构建包含上下文的提示词</li>
+     *   <li>评估答案忠实度</li>
+     * </ol>
+     * </p>
+     */
+    @Column(name = "enable_rag")
+    @Builder.Default
+    private Boolean enableRag = false;
+
     @Column(nullable = false)
     @Builder.Default
     @Enumerated(EnumType.STRING)

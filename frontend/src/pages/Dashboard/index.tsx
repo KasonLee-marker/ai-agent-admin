@@ -1,13 +1,15 @@
 import React, {useEffect, useState} from 'react'
-import {Card, Col, Row, Spin, Statistic} from 'antd'
+import {Button, Card, Col, Row, Spin, Statistic, Steps} from 'antd'
 import {
     CheckCircleOutlined,
     CloudServerOutlined,
     DatabaseOutlined,
     FileSearchOutlined,
     FileTextOutlined,
+    LineChartOutlined,
     MessageOutlined
 } from '@ant-design/icons'
+import {useNavigate} from 'react-router-dom'
 import {listPrompts} from '@/api/prompts'
 import {listModels} from '@/api/models'
 import {listSessions} from '@/api/chat'
@@ -15,6 +17,7 @@ import {listDatasets} from '@/api/datasets'
 import {listDocuments} from '@/api/documents'
 
 const DashboardPage: React.FC = () => {
+    const navigate = useNavigate()
     const [loading, setLoading] = useState(true)
     const [stats, setStats] = useState({
         promptCount: 0,
@@ -113,6 +116,41 @@ const DashboardPage: React.FC = () => {
                     </Col>
                 </Row>
             </Spin>
+
+            <Card style={{marginTop: 24}} title="快速入门">
+                <Steps current={-1} size="small">
+                    <Steps.Step
+                        title="配置模型"
+                        icon={<CloudServerOutlined/>}
+                        description="添加 AI 模型的 API Key 和参数配置"
+                    />
+                    <Steps.Step
+                        title="编写提示词"
+                        icon={<FileTextOutlined/>}
+                        description="创建 Prompt 模板，定义 AI 的行为风格"
+                    />
+                    <Steps.Step
+                        title="对话调试"
+                        icon={<MessageOutlined/>}
+                        description="测试 AI 对话效果，调整提示词参数"
+                    />
+                    <Steps.Step
+                        title="准备数据集"
+                        icon={<DatabaseOutlined/>}
+                        description="添加测试数据用于批量评估"
+                    />
+                    <Steps.Step
+                        title="批量评估"
+                        icon={<LineChartOutlined/>}
+                        description="运行评估任务，对比不同配置的效果"
+                    />
+                </Steps>
+                <div style={{marginTop: 16}}>
+                    <Button type="primary" onClick={() => navigate('/models')}>
+                        开始配置 →
+                    </Button>
+                </div>
+            </Card>
 
             <Card style={{marginTop: 24}}>
                 <h3>欢迎使用 AI Agent Admin</h3>

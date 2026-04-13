@@ -5,7 +5,6 @@ import {
     CreateDatasetRequest,
     Dataset,
     DatasetItem,
-    ImportDatasetRequest,
     UpdateDatasetRequest
 } from '@/types/dataset'
 
@@ -51,19 +50,44 @@ export async function deleteDatasetItem(datasetId: string, itemId: string): Prom
     return client.delete(`${BASE_URL}/${datasetId}/items/${itemId}`)
 }
 
-// 导入数据
-export async function importDataset(data: ImportDatasetRequest): Promise<ApiResponse<Dataset>> {
-    return client.post(`${BASE_URL}/import`, data)
+// 更新数据项
+export async function updateDatasetItem(itemId: string, data: {
+    input: string;
+    output?: string
+}): Promise<ApiResponse<DatasetItem>> {
+    return client.put(`${BASE_URL}/items/${itemId}`, data)
 }
 
-// 导出 JSON
-export async function exportDatasetJson(id: string): Promise<ApiResponse<DatasetItem[]>> {
-    return client.get(`${BASE_URL}/${id}/export/json`)
+// 导入数据项到现有数据集
+export async function importItemsToDataset(datasetId: string, items: {
+    input: string;
+    output?: string
+}[]): Promise<ApiResponse<DatasetItem[]>> {
+    return client.post(`${BASE_URL}/${datasetId}/import`, items)
 }
 
-// 导出 CSV
-export async function exportDatasetCsv(id: string): Promise<ApiResponse<string>> {
-    return client.get(`${BASE_URL}/${id}/export/csv`)
+// 导出 JSON（文件下载）
+export async function exportDatasetJson(datasetId: string): Promise<void> {
+    const response = await client.get(`${BASE_URL}/${datasetId}/export/json`, {responseType: 'blob'})
+    const blob = new Blob([response.data], {type: 'application/json'})
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `dataset_export.json`
+    link.click()
+    window.URL.revokeObjectURL(url)
+}
+
+// 导出 CSV（文件下载）
+export async function exportDatasetCsv(datasetId: string): Promise<void> {
+    const response = await client.get(`${BASE_URL}/${datasetId}/export/csv`, {responseType: 'blob'})
+    const blob = new Blob([response.data], {type: 'text/csv'})
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `dataset_export.csv`
+    link.click()
+    window.URL.revokeObjectURL(url)
 }
 
 // 创建新版本

@@ -23,6 +23,16 @@ public class EvaluationJobCreateRequest {
     @NotBlank(message = "Dataset ID is required")
     private String datasetId;
 
+    /**
+     * 关联的知识库ID（用于RAG评估，可选）
+     */
+    private String documentId;
+
+    /**
+     * 是否启用RAG评估模式（默认false）
+     */
+    private Boolean enableRag;
+
     @Size(max = 100, message = "CreatedBy must be less than 100 characters")
     private String createdBy;
 }

@@ -175,7 +175,10 @@ const ModelListPage: React.FC = () => {
     return (
         <div>
             <div style={{marginBottom: 16, display: 'flex', justifyContent: 'space-between'}}>
-                <h2>模型管理</h2>
+                <div>
+                    <h2 style={{marginBottom: 0}}>模型管理</h2>
+                    <p style={{color: '#666', marginTop: 4}}>配置 AI 模型的 API 地址和密钥，测试连接后设为默认模型</p>
+                </div>
                 <Button type="primary" icon={<PlusOutlined/>} onClick={handleCreate}>
                     新建模型
                 </Button>

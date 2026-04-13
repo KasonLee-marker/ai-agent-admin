@@ -17,6 +17,16 @@ public interface ModelConfigRepository extends JpaRepository<ModelConfig, String
 
     Optional<ModelConfig> findByIsDefaultTrue();
 
+    /**
+     * 查找默认且激活的模型配置
+     */
+    Optional<ModelConfig> findByIsDefaultTrueAndIsActiveTrue();
+
+    /**
+     * 查找指定 provider 列表中激活的模型配置
+     */
+    List<ModelConfig> findByProviderInAndIsActiveTrue(List<ModelProvider> providers);
+
     List<ModelConfig> findByProvider(ModelProvider provider);
 
     List<ModelConfig> findByIsActiveTrue();

@@ -89,3 +89,4 @@ work/
 # Local environment
 .env.local
 .env.*.local
+/.playwright-mcp/

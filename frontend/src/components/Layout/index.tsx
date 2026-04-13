@@ -1,30 +1,59 @@
 import React, {useState} from 'react'
+import type {MenuProps} from 'antd'
 import {Layout, Menu, theme} from 'antd'
 import {
-    DashboardOutlined,
-    FileTextOutlined,
     CloudServerOutlined,
-    MessageOutlined,
+    DashboardOutlined,
     DatabaseOutlined,
-    LineChartOutlined,
     FileSearchOutlined,
-    RobotOutlined,
+    FileTextOutlined,
+    LineChartOutlined,
     LogoutOutlined,
+    MessageOutlined,
+    RobotOutlined,
 } from '@ant-design/icons'
-import {useNavigate, useLocation, Outlet} from 'react-router-dom'
+import {Outlet, useLocation, useNavigate} from 'react-router-dom'
 import {useAuthStore} from '@/stores/authStore'
 
 const {Header, Sider, Content} = Layout
 
-const menuItems = [
+const menuItems: MenuProps['items'] = [
     {key: '/', icon: <DashboardOutlined/>, label: '仪表盘'},
-    {key: '/prompts', icon: <FileTextOutlined/>, label: 'Prompt 管理'},
-    {key: '/models', icon: <CloudServerOutlined/>, label: '模型管理'},
-    {key: '/chat', icon: <MessageOutlined/>, label: '对话调试'},
-    {key: '/datasets', icon: <DatabaseOutlined/>, label: '数据集管理'},
-    {key: '/evaluations', icon: <LineChartOutlined/>, label: '评估系统'},
-    {key: '/documents', icon: <FileSearchOutlined/>, label: '文档管理'},
-    {key: '/rag', icon: <RobotOutlined/>, label: 'RAG 对话'},
+    {
+        key: 'config-group',
+        type: 'group' as const,
+        label: '基础配置',
+        children: [
+            {key: '/models', icon: <CloudServerOutlined/>, label: '模型管理'},
+            {key: '/prompts', icon: <FileTextOutlined/>, label: 'Prompt 管理'},
+        ]
+    },
+    {
+        key: 'test-group',
+        type: 'group' as const,
+        label: '测试调试',
+        children: [
+            {key: '/chat', icon: <MessageOutlined/>, label: '对话调试'},
+            {key: '/rag', icon: <RobotOutlined/>, label: 'RAG 对话'},
+        ]
+    },
+    {
+        key: 'eval-group',
+        type: 'group' as const,
+        label: '评估优化',
+        children: [
+            {key: '/datasets', icon: <DatabaseOutlined/>, label: '数据集管理'},
+            {key: '/evaluations', icon: <LineChartOutlined/>, label: '评估系统'},
+        ]
+    },
+    {
+        key: 'kb-group',
+        type: 'group' as const,
+        label: '知识库',
+        children: [
+            {key: '/documents', icon: <FileSearchOutlined/>, label: '文档管理'},
+        ]
+    },
 ]
 
 const MainLayout: React.FC = () => {

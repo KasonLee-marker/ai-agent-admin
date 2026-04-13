@@ -1,6 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react'
 import {Button, Card, Empty, Form, Input, Layout, List, message, Modal, Select, Space, Spin} from 'antd'
-import {DeleteOutlined, EditOutlined, PlusOutlined, SendOutlined} from '@ant-design/icons'
+import {DeleteOutlined, EditOutlined, InfoCircleOutlined, PlusOutlined, SendOutlined} from '@ant-design/icons'
 import {
     createSession,
     deleteSession,
@@ -326,6 +326,16 @@ const ChatPage: React.FC = () => {
     return (
         <Layout style={{height: 'calc(100vh - 150px)', background: '#fff'}}>
             <Sider width={250} style={{background: '#fafafa', borderRight: '1px solid #eee'}}>
+                <div style={{
+                    padding: '8px 12px',
+                    background: '#e6f7ff',
+                    borderBottom: '1px solid #91d5ff',
+                    fontSize: 12,
+                    color: '#1890ff'
+                }}>
+                    <InfoCircleOutlined style={{marginRight: 4}}/>
+                    选择模型和提示词模板，实时测试 AI 对话效果
+                </div>
                 <div style={{padding: 16}}>
                     <Button type="primary" icon={<PlusOutlined/>} block onClick={handleCreateSession}>
                         新建对话

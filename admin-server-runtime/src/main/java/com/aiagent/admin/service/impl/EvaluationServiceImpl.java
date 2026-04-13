@@ -3,10 +3,14 @@ package com.aiagent.admin.service.impl;
 import com.aiagent.admin.api.dto.*;
 import com.aiagent.admin.domain.entity.*;
 import com.aiagent.admin.domain.repository.*;
+import com.aiagent.admin.service.DocumentService;
+import com.aiagent.admin.service.EmbeddingService;
 import com.aiagent.admin.service.EncryptionService;
 import com.aiagent.admin.service.EvaluationService;
 import com.aiagent.admin.service.mapper.EvaluationMapper;
 import jakarta.persistence.EntityNotFoundException;
+import lombok.AllArgsConstructor;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -68,6 +72,8 @@ public class EvaluationServiceImpl implements EvaluationService {
     private final ModelConfigRepository modelConfigRepository;
     private final EvaluationMapper evaluationMapper;
     private final EncryptionService encryptionService;
+    private final EmbeddingService embeddingService;
+    private final DocumentService documentService;
 
     /**
      * 提示词变量匹配模式：{{variableName}}
@@ -290,9 +296,12 @@ public class EvaluationServiceImpl implements EvaluationService {
     /**
      * 评估单个数据集项
      * <p>
-     * 渲染提示词模板并调用模型获取响应。
-     * 记录响应、延迟、Token 使用等指标到评估结果。
-     * 更新任务的统计计数器。
+     * 根据是否启用RAG选择评估模式：
+     * <ul>
+     *   <li>基础模式：渲染提示词并调用模型，计算AI评分</li>
+     *   <li>RAG模式：检索文档、计算检索指标、构建RAG提示词、计算忠实度</li>
+     * </ul>
+     * 统一计算语义相似度（如有期望输出）。
      * </p>
      *
      * @param job             评估任务实体
@@ -302,36 +311,87 @@ public class EvaluationServiceImpl implements EvaluationService {
      */
     private void evaluateItem(EvaluationJob job, DatasetItem item, PromptTemplate promptTemplate, ModelConfig modelConfig) {
         long startTime = System.currentTimeMillis();
-        String renderedPrompt = renderPrompt(promptTemplate.getContent(), item.getInput());
-        
+
         EvaluationResult result = EvaluationResult.builder()
                 .jobId(job.getId())
                 .datasetItemId(item.getId())
                 .input(item.getInput())
                 .expectedOutput(item.getOutput())
-                .renderedPrompt(renderedPrompt)  // 保存渲染后的提示词便于复现
                 .status(EvaluationResult.ResultStatus.PENDING)
                 .build();
-        
+
         try {
             OpenAiChatClient chatClient = buildChatClient(modelConfig);
+
+            // 根据是否启用RAG选择评估流程
+            String renderedPrompt;
+            List<VectorSearchResult> retrievedDocs = null;
+
+            if (Boolean.TRUE.equals(job.getEnableRag()) && job.getDocumentId() != null) {
+                // RAG评估流程
+                retrievedDocs = retrieveDocuments(job.getDocumentId(), item.getInput(), 5);
+                result.setRetrievedDocIds(serializeDocIds(retrievedDocs));
+
+                // 计算检索评估指标（如有期望文档ID）
+                if (item.getExpectedDocIds() != null && !item.getExpectedDocIds().isEmpty()) {
+                    result.setRetrievalScore(calculateRetrievalMetrics(item.getExpectedDocIds(), retrievedDocs));
+                }
+
+                // 构建包含检索上下文的提示词
+                renderedPrompt = buildRagPrompt(promptTemplate.getContent(), item.getInput(), retrievedDocs);
+            } else {
+                // 基础评估流程
+                renderedPrompt = renderPrompt(promptTemplate.getContent(), item.getInput());
+            }
+
+            result.setRenderedPrompt(renderedPrompt);
+
+            // 调用模型生成回答
             Prompt prompt = new Prompt(new UserMessage(renderedPrompt));
-            
             org.springframework.ai.chat.ChatResponse response = chatClient.call(prompt);
             String output = response.getResult().getOutput().getContent();
             long latency = System.currentTimeMillis() - startTime;
-            
+
             result.setActualOutput(output);
             result.setLatencyMs((int) latency);
             result.setStatus(EvaluationResult.ResultStatus.SUCCESS);
-            
-            // Extract token usage if available
+
+            // 提取Token使用量
             if (response.getMetadata() != null && response.getMetadata().getUsage() != null) {
                 Usage usage = response.getMetadata().getUsage();
                 result.setInputTokens(usage.getPromptTokens() != null ? usage.getPromptTokens().intValue() : 0);
                 result.setOutputTokens(usage.getGenerationTokens() != null ? usage.getGenerationTokens().intValue() : 0);
             }
-            
+
+            // 计算语义相似度（如有期望输出）
+            if (item.getOutput() != null && !item.getOutput().isEmpty() && output != null && !output.isEmpty()) {
+                try {
+                    result.setSemanticSimilarity(embeddingService.semanticSimilarity(item.getOutput(), output));
+                } catch (Exception e) {
+                    log.warn("Failed to calculate semantic similarity for item {}: {}", item.getId(), e.getMessage());
+                }
+            }
+
+            // 计算事实忠实度（RAG模式且有上下文）
+            if (Boolean.TRUE.equals(job.getEnableRag()) && retrievedDocs != null && !retrievedDocs.isEmpty() && output != null) {
+                try {
+                    result.setFaithfulness(calculateFaithfulness(retrievedDocs, output, chatClient));
+                } catch (Exception e) {
+                    log.warn("Failed to calculate faithfulness for item {}: {}", item.getId(), e.getMessage());
+                }
+            }
+
+            // AI评分（如果有期望输出）
+            if (item.getOutput() != null && !item.getOutput().isEmpty() && output != null && !output.isEmpty()) {
+                try {
+                    EvaluationScore score = evaluateScore(item.getInput(), item.getOutput(), output, chatClient);
+                    result.setScore(score.getScore());
+                    result.setScoreReason(score.getReason());
+                } catch (Exception e) {
+                    log.warn("Failed to evaluate score for item {}: {}", item.getId(), e.getMessage());
+                }
+            }
+
             job.incrementSuccess();
             job.addLatency(latency);
             if (result.getInputTokens() != null) {
@@ -340,6 +400,7 @@ public class EvaluationServiceImpl implements EvaluationService {
             if (result.getOutputTokens() != null) {
                 job.addOutputTokens(result.getOutputTokens());
             }
+
         } catch (Exception e) {
             log.error("Error evaluating item {} for job {}", item.getId(), job.getId(), e);
             result.setActualOutput("");
@@ -348,10 +409,139 @@ public class EvaluationServiceImpl implements EvaluationService {
             result.setLatencyMs((int) (System.currentTimeMillis() - startTime));
             job.incrementFailed();
         }
-        
+
         evaluationResultRepository.save(result);
         job.incrementCompleted();
         evaluationJobRepository.save(job);
+    }
+
+    /**
+     * 检索相关文档
+     *
+     * @param documentId 知识库ID
+     * @param query      查询文本
+     * @param topK       返回数量
+     * @return 检索结果列表
+     */
+    private List<VectorSearchResult> retrieveDocuments(String documentId, String query, int topK) {
+        VectorSearchRequest request = new VectorSearchRequest();
+        request.setDocumentId(documentId);
+        request.setQuery(query);
+        request.setTopK(topK);
+        return documentService.searchSimilar(request);
+    }
+
+    /**
+     * 构建RAG提示词（包含检索上下文）
+     *
+     * @param template      提示词模板
+     * @param input         用户输入
+     * @param retrievedDocs 检索到的文档
+     * @return 渲染后的提示词
+     */
+    private String buildRagPrompt(String template, String input, List<VectorSearchResult> retrievedDocs) {
+        // 构建上下文文本
+        String context = retrievedDocs.stream()
+                .map(VectorSearchResult::getContent)
+                .reduce((a, b) -> a + "\n\n---\n\n" + b)
+                .orElse("");
+
+        // 渲染模板（支持 {context} 和 {input} 变量）
+        String result = template.replace("{context}", context);
+        result = result.replace("{{input}}", input != null ? input : "");
+
+        return result;
+    }
+
+    /**
+     * 序列化检索到的文档ID列表
+     */
+    private String serializeDocIds(List<VectorSearchResult> docs) {
+        if (docs == null || docs.isEmpty()) return null;
+        List<String> ids = docs.stream().map(VectorSearchResult::getChunkId).toList();
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            return mapper.writeValueAsString(ids);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 计算检索评估指标（Recall@K）
+     *
+     * @param expectedDocIds 期望文档ID列表（JSON格式）
+     * @param retrievedDocs  实际检索到的文档
+     * @return Recall得分（0-1）
+     */
+    private Float calculateRetrievalMetrics(String expectedDocIds, List<VectorSearchResult> retrievedDocs) {
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            List<String> expected = mapper.readValue(expectedDocIds, List.class);
+            List<String> retrieved = retrievedDocs.stream()
+                    .map(VectorSearchResult::getChunkId)
+                    .toList();
+
+            // 计算Recall: 期望文档被检索到的比例
+            int hitCount = 0;
+            for (String expectedId : expected) {
+                if (retrieved.contains(expectedId)) {
+                    hitCount++;
+                }
+            }
+
+            return expected.isEmpty() ? 0f : (float) hitCount / expected.size();
+        } catch (Exception e) {
+            log.warn("Failed to parse expected doc IDs: {}", expectedDocIds);
+            return null;
+        }
+    }
+
+    /**
+     * 计算事实忠实度
+     * <p>
+     * 使用LLM评估答案是否忠实于检索到的上下文。
+     * </p>
+     *
+     * @param context    检索到的文档上下文
+     * @param answer     模型生成的答案
+     * @param chatClient 模型客户端
+     * @return 忠实度得分（0-1）
+     */
+    private Float calculateFaithfulness(List<VectorSearchResult> context, String answer, OpenAiChatClient chatClient) {
+        String contextText = context.stream()
+                .map(VectorSearchResult::getContent)
+                .reduce((a, b) -> a + "\n\n---\n\n" + b)
+                .orElse("");
+
+        String evalPrompt = """
+                评估以下答案是否忠实于给定的上下文内容。
+                上下文：%s
+                答案：%s
+                
+                请判断答案中的信息是否都来自上下文，没有捏造或超出上下文的内容。
+                返回JSON格式（不要包含其他内容）：
+                {"faithfulness": <0-1之间的数值>, "reason": "<简要说明>"}
+                """.formatted(contextText.substring(0, Math.min(2000, contextText.length())), answer);
+
+        try {
+            Prompt prompt = new Prompt(new UserMessage(evalPrompt));
+            String response = chatClient.call(prompt).getResult().getOutput().getContent();
+
+            // 解析JSON响应
+            int start = response.indexOf('{');
+            int end = response.lastIndexOf('}');
+            if (start >= 0 && end > start) {
+                String json = response.substring(start, end + 1);
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                Map<String, Object> map = mapper.readValue(json, Map.class);
+                return ((Number) map.get("faithfulness")).floatValue();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to calculate faithfulness: {}", e.getMessage());
+        }
+
+        return null;
     }
 
     /**
@@ -583,7 +773,139 @@ public class EvaluationServiceImpl implements EvaluationService {
         // Set computed metrics
         response.setSuccessRate(job.getSuccessRate());
         response.setAverageLatencyMs(job.getAverageLatencyMs());
-        
+
         return response;
+    }
+
+    /**
+     * 使用 AI 评估响应质量
+     * <p>
+     * 构建评估提示词，让 AI 对比期望输出和实际输出，给出分数和理由。
+     * 使用独立的新对话，避免上下文污染。
+     * </p>
+     *
+     * @param input      原始输入
+     * @param expected   期望输出
+     * @param actual     实际输出
+     * @param chatClient 模型客户端
+     * @return 评估分数和理由
+     */
+    private EvaluationScore evaluateScore(String input, String expected, String actual, OpenAiChatClient chatClient) {
+        String evalPrompt = buildEvaluationPrompt(input, expected, actual);
+        Prompt prompt = new Prompt(new UserMessage(evalPrompt));
+
+        org.springframework.ai.chat.ChatResponse response = chatClient.call(prompt);
+        String content = response.getResult().getOutput().getContent();
+
+        return parseScoreResponse(content);
+    }
+
+    /**
+     * 构建评估提示词
+     *
+     * @param input    原始输入
+     * @param expected 期望输出
+     * @param actual   实际输出
+     * @return 评估提示词
+     */
+    private String buildEvaluationPrompt(String input, String expected, String actual) {
+        return """
+                你是一个评估助手。请评估以下 AI 响应的质量。
+                
+                输入问题：%s
+                期望输出：%s
+                实际输出：%s
+                
+                请给出 0-100 分的质量评分，并简要说明理由。
+                评分标准：
+                - 完全符合期望输出：90-100 分
+                - 大部分符合但有小问题：70-89 分
+                - 相关但有明显偏差：50-69 分
+                - 不相关或错误：0-49 分
+                
+                请以 JSON 格式返回（不要包含其他内容）：
+                {"score": <分数>, "reason": "<理由>"}
+                """.formatted(input, expected, actual);
+    }
+
+    /**
+     * 解析 AI 评估响应
+     *
+     * @param content AI 返回的内容
+     * @return 评估分数和理由
+     */
+    private EvaluationScore parseScoreResponse(String content) {
+        try {
+            // 提取 JSON 部分（可能有额外文本）
+            int start = content.indexOf('{');
+            int end = content.lastIndexOf('}');
+            if (start >= 0 && end > start) {
+                String json = content.substring(start, end + 1);
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                Map<String, Object> map = mapper.readValue(json, Map.class);
+
+                Float score = ((Number) map.get("score")).floatValue();
+                String reason = (String) map.get("reason");
+
+                return new EvaluationScore(score, reason);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to parse score response: {}", content);
+        }
+
+        // 解析失败时返回默认分数
+        return new EvaluationScore(50.0f, "无法解析评估结果");
+    }
+
+    /**
+     * 评估分数内部类
+     */
+    @Data
+    @AllArgsConstructor
+    private static class EvaluationScore {
+        private Float score;
+        private String reason;
+    }
+
+    /**
+     * 重新运行评估任务
+     * <p>
+     * 删除之前的评估结果，重置任务状态和计数器，然后重新执行评估。
+     * 支持对已完成、失败或取消的任务进行重新评估。
+     * </p>
+     *
+     * @param id 任务唯一标识
+     * @return 异步执行结果（CompletableFuture）
+     * @throws EntityNotFoundException 任务不存在时抛出
+     * @throws IllegalStateException   任务正在运行时抛出
+     */
+    @Override
+    @Transactional
+    public CompletableFuture<EvaluationJobResponse> rerunJob(String id) {
+        EvaluationJob job = evaluationJobRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Evaluation job not found with id: " + id));
+
+        if (job.getStatus() == EvaluationJob.JobStatus.RUNNING) {
+            throw new IllegalStateException("Job is already running, cannot rerun");
+        }
+
+        // 删除之前的评估结果
+        evaluationResultRepository.deleteByJobId(id);
+
+        // 重置任务状态和计数器
+        job.setStatus(EvaluationJob.JobStatus.PENDING);
+        job.setStartedAt(null);
+        job.setCompletedAt(null);
+        job.setCompletedItems(0);
+        job.setSuccessCount(0);
+        job.setFailedCount(0);
+        job.setTotalLatencyMs(0L);
+        job.setTotalInputTokens(0L);
+        job.setTotalOutputTokens(0L);
+        job.setErrorMessage(null);
+        evaluationJobRepository.save(job);
+
+        // 运行评估任务
+        return runJob(id);
     }
 }

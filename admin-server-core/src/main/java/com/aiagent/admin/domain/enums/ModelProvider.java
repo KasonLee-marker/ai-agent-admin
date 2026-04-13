@@ -61,6 +61,17 @@ public enum ModelProvider {
             BuiltinModel.of("qwen2.5", "Qwen 2.5", "通义千问"),
             BuiltinModel.of("deepseek-v2", "DeepSeek V2", "DeepSeek本地版"),
             BuiltinModel.of("mistral", "Mistral", "Mistral AI")
+    )),
+    // Embedding 模型提供商（用于向量计算）
+    OPENAI_EMBEDDING("OpenAI Embedding", "https://api.openai.com", List.of(
+            BuiltinModel.of("text-embedding-ada-002", "Ada-002", "1536维向量，性价比高"),
+            BuiltinModel.of("text-embedding-3-small", "Embedding-3-Small", "1536维向量，更高效"),
+            BuiltinModel.of("text-embedding-3-large", "Embedding-3-Large", "3072维向量，最高质量")
+    )),
+    DASHSCOPE_EMBEDDING("阿里云百炼 Embedding", "https://dashscope.aliyuncs.com/compatible-mode", List.of(
+            BuiltinModel.of("text-embedding-v1", "Embedding V1", "1024维向量"),
+            BuiltinModel.of("text-embedding-v2", "Embedding V2", "1536维向量"),
+            BuiltinModel.of("text-embedding-v3", "Embedding V3", "1024维向量，最新版")
     ));
 
     private final String displayName;

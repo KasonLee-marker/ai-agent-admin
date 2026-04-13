@@ -107,7 +107,11 @@ const PromptListPage: React.FC = () => {
     return (
         <div>
             <div style={{marginBottom: 16, display: 'flex', justifyContent: 'space-between'}}>
-                <h2>Prompt 管理</h2>
+                <div>
+                    <h2 style={{marginBottom: 0}}>Prompt 管理</h2>
+                    <p style={{color: '#666', marginTop: 4}}>创建提示词模板定义 AI
+                        的行为风格，支持变量占位符 {'{{input}}'}</p>
+                </div>
                 <Button type="primary" icon={<PlusOutlined/>} onClick={handleCreate}>
                     新建 Prompt
                 </Button>

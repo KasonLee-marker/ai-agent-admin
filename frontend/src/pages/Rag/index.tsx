@@ -1,6 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react'
 import {Button, Card, Collapse, Divider, Empty, Input, Layout, List, message, Select, Space, Tag} from 'antd'
-import {ClearOutlined, FileTextOutlined, SendOutlined} from '@ant-design/icons'
+import {ClearOutlined, FileTextOutlined, InfoCircleOutlined, SendOutlined} from '@ant-design/icons'
 import {ragChat, vectorSearch} from '@/api/rag'
 import {listDocuments} from '@/api/documents'
 import {listPrompts} from '@/api/prompts'
@@ -184,6 +184,16 @@ const RagPage: React.FC = () => {
     return (
         <Layout style={{height: 'calc(100vh - 150px)', background: '#fff'}}>
             <Sider width={250} style={{background: '#fafafa', borderRight: '1px solid #eee'}}>
+                <div style={{
+                    padding: '8px 12px',
+                    background: '#e6f7ff',
+                    borderBottom: '1px solid #91d5ff',
+                    fontSize: 12,
+                    color: '#1890ff'
+                }}>
+                    <InfoCircleOutlined style={{marginRight: 4}}/>
+                    基于知识库文档进行智能问答，检索相关内容生成答案
+                </div>
                 <div style={{padding: 16}}>
                     <div style={{marginBottom: 12}}>
                         <span style={{fontWeight: 500}}>模式选择</span>

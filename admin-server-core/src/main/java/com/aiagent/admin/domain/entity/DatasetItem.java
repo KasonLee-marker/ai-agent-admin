@@ -41,6 +41,24 @@ public class DatasetItem {
     @Column(name = "output_data", length = 10000)
     private String output;
 
+    /**
+     * 期望检索到的文档ID列表（用于RAG评估）
+     * <p>
+     * JSON数组格式：["docId1", "docId2"]
+     * </p>
+     */
+    @Column(name = "expected_doc_ids", length = 500)
+    private String expectedDocIds;
+
+    /**
+     * 参考上下文（用于RAG评估的faithfulness指标）
+     * <p>
+     * 提供正确答案应基于的事实内容，用于评估答案是否忠实于检索内容。
+     * </p>
+     */
+    @Column(name = "context_data", length = 5000)
+    private String context;
+
     @Column(length = 10000)
     private String metadata;
 

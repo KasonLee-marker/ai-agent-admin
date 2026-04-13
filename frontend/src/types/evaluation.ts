@@ -4,8 +4,13 @@ export interface EvaluationJob {
     name: string;
     description?: string;
     datasetId: string;
-    promptId?: string;
-    modelId?: string;
+    promptTemplateId?: string;
+    modelConfigId?: string;
+    /** 关联的知识库ID（用于RAG评估） */
+    documentId?: string;
+    /** 是否启用RAG评估模式 */
+    enableRag?: boolean;
+    promptTemplateVersion?: number;
     status: EvaluationStatus;
     totalItems: number;
     completedItems: number;
@@ -22,15 +27,24 @@ export type EvaluationStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 
 export interface EvaluationResult {
     id: string;
     jobId: string;
-    itemIndex: number;
     input: string;
     expectedOutput?: string;
     actualOutput: string;
-    passed?: boolean;
     score?: number;
+    scoreReason?: string;
+    /** Embedding语义相似度（0-1） */
+    semanticSimilarity?: number;
+    /** 实际检索到的文档ID列表 */
+    retrievedDocIds?: string;
+    /** 检索评估得分 */
+    retrievalScore?: number;
+    /** 事实忠实度 */
+    faithfulness?: number;
     latencyMs?: number;
-    tokenCount?: number;
-    error?: string;
+    inputTokens?: number;
+    outputTokens?: number;
+    status?: string;
+    errorMessage?: string;
     createdAt: string;
 }
 
@@ -40,6 +54,12 @@ export interface EvaluationMetrics {
     passedItems: number;
     failedItems: number;
     averageScore?: number;
+    /** 平均语义相似度 */
+    averageSemanticSimilarity?: number;
+    /** 平均检索得分 */
+    averageRetrievalScore?: number;
+    /** 平均忠实度 */
+    averageFaithfulness?: number;
     averageLatencyMs?: number;
     totalTokenCount?: number;
     passRate?: number;
@@ -50,8 +70,12 @@ export interface CreateEvaluationRequest {
     name: string;
     description?: string;
     datasetId: string;
-    promptId?: string;
-    modelId?: string;
+    promptTemplateId?: string;
+    modelConfigId?: string;
+    /** 关联的知识库ID（用于RAG评估） */
+    documentId?: string;
+    /** 是否启用RAG评估模式 */
+    enableRag?: boolean;
 }
 
 // 更新评估任务请求

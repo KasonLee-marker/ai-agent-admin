@@ -191,7 +191,11 @@ const DocumentPage: React.FC = () => {
     return (
         <div>
             <div style={{marginBottom: 16, display: 'flex', justifyContent: 'space-between'}}>
-                <h2>文档管理</h2>
+                <div>
+                    <h2 style={{marginBottom: 0}}>文档管理</h2>
+                    <p style={{color: '#666', marginTop: 4}}>上传知识库文档用于 RAG
+                        检索，系统会自动分块并建立向量索引</p>
+                </div>
                 <Upload {...uploadProps}>
                     <Button icon={<UploadOutlined/>} loading={uploading} type="primary">
                         上传文档

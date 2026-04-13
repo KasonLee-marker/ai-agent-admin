@@ -8,9 +8,12 @@ import com.aiagent.admin.domain.entity.DocumentChunk;
 import com.aiagent.admin.domain.repository.DocumentChunkRepository;
 import com.aiagent.admin.domain.repository.DocumentRepository;
 import com.aiagent.admin.service.DocumentService;
+import com.aiagent.admin.service.EmbeddingService;
 import com.aiagent.admin.service.IdGenerator;
 import com.aiagent.admin.service.mapper.DocumentChunkMapper;
 import com.aiagent.admin.service.mapper.DocumentMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +33,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -74,6 +78,8 @@ public class DocumentServiceImpl implements DocumentService {
     private final DocumentMapper documentMapper;
     private final DocumentChunkMapper documentChunkMapper;
     private final IdGenerator idGenerator;
+    private final EmbeddingService embeddingService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * 默认分块大小（字符数）
@@ -152,18 +158,26 @@ public class DocumentServiceImpl implements DocumentService {
             // Split into chunks
             List<String> chunks = splitText(text);
 
-            // Create chunk entities
+            // Create chunk entities with embeddings
             List<DocumentChunk> chunkEntities = new ArrayList<>();
+
+            // Batch compute embeddings for efficiency
+            List<float[]> embeddings = embeddingService.embedBatch(chunks);
 
             for (int i = 0; i < chunks.size(); i++) {
                 String chunkId = idGenerator.generateId();
                 String chunkContent = chunks.get(i);
+                float[] embedding = embeddings.get(i);
+
+                // Serialize embedding to JSON string for storage
+                String embeddingJson = serializeEmbedding(embedding);
 
                 DocumentChunk chunk = DocumentChunk.builder()
                         .id(chunkId)
                         .documentId(documentId)
                         .chunkIndex(i)
                         .content(chunkContent)
+                        .embedding(embeddingJson)  // Store embedding vector
                         .metadata(String.format("{\"documentId\":\"%s\",\"documentName\":\"%s\",\"chunkIndex\":%d}",
                                 documentId, document.getName().replace("\"", "\\\""), i))
                         .build();
@@ -178,7 +192,7 @@ public class DocumentServiceImpl implements DocumentService {
             document.setTotalChunks(chunks.size());
             documentRepository.save(document);
 
-            log.info("Document processed successfully: {} with {} chunks", documentId, chunks.size());
+            log.info("Document processed successfully: {} with {} chunks (embeddings computed)", documentId, chunks.size());
 
         } catch (Exception e) {
             log.error("Error processing document: {}", documentId, e);
@@ -187,6 +201,39 @@ public class DocumentServiceImpl implements DocumentService {
                 doc.setErrorMessage(e.getMessage());
                 documentRepository.save(doc);
             });
+        }
+    }
+
+    /**
+     * 将 Embedding 向量序列化为 JSON 字符串
+     *
+     * @param embedding 向量数组
+     * @return JSON 字符串
+     */
+    private String serializeEmbedding(float[] embedding) {
+        try {
+            return objectMapper.writeValueAsString(embedding);
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to serialize embedding", e);
+            return null;
+        }
+    }
+
+    /**
+     * 从 JSON 字符串解析 Embedding 向量
+     *
+     * @param embeddingJson JSON 字符串
+     * @return 向量数组
+     */
+    private float[] deserializeEmbedding(String embeddingJson) {
+        if (embeddingJson == null || embeddingJson.isEmpty()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(embeddingJson, float[].class);
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to deserialize embedding", e);
+            return null;
         }
     }
 
@@ -391,8 +438,17 @@ public class DocumentServiceImpl implements DocumentService {
     /**
      * 执行向量相似度搜索
      * <p>
-     * 当前版本使用简单的文本匹配实现（包含关键词即匹配）。
-     * 生产环境应使用 pgvector 进行真正的向量 Embedding 和相似度搜索。
+     * 执行流程：
+     * <ol>
+     *   <li>计算查询文本的 Embedding 向量</li>
+     *   <li>获取所有文档分块（或按文档ID过滤）</li>
+     *   <li>计算每个分块与查询的余弦相似度</li>
+     *   <li>按相似度排序，返回 TopK 结果</li>
+     * </ol>
+     * </p>
+     * <p>
+     * 注意：当前使用内存计算，适合小规模场景（<10000分块）。
+     * 大规模场景应使用 pgvector 进行数据库层面的向量检索。
      * </p>
      *
      * @param request 搜索请求，包含查询文本、topK、可选文档ID过滤
@@ -400,23 +456,40 @@ public class DocumentServiceImpl implements DocumentService {
      */
     @Override
     public List<VectorSearchResult> searchSimilar(VectorSearchRequest request) {
-        // Simple text-based search fallback
-        // In production, this would use vector similarity search with pgvector
-        List<DocumentChunk> chunks = documentChunkRepository.findAll();
+        // 计算查询文本的 Embedding
+        float[] queryEmbedding = embeddingService.embed(request.getQuery());
 
-        String queryLower = request.getQuery().toLowerCase();
+        // 获取文档分块（按文档ID过滤或获取全部）
+        List<DocumentChunk> chunks;
+        if (request.getDocumentId() != null && !request.getDocumentId().isEmpty()) {
+            chunks = documentChunkRepository.findByDocumentIdOrderByChunkIndexAsc(request.getDocumentId());
+        } else {
+            chunks = documentChunkRepository.findAll();
+        }
+
+        // 计算相似度并排序
+        int topK = request.getTopK() != null ? request.getTopK() : 5;
 
         return chunks.stream()
-                .filter(chunk -> chunk.getContent().toLowerCase().contains(queryLower))
-                .limit(request.getTopK())
-                .map(chunk -> VectorSearchResult.builder()
-                        .chunkId(chunk.getId())
-                        .documentId(chunk.getDocumentId())
-                        .chunkIndex(chunk.getChunkIndex())
-                        .content(chunk.getContent())
-                        .score(1.0)
-                        .metadata(chunk.getMetadata())
-                        .build())
+                .filter(chunk -> chunk.getEmbedding() != null && !chunk.getEmbedding().isEmpty())
+                .map(chunk -> {
+                    float[] chunkEmbedding = deserializeEmbedding(chunk.getEmbedding());
+                    if (chunkEmbedding == null) {
+                        return null;
+                    }
+                    float similarity = embeddingService.cosineSimilarity(queryEmbedding, chunkEmbedding);
+                    return VectorSearchResult.builder()
+                            .chunkId(chunk.getId())
+                            .documentId(chunk.getDocumentId())
+                            .chunkIndex(chunk.getChunkIndex())
+                            .content(chunk.getContent())
+                            .score((double) similarity)
+                            .metadata(chunk.getMetadata())
+                            .build();
+                })
+                .filter(result -> result != null && result.getScore() > 0.1)  // 过滤低相似度结果
+                .sorted(Comparator.comparingDouble(VectorSearchResult::getScore).reversed())
+                .limit(topK)
                 .collect(Collectors.toList());
     }
 
