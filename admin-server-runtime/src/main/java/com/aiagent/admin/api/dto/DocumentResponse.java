@@ -8,7 +8,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
-import java.util.Map;
 
 @Data
 @Builder
@@ -32,8 +31,29 @@ public class DocumentResponse {
     @Schema(description = "总分块数")
     private Integer totalChunks;
 
-    @Schema(description = "Embedding模型")
-    private String embeddingModel;
+    @Schema(description = "分块策略")
+    private String chunkStrategy;
+
+    @Schema(description = "分块大小")
+    private Integer chunkSize;
+
+    @Schema(description = "分块重叠")
+    private Integer chunkOverlap;
+
+    @Schema(description = "已创建分块数")
+    private Integer chunksCreated;
+
+    @Schema(description = "已Embedding分块数")
+    private Integer chunksEmbedded;
+
+    @Schema(description = "Embedding模型ID")
+    private String embeddingModelId;
+
+    @Schema(description = "Embedding模型名称")
+    private String embeddingModelName;
+
+    @Schema(description = "向量维度")
+    private Integer embeddingDimension;
 
     @Schema(description = "状态")
     private Document.DocumentStatus status;

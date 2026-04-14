@@ -14,7 +14,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Embedding 服务实现类
@@ -29,13 +31,11 @@ import java.util.List;
  * </p>
  * <p>
  * API 调用格式：
- * <pre>
- * POST /v1/embeddings
- * {
- *   "model": "text-embedding-ada-002",
- *   "input": "文本内容"
- * }
- * </pre>
+ * <ul>
+ *   <li>OpenAI: POST /v1/embeddings, body: {"model": "xxx", "input": "text"}</li>
+ *   <li>DashScope: POST /services/embeddings/text-embedding/text-embedding,
+ *       body: {"model": "xxx", "input": {"texts": ["text"]}, "parameters": {"text_type": "document"}}</li>
+ * </ul>
  * </p>
  *
  * @see EmbeddingService
@@ -57,12 +57,17 @@ public class EmbeddingServiceImpl implements EmbeddingService {
     private static final String DEFAULT_EMBEDDING_BASE_URL = "https://api.openai.com";
 
     /**
+     * 测试文本内容（用于 DashScope）
+     */
+    private static final String TEST_TEXT = "test";
+
+    /**
      * 计算单个文本的 Embedding 向量
      * <p>
      * 执行流程：
      * <ol>
      *   <li>获取 embedding 模型配置</li>
-     *   <li>调用 Embedding API</li>
+     *   <li>调用 Embedding API（区分 OpenAI 和 DashScope）</li>
      *   <li>解析返回的向量数据</li>
      * </ol>
      * </p>
@@ -77,35 +82,7 @@ public class EmbeddingServiceImpl implements EmbeddingService {
         }
 
         ModelConfig embeddingConfig = getEmbeddingModelConfig();
-        String baseUrl = embeddingConfig.getBaseUrl() != null
-                ? embeddingConfig.getBaseUrl()
-                : embeddingConfig.getProvider().getDefaultBaseUrl();
-        String apiKey = encryptionService.decrypt(embeddingConfig.getApiKey());
-        String modelName = embeddingConfig.getModelName();
-
-        try {
-            RestClient client = RestClient.builder()
-                    .baseUrl(baseUrl)
-                    .defaultHeader("Authorization", "Bearer " + apiKey)
-                    .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
-                    .build();
-
-            String requestBody = objectMapper.writeValueAsString(createMap(
-                    "model", modelName,
-                    "input", text
-            ));
-
-            String response = client.post()
-                    .uri("/v1/embeddings")
-                    .body(requestBody)
-                    .retrieve()
-                    .body(String.class);
-
-            return parseEmbeddingResponse(response);
-        } catch (Exception e) {
-            log.error("Failed to get embedding for text: {}", text.substring(0, Math.min(50, text.length())), e);
-            throw new RuntimeException("Embedding API call failed: " + e.getMessage(), e);
-        }
+        return callEmbeddingApi(text, embeddingConfig);
     }
 
     /**
@@ -124,42 +101,44 @@ public class EmbeddingServiceImpl implements EmbeddingService {
         }
 
         ModelConfig embeddingConfig = getEmbeddingModelConfig();
-        String baseUrl = embeddingConfig.getBaseUrl() != null
-                ? embeddingConfig.getBaseUrl()
-                : embeddingConfig.getProvider().getDefaultBaseUrl();
-        String apiKey = encryptionService.decrypt(embeddingConfig.getApiKey());
-        String modelName = embeddingConfig.getModelName();
 
-        try {
-            RestClient client = RestClient.builder()
-                    .baseUrl(baseUrl)
-                    .defaultHeader("Authorization", "Bearer " + apiKey)
-                    .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
-                    .build();
+        // DashScope 不支持标准批量格式，需要逐个处理或使用特殊格式
+        if (isDashScope(embeddingConfig)) {
+            // DashScope 批量格式: input = {"texts": [...]}
+            return callDashScopeBatchEmbeddingApi(texts, embeddingConfig);
+        } else {
+            // OpenAI 标准批量格式
+            return callOpenAiBatchEmbeddingApi(texts, embeddingConfig);
+        }
+    }
 
-            String requestBody = objectMapper.writeValueAsString(createMap(
-                    "model", modelName,
-                    "input", texts
-            ));
+    /**
+     * 使用指定的模型配置批量计算文本的 Embedding 向量
+     * <p>
+     * 不查找默认配置，直接使用传入的模型配置。
+     * 用于文档向量化时指定特定的 embedding 模型。
+     * </p>
+     *
+     * @param texts        输入文本列表
+     * @param modelConfig  模型配置实体
+     * @return Embedding 向量列表
+     */
+    @Override
+    public List<float[]> embedBatchWithModel(List<String> texts, ModelConfig modelConfig) {
+        if (texts == null || texts.isEmpty()) {
+            return new ArrayList<>();
+        }
 
-            String response = client.post()
-                    .uri("/v1/embeddings")
-                    .body(requestBody)
-                    .retrieve()
-                    .body(String.class);
-
-            return parseBatchEmbeddingResponse(response);
-        } catch (Exception e) {
-            log.error("Failed to get batch embeddings for {} texts", texts.size(), e);
-            throw new RuntimeException("Batch embedding API call failed: " + e.getMessage(), e);
+        // 直接使用传入的模型配置
+        if (isDashScope(modelConfig)) {
+            return callDashScopeBatchEmbeddingApi(texts, modelConfig);
+        } else {
+            return callOpenAiBatchEmbeddingApi(texts, modelConfig);
         }
     }
 
     /**
      * 计算两个向量的余弦相似度
-     * <p>
-     * 公式：cos(A, B) = (A · B) / (||A|| * ||B||)
-     * </p>
      *
      * @param vector1 向量1
      * @param vector2 向量2
@@ -203,15 +182,37 @@ public class EmbeddingServiceImpl implements EmbeddingService {
     }
 
     /**
+     * 使用指定的模型配置计算单个文本的 Embedding 向量
+     *
+     * @param text        输入文本
+     * @param modelConfig 模型配置实体
+     * @return Embedding 向量
+     */
+    @Override
+    public float[] embedWithModel(String text, ModelConfig modelConfig) {
+        if (text == null || text.isEmpty()) {
+            return new float[0];
+        }
+        return callEmbeddingApi(text, modelConfig);
+    }
+
+    /**
+     * 使用指定的模型配置计算两个文本的语义相似度
+     *
+     * @param text1       文本1
+     * @param text2       文本2
+     * @param modelConfig 模型配置实体
+     * @return 相似度值（0-1）
+     */
+    @Override
+    public float semanticSimilarityWithModel(String text1, String text2, ModelConfig modelConfig) {
+        float[] embedding1 = embedWithModel(text1, modelConfig);
+        float[] embedding2 = embedWithModel(text2, modelConfig);
+        return cosineSimilarity(embedding1, embedding2);
+    }
+
+    /**
      * 获取 Embedding 向量维度
-     * <p>
-     * 根据模型名称推断维度：
-     * <ul>
-     *   <li>text-embedding-3-large: 3072</li>
-     *   <li>text-embedding-ada-002, text-embedding-3-small: 1536</li>
-     *   <li>text-embedding-v1/v2/v3: 1024-1536</li>
-     * </ul>
-     * </p>
      *
      * @return 向量维度
      */
@@ -230,100 +231,264 @@ public class EmbeddingServiceImpl implements EmbeddingService {
     }
 
     /**
-     * 获取 Embedding 模型配置
-     * <p>
-     * 查找策略：
-     * <ol>
-     *   <li>查找 OPENAI_EMBEDDING 或 DASHSCOPE_EMBEDDING 类型的配置</li>
-     *   <li>如无专用配置，查找默认模型</li>
-     *   <li>仍无配置，返回系统默认配置</li>
-     * </ol>
-     * </p>
-     *
-     * @return Embedding 模型配置
+     * 判断是否为 DashScope Embedding Provider
      */
-    private ModelConfig getEmbeddingModelConfig() {
-        // 查找专用 Embedding 配置
-        List<ModelConfig> embeddingConfigs = modelConfigRepository.findByProviderInAndIsActiveTrue(
-                List.of(ModelProvider.OPENAI_EMBEDDING, ModelProvider.DASHSCOPE_EMBEDDING));
+    private boolean isDashScope(ModelConfig config) {
+        return config.getProvider() == ModelProvider.DASHSCOPE_EMBEDDING;
+    }
 
-        if (!embeddingConfigs.isEmpty()) {
-            return embeddingConfigs.get(0);
+    /**
+     * 调用 Embedding API（自动区分 OpenAI 和 DashScope）
+     */
+    private float[] callEmbeddingApi(String text, ModelConfig config) {
+        String baseUrl = config.getBaseUrl() != null ? config.getBaseUrl() : config.getProvider().getDefaultBaseUrl();
+        String apiKey = encryptionService.decrypt(config.getApiKey());
+        String modelName = config.getModelName();
+
+        try {
+            RestClient client = RestClient.builder()
+                    .baseUrl(baseUrl)
+                    .defaultHeader("Authorization", "Bearer " + apiKey)
+                    .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+                    .build();
+
+            String uriPath;
+            String requestBody;
+
+            if (isDashScope(config)) {
+                // DashScope 格式
+                uriPath = "/services/embeddings/text-embedding/text-embedding";
+                Map<String, Object> bodyMap = new HashMap<>();
+                bodyMap.put("model", modelName);
+                bodyMap.put("input", Map.of("texts", List.of(text)));
+                bodyMap.put("parameters", Map.of("text_type", "document"));
+                requestBody = objectMapper.writeValueAsString(bodyMap);
+            } else {
+                // OpenAI 格式
+                uriPath = "/v1/embeddings";
+                requestBody = objectMapper.writeValueAsString(Map.of(
+                        "model", modelName,
+                        "input", text
+                ));
+            }
+
+            log.debug("Calling embedding API: baseUrl={}, uriPath={}, model={}", baseUrl, uriPath, modelName);
+
+            String response = client.post()
+                    .uri(uriPath)
+                    .body(requestBody)
+                    .retrieve()
+                    .body(String.class);
+
+            return parseEmbeddingResponse(response, isDashScope(config));
+        } catch (Exception e) {
+            log.error("Failed to get embedding for text (length {}): {}", text.length(), e.getMessage());
+            throw new RuntimeException("Embedding API call failed: " + e.getMessage(), e);
         }
+    }
 
-        // 查找默认模型（可能是 chat 模型，但有些也支持 embedding）
-        ModelConfig defaultConfig = modelConfigRepository.findByIsDefaultTrueAndIsActiveTrue().orElse(null);
-        if (defaultConfig != null) {
-            log.warn("No dedicated embedding model configured, using default model: {}", defaultConfig.getName());
-            return defaultConfig;
+    /**
+     * 调用 OpenAI 批量 Embedding API
+     */
+    private List<float[]> callOpenAiBatchEmbeddingApi(List<String> texts, ModelConfig config) {
+        String baseUrl = config.getBaseUrl() != null ? config.getBaseUrl() : config.getProvider().getDefaultBaseUrl();
+        String apiKey = encryptionService.decrypt(config.getApiKey());
+        String modelName = config.getModelName();
+
+        try {
+            RestClient client = RestClient.builder()
+                    .baseUrl(baseUrl)
+                    .defaultHeader("Authorization", "Bearer " + apiKey)
+                    .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+                    .build();
+
+            String requestBody = objectMapper.writeValueAsString(Map.of(
+                    "model", modelName,
+                    "input", texts
+            ));
+
+            String response = client.post()
+                    .uri("/v1/embeddings")
+                    .body(requestBody)
+                    .retrieve()
+                    .body(String.class);
+
+            return parseBatchEmbeddingResponse(response, false);
+        } catch (Exception e) {
+            log.error("Failed to get batch embeddings for {} texts: {}", texts.size(), e.getMessage());
+            throw new RuntimeException("Batch embedding API call failed: " + e.getMessage(), e);
         }
+    }
 
-        // 创建默认配置（兜底）
-        log.warn("No embedding model configured, using system default: {}", DEFAULT_EMBEDDING_MODEL);
-        return ModelConfig.builder()
-                .id("system-default-embedding")
-                .name("System Default Embedding")
-                .provider(ModelProvider.OPENAI_EMBEDDING)
-                .modelName(DEFAULT_EMBEDDING_MODEL)
-                .baseUrl(DEFAULT_EMBEDDING_BASE_URL)
-                .apiKey("") // 需要配置
-                .build();
+    /**
+     * 调用 DashScope 批量 Embedding API
+     * <p>
+     * DashScope 批量格式：input = {"texts": ["text1", "text2", ...]}
+     * </p>
+     */
+    private List<float[]> callDashScopeBatchEmbeddingApi(List<String> texts, ModelConfig config) {
+        String baseUrl = config.getBaseUrl() != null ? config.getBaseUrl() : config.getProvider().getDefaultBaseUrl();
+        String apiKey = encryptionService.decrypt(config.getApiKey());
+        String modelName = config.getModelName();
+
+        try {
+            RestClient client = RestClient.builder()
+                    .baseUrl(baseUrl)
+                    .defaultHeader("Authorization", "Bearer " + apiKey)
+                    .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+                    .build();
+
+            Map<String, Object> bodyMap = new HashMap<>();
+            bodyMap.put("model", modelName);
+            bodyMap.put("input", Map.of("texts", texts));
+            bodyMap.put("parameters", Map.of("text_type", "document"));
+
+            String requestBody = objectMapper.writeValueAsString(bodyMap);
+
+            log.debug("Calling DashScope batch embedding API: baseUrl={}, model={}, textsCount={}", baseUrl, modelName, texts.size());
+
+            String response = client.post()
+                    .uri("/services/embeddings/text-embedding/text-embedding")
+                    .body(requestBody)
+                    .retrieve()
+                    .body(String.class);
+
+            return parseBatchEmbeddingResponse(response, true);
+        } catch (Exception e) {
+            log.error("Failed to get DashScope batch embeddings for {} texts: {}", texts.size(), e.getMessage());
+            throw new RuntimeException("DashScope batch embedding API call failed: " + e.getMessage(), e);
+        }
     }
 
     /**
      * 解析 Embedding API 响应
      *
-     * @param response API 响应 JSON
+     * @param response     API 响应 JSON
+     * @param isDashScope  是否为 DashScope 格式
      * @return Embedding 向量
      */
-    private float[] parseEmbeddingResponse(String response) throws Exception {
+    private float[] parseEmbeddingResponse(String response, boolean isDashScope) throws Exception {
         JsonNode root = objectMapper.readTree(response);
-        JsonNode data = root.path("data");
 
-        if (data.isArray() && data.size() > 0) {
-            JsonNode embeddingNode = data.get(0).path("embedding");
-            float[] embedding = new float[embeddingNode.size()];
-            for (int i = 0; i < embeddingNode.size(); i++) {
-                embedding[i] = (float) embeddingNode.get(i).asDouble();
+        if (isDashScope) {
+            // DashScope 返回格式：output.embeddings[0].embedding
+            JsonNode embeddings = root.path("output").path("embeddings");
+            if (embeddings.isArray() && embeddings.size() > 0) {
+                JsonNode embeddingNode = embeddings.get(0).path("embedding");
+                return parseEmbeddingArray(embeddingNode);
             }
-            return embedding;
+        } else {
+            // OpenAI 返回格式：data[0].embedding
+            JsonNode data = root.path("data");
+            if (data.isArray() && data.size() > 0) {
+                JsonNode embeddingNode = data.get(0).path("embedding");
+                return parseEmbeddingArray(embeddingNode);
+            }
         }
 
-        throw new RuntimeException("Invalid embedding response: no embedding data found");
+        throw new RuntimeException("Invalid embedding response: no embedding data found. Response: " + response);
     }
 
     /**
      * 解析批量 Embedding API 响应
      *
-     * @param response API 响应 JSON
+     * @param response     API 响应 JSON
+     * @param isDashScope  是否为 DashScope 格式
      * @return Embedding 向量列表
      */
-    private List<float[]> parseBatchEmbeddingResponse(String response) throws Exception {
+    private List<float[]> parseBatchEmbeddingResponse(String response, boolean isDashScope) throws Exception {
         JsonNode root = objectMapper.readTree(response);
-        JsonNode data = root.path("data");
-
         List<float[]> embeddings = new ArrayList<>();
-        if (data.isArray()) {
-            for (JsonNode item : data) {
-                JsonNode embeddingNode = item.path("embedding");
-                float[] embedding = new float[embeddingNode.size()];
-                for (int i = 0; i < embeddingNode.size(); i++) {
-                    embedding[i] = (float) embeddingNode.get(i).asDouble();
+
+        if (isDashScope) {
+            // DashScope 返回格式：output.embeddings[].embedding
+            JsonNode embeddingsNode = root.path("output").path("embeddings");
+            if (embeddingsNode.isArray()) {
+                for (JsonNode item : embeddingsNode) {
+                    JsonNode embeddingNode = item.path("embedding");
+                    embeddings.add(parseEmbeddingArray(embeddingNode));
                 }
-                embeddings.add(embedding);
             }
+        } else {
+            // OpenAI 返回格式：data[].embedding
+            JsonNode data = root.path("data");
+            if (data.isArray()) {
+                for (JsonNode item : data) {
+                    JsonNode embeddingNode = item.path("embedding");
+                    embeddings.add(parseEmbeddingArray(embeddingNode));
+                }
+            }
+        }
+
+        if (embeddings.isEmpty()) {
+            throw new RuntimeException("Invalid batch embedding response: no embedding data found. Response: " + response);
         }
 
         return embeddings;
     }
 
     /**
-     * 创建简单的 Map（用于构建 JSON 请求体）
+     * 解析 embedding 数组节点
      */
-    private java.util.Map<String, Object> createMap(String k1, Object v1, String k2, Object v2) {
-        java.util.Map<String, Object> map = new java.util.HashMap<>();
-        map.put(k1, v1);
-        map.put(k2, v2);
-        return map;
+    private float[] parseEmbeddingArray(JsonNode embeddingNode) {
+        float[] embedding = new float[embeddingNode.size()];
+        for (int i = 0; i < embeddingNode.size(); i++) {
+            embedding[i] = (float) embeddingNode.get(i).asDouble();
+        }
+        return embedding;
+    }
+
+    /**
+     * 获取 Embedding 模型配置
+     * <p>
+     * 查找策略（优先级从高到低）：
+     * <ol>
+     *   <li>查找明确标记为 isDefaultEmbedding 的模型</li>
+     *   <li>查找 OPENAI_EMBEDDING 或 DASHSCOPE_EMBEDDING 类型的激活配置</li>
+     *   <li>如无专用配置，查找默认 Chat 模型（会记录警告）</li>
+     *   <li>仍无配置，返回系统默认配置（需要用户配置 API Key）</li>
+     * </ol>
+     * </p>
+     *
+     * @return Embedding 模型配置
+     */
+    private ModelConfig getEmbeddingModelConfig() {
+        // 1. 优先查找明确标记为默认 Embedding 的模型
+        ModelConfig defaultEmbedding = modelConfigRepository.findByIsDefaultEmbeddingTrue()
+                .orElse(null);
+        if (defaultEmbedding != null && Boolean.TRUE.equals(defaultEmbedding.getIsActive())) {
+            log.debug("Using default embedding model: {}", defaultEmbedding.getName());
+            return defaultEmbedding;
+        }
+
+        // 2. 查找专用 Embedding Provider 的激活配置
+        List<ModelConfig> embeddingConfigs = modelConfigRepository.findByProviderInAndIsActiveTrue(
+                List.of(ModelProvider.OPENAI_EMBEDDING, ModelProvider.DASHSCOPE_EMBEDDING));
+
+        if (!embeddingConfigs.isEmpty()) {
+            ModelConfig config = embeddingConfigs.get(0);
+            log.debug("Using embedding provider config: {}", config.getName());
+            return config;
+        }
+
+        // 3. 查找默认 Chat 模型（有些 Chat 模型也支持 embedding）
+        ModelConfig defaultConfig = modelConfigRepository.findByIsDefaultTrueAndIsActiveTrue().orElse(null);
+        if (defaultConfig != null) {
+            log.warn("No dedicated embedding model configured, using default chat model: {}. " +
+                    "Please configure an embedding model for better performance.", defaultConfig.getName());
+            return defaultConfig;
+        }
+
+        // 4. 创建系统默认配置（兜底方案，需要用户配置 API Key）
+        log.warn("No embedding model configured, using system default: {}. " +
+                "Please configure an embedding model in Model Management.", DEFAULT_EMBEDDING_MODEL);
+        return ModelConfig.builder()
+                .id("system-default-embedding")
+                .name("System Default Embedding")
+                .provider(ModelProvider.OPENAI_EMBEDDING)
+                .modelName(DEFAULT_EMBEDDING_MODEL)
+                .baseUrl(DEFAULT_EMBEDDING_BASE_URL)
+                .apiKey("") // 需要用户配置
+                .build();
     }
 }

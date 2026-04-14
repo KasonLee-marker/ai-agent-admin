@@ -51,6 +51,9 @@ public class ModelConfig {
     @Column(name = "is_default")
     private Boolean isDefault = false;
 
+    @Column(name = "is_default_embedding")
+    private Boolean isDefaultEmbedding = false;
+
     @Column(name = "is_active")
     private Boolean isActive = true;
 
@@ -60,6 +63,26 @@ public class ModelConfig {
 
     @Column(name = "last_health_check")
     private LocalDateTime lastHealthCheck;
+
+    /**
+     * Embedding 向量维度（仅 EMBEDDING 类型模型有效）
+     * <p>
+     * 健康检查时从 API 响应获取并记录。
+     * 不同维度对应不同的向量存储表。
+     * </p>
+     */
+    @Column(name = "embedding_dimension")
+    private Integer embeddingDimension;
+
+    /**
+     * 关联的向量表名（仅 EMBEDDING 类型模型有效）
+     * <p>
+     * 格式：document_embeddings_{dimension}，如 document_embeddings_1536
+     * 健康检查成功后自动创建并关联。
+     * </p>
+     */
+    @Column(name = "embedding_table_name", length = 50)
+    private String embeddingTableName;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
@@ -74,6 +97,9 @@ public class ModelConfig {
     public void prePersist() {
         if (isDefault == null) {
             isDefault = false;
+        }
+        if (isDefaultEmbedding == null) {
+            isDefaultEmbedding = false;
         }
         if (isActive == null) {
             isActive = true;

@@ -10,6 +10,8 @@ export interface EvaluationJob {
     documentId?: string;
     /** 是否启用RAG评估模式 */
     enableRag?: boolean;
+    /** Embedding 模型配置ID（用于计算语义相似度） */
+    embeddingModelId?: string;
     promptTemplateVersion?: number;
     status: EvaluationStatus;
     totalItems: number;
@@ -76,6 +78,8 @@ export interface CreateEvaluationRequest {
     documentId?: string;
     /** 是否启用RAG评估模式 */
     enableRag?: boolean;
+    /** Embedding 模型配置ID（用于计算语义相似度） */
+    embeddingModelId?: string;
 }
 
 // 更新评估任务请求

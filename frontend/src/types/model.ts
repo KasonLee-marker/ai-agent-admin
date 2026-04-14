@@ -11,8 +11,14 @@ export interface ModelConfig {
     topP?: number;
     extraParams?: string;
     isDefault: boolean;
+    isDefaultEmbedding: boolean;
     isActive: boolean;
     healthStatus: 'HEALTHY' | 'UNHEALTHY' | 'UNKNOWN';
+    modelType: 'CHAT' | 'EMBEDDING';
+    /** 向量维度（仅 EMBEDDING 类型有效） */
+    embeddingDimension?: number;
+    /** 向量表名（仅 EMBEDDING 类型有效） */
+    embeddingTableName?: string;
     lastHealthCheck?: string;
     createdAt: string;
     updatedAt: string;
@@ -24,6 +30,8 @@ export interface ProviderInfo {
     name: string;
     displayName: string;
     defaultBaseUrl: string;
+    /** 模型类型：CHAT 或 EMBEDDING */
+    modelType: string;
     builtinModels: BuiltinModel[];
 }
 

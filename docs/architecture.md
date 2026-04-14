@@ -33,7 +33,7 @@
 │  │ModelService │  │ EvalService │  │ VectorService       │  │
 │  └─────────────┘  └─────────────┘  └─────────────────────┘  │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
-│  │RAGService   │  │ DocService  │  │ Observability       │  │
+│  │RAGService   │  │ DocService  │  │ EmbeddingService ✅  │  │
 │  └─────────────┘  └─────────────┘  └─────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -142,24 +142,85 @@ ai-agent-admin/
 - 对话历史记录
 - Prompt 效果对比
 
-### 4. 数据集管理模块
+### 4. 数据集管理模块 ⭐ 增强
+
+#### 基础功能
 - 数据导入（JSON、CSV、Excel）
 - 数据版本控制
 - 数据项 CRUD
 - 数据集导出
 
-### 5. 评估模块
+#### RAG评估数据增强 ✅ 新增
+
+- **expectedDocIds**: 期望检索到的文档ID列表（用于检索评估）
+- **context**: 参考上下文（用于忠实度评估）
+- 数据项支持RAG评估所需的完整字段
+
+### 5. 评估模块 ⭐ 增强
+
+#### 基础评估模式
 - 评估器配置（准确率、延迟、token 消耗）
 - 批量实验执行
 - 结果统计和可视化
 - A/B 测试支持
 
-### 6. 文档检索/RAG 模块 ⭐ 新增
+#### RAG评估模式 ✅ 新增
+
+- **知识库关联**: 评估任务可关联知识库进行RAG评估
+- **检索评估指标**: Recall@K（期望文档命中率）
+- **语义相似度**: Embedding余弦相似度计算
+- **事实忠实度**: LLM评估答案是否忠实于检索内容
+- **多维度评分**: AI评分 + 相似度 + 检索得分 + 忠实度
+
+#### 评估指标体系 ✅ 新增
+
+| 指标    | 方法           | 范围    | 说明          |
+|-------|--------------|-------|-------------|
+| AI得分  | LLM-as-Judge | 0-100 | 质量评分        |
+| 语义相似度 | Embedding余弦  | 0-1   | 期望与实际的向量相似度 |
+| 检索得分  | Recall@K     | 0-1   | 期望文档命中比例    |
+| 忠实度   | LLM评估        | 0-1   | 答案是否忠实于上下文  |
+
+详细功能文档: [evaluation-rag-feature.md](evaluation-rag-feature.md)
+
+#### 模型类型区分 ⏳ 待完成
+
+系统中存在两种模型类型：
+
+- **Chat 模型**: 用于对话、评估生成（OPENAI, ANTHROPIC, DASHSCOPE 等）
+- **Embedding 模型**: 用于向量计算（OPENAI_EMBEDDING, DASHSCOPE_EMBEDDING）
+
+需要完善的功能：
+
+1. 模型管理页面分组显示 Provider
+2. 支持设置默认 Embedding 模型
+3. EmbeddingService 只使用 Embedding 类型配置
+
+### 6. 文档检索/RAG 模块 ⭐ 增强
+
+#### 基础功能
 - 文档上传（PDF、Word、TXT、Markdown）
 - 自动分块和向量化
 - 向量检索（相似度搜索）
 - RAG 对话（检索增强生成）
-- 支持 text-embedding-v1 等 Embedding 模型
+
+#### Embedding服务 ✅ 新增
+
+- **EmbeddingService**: 提供文本向量计算能力
+- **向量存储**: DocumentChunk.embedding 字段存储向量
+- **相似度搜索**: 余弦相似度计算，支持TopK检索
+- **语义相似度**: 文本语义相似度计算
+
+#### 支持的Embedding模型
+
+| Provider            | 模型                     | 维度   |
+|---------------------|------------------------|------|
+| OPENAI_EMBEDDING    | text-embedding-ada-002 | 1536 |
+| OPENAI_EMBEDDING    | text-embedding-3-small | 1536 |
+| OPENAI_EMBEDDING    | text-embedding-3-large | 3072 |
+| DASHSCOPE_EMBEDDING | text-embedding-v1      | 1024 |
+| DASHSCOPE_EMBEDDING | text-embedding-v2      | 1536 |
+| DASHSCOPE_EMBEDDING | text-embedding-v3      | 1024 |
 
 ### 7. 可观测性模块（简化）
 - 调用日志记录

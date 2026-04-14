@@ -28,6 +28,14 @@ public class EvaluationJobResponse {
      * 是否启用RAG评估模式
      */
     private Boolean enableRag;
+    /**
+     * Embedding 模型配置ID（用于计算语义相似度）
+     */
+    private String embeddingModelId;
+    /**
+     * Embedding 模型名称
+     */
+    private String embeddingModelName;
     private String status;
     private Integer totalItems;
     private Integer completedItems;

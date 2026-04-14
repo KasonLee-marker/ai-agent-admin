@@ -22,6 +22,7 @@ export interface RagChatRequest {
     documentIds?: string[];
     topK?: number;
     sessionId?: string;
+    modelId?: string;  // 对话模型ID（可选，默认使用系统默认模型）
 }
 
 // RAG 对话响应

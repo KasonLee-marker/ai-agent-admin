@@ -366,7 +366,21 @@ public class EvaluationServiceImpl implements EvaluationService {
             // 计算语义相似度（如有期望输出）
             if (item.getOutput() != null && !item.getOutput().isEmpty() && output != null && !output.isEmpty()) {
                 try {
-                    result.setSemanticSimilarity(embeddingService.semanticSimilarity(item.getOutput(), output));
+                    // 使用指定的 embedding 模型或默认模型
+                    Float similarity;
+                    if (job.getEmbeddingModelId() != null && !job.getEmbeddingModelId().isEmpty()) {
+                        ModelConfig embeddingConfig = modelConfigRepository.findById(job.getEmbeddingModelId())
+                                .orElse(null);
+                        if (embeddingConfig != null) {
+                            similarity = embeddingService.semanticSimilarityWithModel(item.getOutput(), output, embeddingConfig);
+                        } else {
+                            log.warn("Specified embedding model {} not found, using default", job.getEmbeddingModelId());
+                            similarity = embeddingService.semanticSimilarity(item.getOutput(), output);
+                        }
+                    } else {
+                        similarity = embeddingService.semanticSimilarity(item.getOutput(), output);
+                    }
+                    result.setSemanticSimilarity(similarity);
                 } catch (Exception e) {
                     log.warn("Failed to calculate semantic similarity for item {}: {}", item.getId(), e.getMessage());
                 }
@@ -759,17 +773,23 @@ public class EvaluationServiceImpl implements EvaluationService {
      */
     private EvaluationJobResponse toJobResponseWithNames(EvaluationJob job) {
         EvaluationJobResponse response = evaluationMapper.toJobResponse(job);
-        
+
         // Fetch names for related entities
         promptTemplateRepository.findById(job.getPromptTemplateId())
                 .ifPresent(pt -> response.setPromptTemplateName(pt.getName()));
-        
+
         modelConfigRepository.findById(job.getModelConfigId())
                 .ifPresent(mc -> response.setModelConfigName(mc.getName()));
-        
+
         datasetRepository.findById(job.getDatasetId())
                 .ifPresent(ds -> response.setDatasetName(ds.getName()));
-        
+
+        // Fill embedding model name if specified
+        if (job.getEmbeddingModelId() != null && !job.getEmbeddingModelId().isEmpty()) {
+            modelConfigRepository.findById(job.getEmbeddingModelId())
+                    .ifPresent(em -> response.setEmbeddingModelName(em.getName()));
+        }
+
         // Set computed metrics
         response.setSuccessRate(job.getSuccessRate());
         response.setAverageLatencyMs(job.getAverageLatencyMs());

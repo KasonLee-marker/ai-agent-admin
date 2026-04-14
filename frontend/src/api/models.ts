@@ -1,6 +1,6 @@
 import client from './client'
 import {ApiResponse} from '@/types/api'
-import {ModelConfig, ProviderInfo, BuiltinModel, CreateModelRequest, UpdateModelRequest} from '@/types/model'
+import {BuiltinModel, CreateModelRequest, ModelConfig, ProviderInfo, UpdateModelRequest} from '@/types/model'
 
 const BASE_URL = '/models'
 
@@ -43,9 +43,19 @@ export async function setDefaultModel(id: string): Promise<ApiResponse<void>> {
     return client.post(`${BASE_URL}/${id}/default`)
 }
 
+// 设为默认 Embedding 模型
+export async function setDefaultEmbeddingModel(id: string): Promise<ApiResponse<void>> {
+    return client.post(`${BASE_URL}/${id}/default-embedding`)
+}
+
 // 获取默认模型
 export async function getDefaultModel(): Promise<ApiResponse<ModelConfig>> {
     return client.get(`${BASE_URL}/default`)
+}
+
+// 获取默认 Embedding 模型
+export async function getDefaultEmbeddingModel(): Promise<ApiResponse<ModelConfig>> {
+    return client.get(`${BASE_URL}/default-embedding`)
 }
 
 // 获取供应商列表

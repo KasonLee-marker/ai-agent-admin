@@ -3,6 +3,7 @@ package com.aiagent.admin.api.controller;
 import com.aiagent.admin.api.dto.ApiResponse;
 import com.aiagent.admin.api.dto.DocumentChunkResponse;
 import com.aiagent.admin.api.dto.DocumentResponse;
+import com.aiagent.admin.api.dto.SupportedTypeResponse;
 import com.aiagent.admin.service.DocumentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -51,13 +52,16 @@ public class DocumentController {
     private final DocumentService documentService;
 
     @PostMapping("/upload")
-    @Operation(summary = "上传文档", description = "上传文档并自动处理（提取文本、分块、向量化）")
+    @Operation(summary = "上传文档", description = "上传文档并自动处理（提取文本、分块）")
     public ResponseEntity<ApiResponse<DocumentResponse>> uploadDocument(
             @Parameter(description = "文档文件") @RequestParam("file") MultipartFile file,
             @Parameter(description = "文档名称") @RequestParam(value = "name", required = false) String name,
+            @Parameter(description = "分块策略") @RequestParam(value = "chunkStrategy", defaultValue = "FIXED_SIZE") String chunkStrategy,
+            @Parameter(description = "分块大小") @RequestParam(value = "chunkSize", defaultValue = "500") Integer chunkSize,
+            @Parameter(description = "分块重叠") @RequestParam(value = "chunkOverlap", defaultValue = "50") Integer chunkOverlap,
             @Parameter(description = "创建人") @RequestHeader(value = "X-User-Id", defaultValue = "anonymous") String createdBy) {
 
-        DocumentResponse response = documentService.uploadDocument(file, name, createdBy);
+        DocumentResponse response = documentService.uploadDocument(file, name, chunkStrategy, chunkSize, chunkOverlap, createdBy);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -111,8 +115,18 @@ public class DocumentController {
 
     @GetMapping("/supported-types")
     @Operation(summary = "获取支持的文件类型", description = "获取系统支持的文档类型列表")
-    public ResponseEntity<ApiResponse<List<String>>> getSupportedContentTypes() {
-        List<String> response = documentService.getSupportedContentTypes();
+    public ResponseEntity<ApiResponse<List<SupportedTypeResponse>>> getSupportedContentTypes() {
+        List<SupportedTypeResponse> response = documentService.getSupportedTypesInfo();
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @PostMapping("/{id}/embed")
+    @Operation(summary = "开始Embedding", description = "对已分块的文档开始计算向量")
+    public ResponseEntity<ApiResponse<DocumentResponse>> startEmbedding(
+            @Parameter(description = "文档ID") @PathVariable String id,
+            @Parameter(description = "Embedding模型ID") @RequestParam(value = "embeddingModelId", required = false) String embeddingModelId) {
+
+        DocumentResponse response = documentService.startEmbedding(id, embeddingModelId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 }

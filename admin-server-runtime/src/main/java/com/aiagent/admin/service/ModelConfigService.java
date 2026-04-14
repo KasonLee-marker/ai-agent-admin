@@ -55,7 +55,7 @@ public class ModelConfigService {
     @Transactional(readOnly = true)
     public List<ModelResponse> findAll() {
         return repository.findAll().stream()
-                .map(mapper::toResponse)
+                .map(entity -> mapper.toResponse(entity, encryptionService))
                 .collect(Collectors.toList());
     }
 
@@ -68,7 +68,7 @@ public class ModelConfigService {
     @Transactional(readOnly = true)
     public Optional<ModelResponse> findById(String id) {
         return repository.findById(id)
-                .map(mapper::toResponse);
+                .map(entity -> mapper.toResponse(entity, encryptionService));
     }
 
     /**
@@ -90,7 +90,18 @@ public class ModelConfigService {
     @Transactional(readOnly = true)
     public Optional<ModelResponse> findDefault() {
         return repository.findByIsDefaultTrue()
-                .map(mapper::toResponse);
+                .map(entity -> mapper.toResponse(entity, encryptionService));
+    }
+
+    /**
+     * 查询默认 Embedding 模型配置
+     *
+     * @return 默认 Embedding 模型配置响应 DTO（Optional）
+     */
+    @Transactional(readOnly = true)
+    public Optional<ModelResponse> findDefaultEmbedding() {
+        return repository.findByIsDefaultEmbeddingTrue()
+                .map(entity -> mapper.toResponse(entity, encryptionService));
     }
 
     /**
@@ -101,6 +112,16 @@ public class ModelConfigService {
     @Transactional(readOnly = true)
     public Optional<ModelConfig> findDefaultEntity() {
         return repository.findByIsDefaultTrue();
+    }
+
+    /**
+     * 查询默认 Embedding 模型配置实体（用于内部调用）
+     *
+     * @return 默认 Embedding 模型配置实体（Optional）
+     */
+    @Transactional(readOnly = true)
+    public Optional<ModelConfig> findDefaultEmbeddingEntity() {
+        return repository.findByIsDefaultEmbeddingTrue();
     }
 
     /**
@@ -118,7 +139,7 @@ public class ModelConfigService {
     public List<ModelResponse> findByFilters(String provider, Boolean isActive, String keyword) {
         ModelProvider providerEnum = provider != null ? ModelProvider.fromString(provider) : null;
         return repository.findByFilters(providerEnum, isActive, keyword).stream()
-                .map(mapper::toResponse)
+                .map(entity -> mapper.toResponse(entity, encryptionService))
                 .collect(Collectors.toList());
     }
 
@@ -166,7 +187,7 @@ public class ModelConfigService {
 
         ModelConfig saved = repository.save(entity);
         log.info("Created model config: {}", saved.getId());
-        return mapper.toResponse(saved);
+        return mapper.toResponse(saved, encryptionService);
     }
 
     /**
@@ -202,7 +223,7 @@ public class ModelConfigService {
 
         ModelConfig saved = repository.save(existing);
         log.info("Updated model config: {}", saved.getId());
-        return mapper.toResponse(saved);
+        return mapper.toResponse(saved, encryptionService);
     }
 
     /**
@@ -245,6 +266,30 @@ public class ModelConfigService {
         repository.clearDefaultModel();
         repository.setDefaultModel(id);
         log.info("Set model {} as default", id);
+    }
+
+    /**
+     * 设置指定模型为默认 Embedding 模型
+     * <p>
+     * 先清除当前默认 Embedding 模型标记，再设置新的默认 Embedding 模型。
+     * </p>
+     *
+     * @param id 模型配置唯一标识
+     * @throws IllegalArgumentException 模型不存在时抛出
+     */
+    @Transactional
+    public void setDefaultEmbedding(String id) {
+        ModelConfig model = repository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Model not found: " + id));
+
+        // 验证模型类型必须是 Embedding
+        if (model.getProvider().getModelType() != ModelProvider.ModelType.EMBEDDING) {
+            throw new IllegalArgumentException("Only EMBEDDING type models can be set as default embedding model");
+        }
+
+        repository.clearDefaultEmbeddingModel();
+        repository.setDefaultEmbeddingModel(id);
+        log.info("Set model {} as default embedding model", id);
     }
 
     /**

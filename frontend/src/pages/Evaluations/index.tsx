@@ -452,9 +452,17 @@ const EvaluationPage: React.FC = () => {
                             ))}
                         </Select>
                     </Form.Item>
-                    <Form.Item name="modelConfigId" label="模型">
+                    <Form.Item name="modelConfigId" label="对话模型">
                         <Select allowClear>
-                            {models.map(m => (
+                            {models.filter(m => m.modelType === 'CHAT').map(m => (
+                                <Select.Option key={m.id} value={m.id}>{m.name}</Select.Option>
+                            ))}
+                        </Select>
+                    </Form.Item>
+                    <Form.Item name="embeddingModelId" label="Embedding模型"
+                               help="用于计算语义相似度，不选则使用系统默认">
+                        <Select allowClear>
+                            {models.filter(m => m.modelType === 'EMBEDDING').map(m => (
                                 <Select.Option key={m.id} value={m.id}>{m.name}</Select.Option>
                             ))}
                         </Select>

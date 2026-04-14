@@ -1,4 +1,4 @@
-import React, {useEffect, useRef, useState} from 'react'
+import React, {useEffect, useState} from 'react'
 import {
     Button,
     Card,
@@ -43,9 +43,9 @@ const DatasetPage: React.FC = () => {
     const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null)
     const [activeTab, setActiveTab] = useState<string>('list')
     const [importModalVisible, setImportModalVisible] = useState(false)
-    const [exportFormat, setExportFormat] = useState<'json' | 'csv'>('json')
+    // 默认导出格式为 JSON（后续可扩展添加格式选择 UI）
+    const exportFormat: 'json' | 'csv' = 'json'
     const [importLoading, setImportLoading] = useState(false)
-    const fileInputRef = useRef<HTMLInputElement>(null)
     const [form] = Form.useForm()
     const [itemForm] = Form.useForm()
 

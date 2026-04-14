@@ -400,7 +400,7 @@ const ChatPage: React.FC = () => {
                                     placeholder="选择模型"
                                     allowClear
                                 >
-                                    {models.filter(m => m.isActive).map(m => (
+                                    {models.filter(m => m.isActive && m.modelType === 'CHAT').map(m => (
                                         <Select.Option key={m.id} value={m.id}>
                                             {m.name} ({m.modelName})
                                             {m.isDefault && <span style={{color: '#1890ff'}}> [默认]</span>}

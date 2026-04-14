@@ -5,12 +5,26 @@ import lombok.Getter;
 import java.util.Arrays;
 import java.util.List;
 
+/**
+ * 模型供应商枚举
+ * <p>
+ * 定义支持的 AI 模型供应商及其配置：
+ * <ul>
+ *   <li>Chat 模型供应商：用于对话和文本生成</li>
+ *   <li>Embedding 模型供应商：用于文本向量计算</li>
+ * </ul>
+ * </p>
+ *
+ * @see ModelType
+ */
 @Getter
 public enum ModelProvider {
-    // 国际供应商
+    // ============ Chat 模型供应商 ============
     // 注意：Spring AI OpenAiApi 会自动添加 /v1/chat/completions 路径
     // 所以 defaultBaseUrl 不应该包含 /v1 后缀
-    OPENAI("OpenAI", "https://api.openai.com", List.of(
+
+    // 国际供应商
+    OPENAI("OpenAI", "https://api.openai.com", ModelType.CHAT, List.of(
             BuiltinModel.of("gpt-4", "GPT-4", "Most capable model"),
             BuiltinModel.of("gpt-4-turbo", "GPT-4 Turbo", "Latest GPT-4"),
             BuiltinModel.of("gpt-4o", "GPT-4o", "Multimodal model"),
@@ -18,57 +32,60 @@ public enum ModelProvider {
             BuiltinModel.of("o1-preview", "O1 Preview", "Reasoning model"),
             BuiltinModel.of("o1-mini", "O1 Mini", "Fast reasoning model")
     )),
-    ANTHROPIC("Anthropic", "https://api.anthropic.com", List.of(
+    ANTHROPIC("Anthropic", "https://api.anthropic.com", ModelType.CHAT, List.of(
             BuiltinModel.of("claude-3-opus", "Claude 3 Opus", "Most powerful model"),
             BuiltinModel.of("claude-3-sonnet", "Claude 3 Sonnet", "Balanced performance"),
             BuiltinModel.of("claude-3-haiku", "Claude 3 Haiku", "Fast and efficient"),
             BuiltinModel.of("claude-3-5-sonnet", "Claude 3.5 Sonnet", "Latest Claude model")
     )),
+
     // 国内供应商 (OpenAI Compatible)
-    SILICONFLOW("硅基流动 (SiliconFlow)", "https://api.siliconflow.cn", List.of(
+    SILICONFLOW("硅基流动 (SiliconFlow)", "https://api.siliconflow.cn", ModelType.CHAT, List.of(
             BuiltinModel.of("Qwen/Qwen2.5-72B-Instruct", "Qwen2.5-72B", "阿里通义千问"),
             BuiltinModel.of("deepseek-ai/DeepSeek-V3", "DeepSeek-V3", "DeepSeek最新"),
             BuiltinModel.of("THUDM/glm-4-9b-chat", "GLM-4-9B", "智谱GLM轻量"),
             BuiltinModel.of("meta-llama/Meta-Llama-3.1-70B-Instruct", "Llama-3.1-70B", "Meta Llama大模型")
     )),
-    MOONSHOT("月之暗面 (Moonshot/Kimi)", "https://api.moonshot.cn", List.of(
+    MOONSHOT("月之暗面 (Moonshot/Kimi)", "https://api.moonshot.cn", ModelType.CHAT, List.of(
             BuiltinModel.of("moonshot-v1-8k", "Moonshot V1 8K", "8K上下文"),
             BuiltinModel.of("moonshot-v1-32k", "Moonshot V1 32K", "32K上下文"),
             BuiltinModel.of("moonshot-v1-128k", "Moonshot V1 128K", "128K长文本")
     )),
-    ZHIPU("智谱AI (GLM)", "https://open.bigmodel.cn/api/paas/v4", List.of(
+    ZHIPU("智谱AI (GLM)", "https://open.bigmodel.cn/api/paas/v4", ModelType.CHAT, List.of(
             BuiltinModel.of("glm-4", "GLM-4", "智谱最新模型"),
             BuiltinModel.of("glm-4-flash", "GLM-4 Flash", "快速响应"),
             BuiltinModel.of("glm-4-plus", "GLM-4 Plus", "增强版"),
             BuiltinModel.of("glm-4-long", "GLM-4 Long", "长文本模型")
     )),
-    DASHSCOPE("阿里云百炼 (DashScope)", "https://dashscope.aliyuncs.com/compatible-mode", List.of(
+    DASHSCOPE("阿里云百炼 (DashScope)", "https://dashscope.aliyuncs.com/compatible-mode", ModelType.CHAT, List.of(
             BuiltinModel.of("qwen-turbo", "Qwen Turbo", "快速响应"),
             BuiltinModel.of("qwen-plus", "Qwen Plus", "平衡性能"),
             BuiltinModel.of("qwen-max", "Qwen Max", "最强能力"),
-            BuiltinModel.of("qwen-long", "Qwen Long", "长文本"),
-            BuiltinModel.of("text-embedding-v3", "Text Embedding V3", "文本向量")
+            BuiltinModel.of("qwen-long", "Qwen Long", "长文本")
     )),
-    DEEPSEEK("DeepSeek", "https://api.deepseek.com", List.of(
+    DEEPSEEK("DeepSeek", "https://api.deepseek.com", ModelType.CHAT, List.of(
             BuiltinModel.of("deepseek-chat", "DeepSeek Chat", "通用对话"),
             BuiltinModel.of("deepseek-coder", "DeepSeek Coder", "代码专用"),
             BuiltinModel.of("deepseek-reasoner", "DeepSeek Reasoner", "推理模型")
     )),
+
     // 本地部署 - Ollama 使用不同的路径格式，不经过 /v1
-    OLLAMA("Ollama (本地)", "http://localhost:11434", List.of(
+    OLLAMA("Ollama (本地)", "http://localhost:11434", ModelType.CHAT, List.of(
             BuiltinModel.of("llama3.1", "Llama 3.1", "Meta最新"),
             BuiltinModel.of("llama3", "Llama 3", "Meta Llama 3"),
             BuiltinModel.of("qwen2.5", "Qwen 2.5", "通义千问"),
             BuiltinModel.of("deepseek-v2", "DeepSeek V2", "DeepSeek本地版"),
             BuiltinModel.of("mistral", "Mistral", "Mistral AI")
     )),
-    // Embedding 模型提供商（用于向量计算）
-    OPENAI_EMBEDDING("OpenAI Embedding", "https://api.openai.com", List.of(
+
+    // ============ Embedding 模型供应商 ============
+
+    OPENAI_EMBEDDING("OpenAI Embedding", "https://api.openai.com", ModelType.EMBEDDING, List.of(
             BuiltinModel.of("text-embedding-ada-002", "Ada-002", "1536维向量，性价比高"),
             BuiltinModel.of("text-embedding-3-small", "Embedding-3-Small", "1536维向量，更高效"),
             BuiltinModel.of("text-embedding-3-large", "Embedding-3-Large", "3072维向量，最高质量")
     )),
-    DASHSCOPE_EMBEDDING("阿里云百炼 Embedding", "https://dashscope.aliyuncs.com/compatible-mode", List.of(
+    DASHSCOPE_EMBEDDING("阿里云百炼 Embedding", "https://dashscope.aliyuncs.com/api/v1", ModelType.EMBEDDING, List.of(
             BuiltinModel.of("text-embedding-v1", "Embedding V1", "1024维向量"),
             BuiltinModel.of("text-embedding-v2", "Embedding V2", "1536维向量"),
             BuiltinModel.of("text-embedding-v3", "Embedding V3", "1024维向量，最新版")
@@ -76,11 +93,13 @@ public enum ModelProvider {
 
     private final String displayName;
     private final String defaultBaseUrl;
+    private final ModelType modelType;
     private final List<BuiltinModel> builtinModels;
 
-    ModelProvider(String displayName, String defaultBaseUrl, List<BuiltinModel> builtinModels) {
+    ModelProvider(String displayName, String defaultBaseUrl, ModelType modelType, List<BuiltinModel> builtinModels) {
         this.displayName = displayName;
         this.defaultBaseUrl = defaultBaseUrl;
+        this.modelType = modelType;
         this.builtinModels = builtinModels;
     }
 
@@ -95,5 +114,20 @@ public enum ModelProvider {
         public static BuiltinModel of(String name, String displayName, String description) {
             return new BuiltinModel(name, displayName, description);
         }
+    }
+
+    /**
+     * 模型类型枚举
+     * <p>
+     * 区分 Chat 模型和 Embedding 模型：
+     * <ul>
+     *   <li>CHAT - 用于对话生成、评估回答</li>
+     *   <li>EMBEDDING - 用于文本向量计算、相似度检索</li>
+     * </ul>
+     * </p>
+     */
+    public enum ModelType {
+        CHAT,
+        EMBEDDING
     }
 }

@@ -26,4 +26,7 @@ public class VectorSearchRequest {
 
     @Schema(description = "文档ID过滤（可选）")
     private String documentId;
+
+    @Schema(description = "Embedding模型ID（可选，默认使用系统默认embedding模型）")
+    private String embeddingModelId;
 }

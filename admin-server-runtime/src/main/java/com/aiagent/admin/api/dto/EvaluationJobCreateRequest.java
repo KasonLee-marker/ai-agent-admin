@@ -33,6 +33,14 @@ public class EvaluationJobCreateRequest {
      */
     private Boolean enableRag;
 
+    /**
+     * Embedding 模型配置ID（用于计算语义相似度，可选）
+     * <p>
+     * 如果不指定，将使用系统默认的 Embedding 模型。
+     * </p>
+     */
+    private String embeddingModelId;
+
     @Size(max = 100, message = "CreatedBy must be less than 100 characters")
     private String createdBy;
 }

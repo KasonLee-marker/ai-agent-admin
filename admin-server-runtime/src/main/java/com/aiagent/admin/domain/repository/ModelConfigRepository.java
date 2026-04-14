@@ -18,6 +18,16 @@ public interface ModelConfigRepository extends JpaRepository<ModelConfig, String
     Optional<ModelConfig> findByIsDefaultTrue();
 
     /**
+     * 查找默认 Embedding 模型配置
+     */
+    Optional<ModelConfig> findByIsDefaultEmbeddingTrue();
+
+    /**
+     * 查找默认且激活的 Embedding 模型配置
+     */
+    Optional<ModelConfig> findByIsDefaultEmbeddingTrueAndIsActiveTrue();
+
+    /**
      * 查找默认且激活的模型配置
      */
     Optional<ModelConfig> findByIsDefaultTrueAndIsActiveTrue();
@@ -38,6 +48,14 @@ public interface ModelConfigRepository extends JpaRepository<ModelConfig, String
     @Modifying
     @Query("UPDATE ModelConfig m SET m.isDefault = true WHERE m.id = :id")
     void setDefaultModel(@Param("id") String id);
+
+    @Modifying
+    @Query("UPDATE ModelConfig m SET m.isDefaultEmbedding = false WHERE m.isDefaultEmbedding = true")
+    void clearDefaultEmbeddingModel();
+
+    @Modifying
+    @Query("UPDATE ModelConfig m SET m.isDefaultEmbedding = true WHERE m.id = :id")
+    void setDefaultEmbeddingModel(@Param("id") String id);
 
     boolean existsByName(String name);
 

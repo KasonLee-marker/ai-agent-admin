@@ -1,11 +1,11 @@
 package com.aiagent.admin.service;
 
-import com.aiagent.admin.domain.entity.ModelConfig;
-import com.aiagent.admin.domain.enums.ModelProvider;
-import com.aiagent.admin.domain.repository.ModelConfigRepository;
 import com.aiagent.admin.api.dto.CreateModelRequest;
 import com.aiagent.admin.api.dto.ModelResponse;
 import com.aiagent.admin.api.dto.UpdateModelRequest;
+import com.aiagent.admin.domain.entity.ModelConfig;
+import com.aiagent.admin.domain.enums.ModelProvider;
+import com.aiagent.admin.domain.repository.ModelConfigRepository;
 import com.aiagent.admin.service.mapper.ModelMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,7 +19,8 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -70,7 +71,7 @@ class ModelConfigServiceTest {
     @Test
     void testFindAll() {
         when(repository.findAll()).thenReturn(Arrays.asList(testConfig));
-        when(mapper.toResponse(testConfig)).thenReturn(testResponse);
+        when(mapper.toResponse(testConfig, encryptionService)).thenReturn(testResponse);
 
         List<ModelResponse> result = modelConfigService.findAll();
 
@@ -82,7 +83,7 @@ class ModelConfigServiceTest {
     @Test
     void testFindById() {
         when(repository.findById("mdl_test123")).thenReturn(Optional.of(testConfig));
-        when(mapper.toResponse(testConfig)).thenReturn(testResponse);
+        when(mapper.toResponse(testConfig, encryptionService)).thenReturn(testResponse);
 
         Optional<ModelResponse> result = modelConfigService.findById("mdl_test123");
 
@@ -120,7 +121,7 @@ class ModelConfigServiceTest {
         when(encryptionService.encrypt("plain-api-key")).thenReturn("ENC(encrypted-key)");
         when(repository.count()).thenReturn(0L);
         when(repository.save(any(ModelConfig.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(mapper.toResponse(any(ModelConfig.class))).thenReturn(testResponse);
+        when(mapper.toResponse(any(ModelConfig.class), eq(encryptionService))).thenReturn(testResponse);
 
         ModelResponse result = modelConfigService.create(request);
 
@@ -150,7 +151,7 @@ class ModelConfigServiceTest {
         when(repository.existsByName("Updated Model")).thenReturn(false);
         doNothing().when(mapper).updateEntityFromRequest(request, testConfig);
         when(repository.save(any(ModelConfig.class))).thenReturn(testConfig);
-        when(mapper.toResponse(testConfig)).thenReturn(testResponse);
+        when(mapper.toResponse(testConfig, encryptionService)).thenReturn(testResponse);
 
         ModelResponse result = modelConfigService.update("mdl_test123", request);
 
@@ -219,7 +220,7 @@ class ModelConfigServiceTest {
     void testFindByFilters() {
         when(repository.findByFilters(eq(ModelProvider.OPENAI), eq(true), eq("test")))
                 .thenReturn(Arrays.asList(testConfig));
-        when(mapper.toResponse(testConfig)).thenReturn(testResponse);
+        when(mapper.toResponse(testConfig, encryptionService)).thenReturn(testResponse);
 
         List<ModelResponse> result = modelConfigService.findByFilters("OPENAI", true, "test");
 

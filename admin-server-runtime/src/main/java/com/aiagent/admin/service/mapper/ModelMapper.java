@@ -4,12 +4,10 @@ import com.aiagent.admin.api.dto.CreateModelRequest;
 import com.aiagent.admin.api.dto.ModelResponse;
 import com.aiagent.admin.api.dto.UpdateModelRequest;
 import com.aiagent.admin.domain.entity.ModelConfig;
+import com.aiagent.admin.service.EncryptionService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
-import org.mapstruct.MappingTarget;
-import org.mapstruct.ReportingPolicy;
+import org.mapstruct.*;
 
 import java.util.Map;
 
@@ -38,7 +36,23 @@ public interface ModelMapper {
     void updateEntityFromRequest(UpdateModelRequest request, @MappingTarget ModelConfig entity);
 
     @Mapping(target = "extraParams", expression = "java(mapExtraParamsFromString(entity.getExtraParams()))")
-    ModelResponse toResponse(ModelConfig entity);
+    @Mapping(target = "modelType", expression = "java(entity.getProvider().getModelType().name())")
+    @Mapping(target = "apiKey", expression = "java(decryptApiKey(entity.getApiKey(), encryptionService))")
+    ModelResponse toResponse(ModelConfig entity, @Context EncryptionService encryptionService);
+
+    /**
+     * 解密 API Key
+     *
+     * @param apiKey            加密的 API Key
+     * @param encryptionService 加密服务
+     * @return 解密后的 API Key
+     */
+    default String decryptApiKey(String apiKey, EncryptionService encryptionService) {
+        if (apiKey == null || apiKey.isEmpty()) {
+            return null;
+        }
+        return encryptionService.decrypt(apiKey);
+    }
 
     default String mapExtraParamsToString(Map<String, Object> extraParams) {
         if (extraParams == null || extraParams.isEmpty()) {

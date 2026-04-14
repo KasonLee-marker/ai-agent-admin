@@ -6,9 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
-import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
@@ -40,8 +38,35 @@ public class Document {
     @Builder.Default
     private Integer totalChunks = 0;
 
-    @Column(name = "embedding_model", length = 100)
-    private String embeddingModel;
+    @Column(name = "embedding_model_id", length = 64)
+    private String embeddingModelId;  // 使用的 embedding 模型配置 ID
+
+    @Column(name = "embedding_model_name", length = 100)
+    private String embeddingModelName;  // 模型名称（用于展示）
+
+    @Column(name = "embedding_dimension")
+    @Builder.Default
+    private Integer embeddingDimension = 0;  // 向量维度
+
+    @Column(name = "chunk_strategy", length = 20)
+    @Builder.Default
+    private String chunkStrategy = "FIXED_SIZE";  // FIXED_SIZE 或 PARAGRAPH
+
+    @Column(name = "chunk_size")
+    @Builder.Default
+    private Integer chunkSize = 500;
+
+    @Column(name = "chunk_overlap")
+    @Builder.Default
+    private Integer chunkOverlap = 50;
+
+    @Column(name = "chunks_created")
+    @Builder.Default
+    private Integer chunksCreated = 0;  // 已创建的分块数
+
+    @Column(name = "chunks_embedded")
+    @Builder.Default
+    private Integer chunksEmbedded = 0;  // 已embedding的分块数
 
     @Column(nullable = false, length = 20)
     @Enumerated(EnumType.STRING)
@@ -63,9 +88,11 @@ public class Document {
     private String createdBy;
 
     public enum DocumentStatus {
-        PROCESSING,  // 处理中
-        COMPLETED,   // 已完成
-        FAILED,      // 失败
-        DELETED      // 已删除
+        PROCESSING,   // 正在提取文本
+        CHUNKED,      // 已分块，等待embedding
+        EMBEDDING,    // 正在计算向量
+        COMPLETED,    // 完成（已embedding）
+        FAILED,       // 失败
+        DELETED       // 已删除
     }
 }

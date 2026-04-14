@@ -57,6 +57,16 @@ public class EvaluationJob {
     private String documentId;
 
     /**
+     * 使用的 Embedding 模型配置ID（用于计算语义相似度）
+     * <p>
+     * 用于计算期望输出与实际输出的语义相似度。
+     * 如果不指定，将使用系统默认的 Embedding 模型。
+     * </p>
+     */
+    @Column(name = "embedding_model_id", length = 100)
+    private String embeddingModelId;
+
+    /**
      * 是否启用RAG评估模式
      * <p>
      * 启用后，评估流程会：

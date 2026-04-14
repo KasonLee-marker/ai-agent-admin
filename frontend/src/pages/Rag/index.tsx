@@ -3,9 +3,11 @@ import {Button, Card, Collapse, Divider, Empty, Input, Layout, List, message, Se
 import {ClearOutlined, FileTextOutlined, InfoCircleOutlined, SendOutlined} from '@ant-design/icons'
 import {ragChat, vectorSearch} from '@/api/rag'
 import {listDocuments} from '@/api/documents'
+import {listModels} from '@/api/models'
 import {listPrompts} from '@/api/prompts'
 import {RagChatResponse, RagSource, VectorSearchResult} from '@/types/rag'
 import {Document} from '@/types/document'
+import {ModelConfig} from '@/types/model'
 import {PromptTemplate} from '@/types/prompt'
 
 const {Sider, Content} = Layout
@@ -21,8 +23,10 @@ interface ChatMessage {
 const RagPage: React.FC = () => {
     const [documents, setDocuments] = useState<Document[]>([])
     const [prompts, setPrompts] = useState<PromptTemplate[]>([])
+    const [models, setModels] = useState<ModelConfig[]>([])
     const [selectedDocIds, setSelectedDocIds] = useState<string[]>([])
     const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null)
+    const [selectedModelId, setSelectedModelId] = useState<string | null>(null)
     const [messages, setMessages] = useState<ChatMessage[]>([])
     const [inputValue, setInputValue] = useState('')
     const [sending, setSending] = useState(false)
@@ -34,6 +38,7 @@ const RagPage: React.FC = () => {
     useEffect(() => {
         fetchDocuments()
         fetchPrompts()
+        fetchModels()
     }, [])
 
     useEffect(() => {
@@ -62,6 +67,24 @@ const RagPage: React.FC = () => {
         }
     }
 
+    const fetchModels = async () => {
+        try {
+            const res = await listModels({isActive: true})
+            if (res.success) {
+                // 只显示 CHAT 类型模型用于 RAG 对话
+                const chatModels = res.data.filter(m => m.modelType === 'CHAT')
+                setModels(chatModels)
+                // 自动选择默认模型
+                const defaultModel = chatModels.find(m => m.isDefault)
+                if (defaultModel) {
+                    setSelectedModelId(defaultModel.id)
+                }
+            }
+        } catch {
+            // ignore
+        }
+    }
+
     const handleSend = async () => {
         if (!inputValue.trim()) return
 
@@ -82,7 +105,8 @@ const RagPage: React.FC = () => {
                     promptTemplateId: selectedPromptId || undefined,
                     documentIds: selectedDocIds.length > 0 ? selectedDocIds : undefined,
                     topK: 5,
-                    sessionId: sessionId || undefined
+                    sessionId: sessionId || undefined,
+                    modelId: selectedModelId || undefined
                 })
 
                 if (res.success) {
@@ -206,6 +230,23 @@ const RagPage: React.FC = () => {
                             {value: 'rag', label: 'RAG 对话'},
                             {value: 'search', label: '向量检索'}
                         ]}
+                    />
+                </div>
+                <Divider style={{margin: '12px 0'}}/>
+                <div style={{padding: 16}}>
+                    <div style={{marginBottom: 12}}>
+                        <span style={{fontWeight: 500}}>对话模型</span>
+                    </div>
+                    <Select
+                        allowClear
+                        placeholder="选择模型（可选）"
+                        value={selectedModelId}
+                        onChange={setSelectedModelId}
+                        style={{width: '100%'}}
+                        options={models.map(m => ({
+                            value: m.id,
+                            label: m.isDefault ? `${m.name} (默认)` : m.name
+                        }))}
                     />
                 </div>
                 <Divider style={{margin: '12px 0'}}/>

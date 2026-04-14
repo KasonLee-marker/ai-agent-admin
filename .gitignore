@@ -90,3 +90,4 @@ work/
 .env.local
 .env.*.local
 /.playwright-mcp/
+rebel.xml

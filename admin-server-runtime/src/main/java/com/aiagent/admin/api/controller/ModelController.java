@@ -120,10 +120,18 @@ public class ModelController {
     }
 
     @PostMapping("/{id}/default")
-    @Operation(summary = "Set model as default")
+    @Operation(summary = "Set model as default chat model")
     public ApiResponse<Void> setDefaultModel(
             @Parameter(description = "Model ID") @PathVariable String id) {
         modelConfigService.setDefault(id);
+        return ApiResponse.success();
+    }
+
+    @PostMapping("/{id}/default-embedding")
+    @Operation(summary = "Set model as default embedding model")
+    public ApiResponse<Void> setDefaultEmbeddingModel(
+            @Parameter(description = "Model ID") @PathVariable String id) {
+        modelConfigService.setDefaultEmbedding(id);
         return ApiResponse.success();
     }
 
@@ -135,6 +143,14 @@ public class ModelController {
                 .orElse(ApiResponse.error(404, "No default model configured"));
     }
 
+    @GetMapping("/default-embedding")
+    @Operation(summary = "Get current default embedding model")
+    public ApiResponse<ModelResponse> getDefaultEmbeddingModel() {
+        return modelConfigService.findDefaultEmbedding()
+                .map(ApiResponse::success)
+                .orElse(ApiResponse.error(404, "No default embedding model configured"));
+    }
+
     @GetMapping("/providers")
     @Operation(summary = "List all supported providers")
     public ApiResponse<List<ProviderResponse>> listProviders() {
@@ -143,6 +159,7 @@ public class ModelController {
                         p.name(),
                         p.getDisplayName(),
                         p.getDefaultBaseUrl(),
+                        p.getModelType().name(),
                         p.getBuiltinModels()
                 ))
                 .collect(Collectors.toList());

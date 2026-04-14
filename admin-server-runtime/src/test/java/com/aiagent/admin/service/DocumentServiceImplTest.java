@@ -1,10 +1,13 @@
 package com.aiagent.admin.service;
 
+import com.aiagent.admin.api.dto.DocumentResponse;
 import com.aiagent.admin.api.dto.VectorSearchRequest;
 import com.aiagent.admin.domain.entity.Document;
 import com.aiagent.admin.domain.entity.DocumentChunk;
+import com.aiagent.admin.domain.entity.ModelConfig;
 import com.aiagent.admin.domain.repository.DocumentChunkRepository;
 import com.aiagent.admin.domain.repository.DocumentRepository;
+import com.aiagent.admin.domain.repository.ModelConfigRepository;
 import com.aiagent.admin.service.impl.DocumentServiceImpl;
 import com.aiagent.admin.service.mapper.DocumentChunkMapper;
 import com.aiagent.admin.service.mapper.DocumentMapper;
@@ -19,7 +22,9 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -41,6 +46,15 @@ class DocumentServiceImplTest {
 
     @Mock
     private IdGenerator idGenerator;
+
+    @Mock
+    private EmbeddingService embeddingService;
+
+    @Mock
+    private EmbeddingStorageService embeddingStorageService;
+
+    @Mock
+    private ModelConfigRepository modelConfigRepository;
 
     @InjectMocks
     private DocumentServiceImpl documentService;
@@ -72,9 +86,17 @@ class DocumentServiceImplTest {
     void testGetDocument_Success() {
         when(documentRepository.findById("doc-123")).thenReturn(Optional.of(testDocument));
 
+        DocumentResponse mockResponse = DocumentResponse.builder()
+                .id("doc-123")
+                .name("test.txt")
+                .status(Document.DocumentStatus.PROCESSING)
+                .build();
+        when(documentMapper.toResponse(testDocument)).thenReturn(mockResponse);
+
         var response = documentService.getDocument("doc-123");
 
         assertNotNull(response);
+        assertEquals("doc-123", response.getId());
         verify(documentRepository).findById("doc-123");
     }
 
@@ -101,7 +123,6 @@ class DocumentServiceImplTest {
     @Test
     void testDeleteDocument() {
         when(documentRepository.findById("doc-123")).thenReturn(Optional.of(testDocument));
-        when(documentChunkRepository.findByDocumentIdOrderByChunkIndexAsc("doc-123")).thenReturn(List.of(testChunk));
 
         documentService.deleteDocument("doc-123");
 
@@ -131,7 +152,35 @@ class DocumentServiceImplTest {
 
     @Test
     void testSearchSimilar() {
-        when(documentChunkRepository.findAll()).thenReturn(List.of(testChunk));
+        // Given - 设置 embedding 模型配置
+        ModelConfig embeddingConfig = ModelConfig.builder()
+                .id("embedding-model-1")
+                .name("Test Embedding")
+                .embeddingDimension(1536)
+                .embeddingTableName("document_embeddings_1536")
+                .isDefaultEmbedding(true)
+                .isActive(true)
+                .build();
+
+        when(modelConfigRepository.findByIsDefaultEmbeddingTrueAndIsActiveTrue())
+                .thenReturn(Optional.of(embeddingConfig));
+
+        float[] queryEmbedding = new float[]{0.1f, 0.2f, 0.3f};
+        when(embeddingService.embedWithModel(anyString(), any(ModelConfig.class)))
+                .thenReturn(queryEmbedding);
+
+        // Mock EmbeddingStorageService 返回搜索结果
+        List<com.aiagent.admin.api.dto.VectorSearchResult> mockResults = new ArrayList<>();
+        mockResults.add(com.aiagent.admin.api.dto.VectorSearchResult.builder()
+                .chunkId("chunk-123")
+                .documentId("doc-123")
+                .score(0.95)
+                .build());
+        when(embeddingStorageService.searchSimilar(any(float[].class), any(ModelConfig.class), any(), anyInt(), anyDouble()))
+                .thenReturn(mockResults);
+
+        // Mock 分块查询
+        when(documentChunkRepository.findById("chunk-123")).thenReturn(Optional.of(testChunk));
 
         VectorSearchRequest request = new VectorSearchRequest();
         request.setQuery("Test");

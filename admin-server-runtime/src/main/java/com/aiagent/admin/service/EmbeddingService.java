@@ -1,5 +1,7 @@
 package com.aiagent.admin.service;
 
+import com.aiagent.admin.domain.entity.ModelConfig;
+
 import java.util.List;
 
 /**
@@ -44,6 +46,19 @@ public interface EmbeddingService {
     List<float[]> embedBatch(List<String> texts);
 
     /**
+     * 使用指定的模型配置批量计算文本的 Embedding 向量
+     * <p>
+     * 不查找默认配置，直接使用传入的模型配置。
+     * 用于文档向量化时指定特定的 embedding 模型。
+     * </p>
+     *
+     * @param texts       输入文本列表
+     * @param modelConfig 模型配置实体
+     * @return Embedding 向量列表
+     */
+    List<float[]> embedBatchWithModel(List<String> texts, ModelConfig modelConfig);
+
+    /**
      * 计算两个向量的余弦相似度
      *
      * @param vector1 向量1
@@ -63,6 +78,25 @@ public interface EmbeddingService {
      * @return 相似度值（0-1）
      */
     float semanticSimilarity(String text1, String text2);
+
+    /**
+     * 使用指定的模型配置计算单个文本的 Embedding 向量
+     *
+     * @param text        输入文本
+     * @param modelConfig 模型配置实体
+     * @return Embedding 向量（浮点数组）
+     */
+    float[] embedWithModel(String text, com.aiagent.admin.domain.entity.ModelConfig modelConfig);
+
+    /**
+     * 使用指定的模型配置计算两个文本的语义相似度
+     *
+     * @param text1       文本1
+     * @param text2       文本2
+     * @param modelConfig 模型配置实体
+     * @return 相似度值（0-1）
+     */
+    float semanticSimilarityWithModel(String text1, String text2, com.aiagent.admin.domain.entity.ModelConfig modelConfig);
 
     /**
      * 获取 Embedding 向量的维度

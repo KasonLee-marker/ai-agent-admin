@@ -5,12 +5,21 @@ export interface Document {
     contentType: string;
     totalChunks: number;
     status: DocumentStatus;
+    chunkStrategy?: 'FIXED_SIZE' | 'PARAGRAPH';
+    chunkSize?: number;
+    chunkOverlap?: number;
+    chunksCreated?: number;
+    chunksEmbedded?: number;
+    embeddingModelId?: string;
+    embeddingModelName?: string;
+    embeddingDimension?: number;
+    errorMessage?: string;
     metadata?: Record<string, unknown>;
     createdAt: string;
     updatedAt: string;
 }
 
-export type DocumentStatus = 'PROCESSING' | 'COMPLETED' | 'FAILED'
+export type DocumentStatus = 'PROCESSING' | 'CHUNKED' | 'EMBEDDING' | 'COMPLETED' | 'FAILED' | 'DELETED'
 
 // 文档分块
 export interface DocumentChunk {
@@ -27,10 +36,4 @@ export interface SupportedType {
     contentType: string;
     extension: string;
     displayName: string;
-}
-
-// 上传响应
-export interface UploadResponse {
-    documentId: string;
-    message: string;
 }
