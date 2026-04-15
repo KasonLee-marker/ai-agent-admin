@@ -97,6 +97,7 @@ public class RagServiceImpl implements RagService {
         searchRequest.setQuery(request.getQuestion());
         searchRequest.setTopK(request.getTopK() != null ? request.getTopK() : 5);
         searchRequest.setDocumentId(request.getDocumentId());
+        searchRequest.setEmbeddingModelId(request.getEmbeddingModelId());  // 支持选择 Embedding 模型
 
         List<VectorSearchResult> sources = documentService.searchSimilar(searchRequest);
 
