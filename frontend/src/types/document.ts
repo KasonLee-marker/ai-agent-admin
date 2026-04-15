@@ -5,7 +5,7 @@ export interface Document {
     contentType: string;
     totalChunks: number;
     status: DocumentStatus;
-    chunkStrategy?: 'FIXED_SIZE' | 'PARAGRAPH';
+    chunkStrategy?: 'FIXED_SIZE' | 'PARAGRAPH' | 'SENTENCE' | 'RECURSIVE' | 'SEMANTIC';
     chunkSize?: number;
     chunkOverlap?: number;
     chunksCreated?: number;
@@ -17,9 +17,28 @@ export interface Document {
     metadata?: Record<string, unknown>;
     createdAt: string;
     updatedAt: string;
+    // 语义切分进度
+    semanticProgressCurrent?: number;
+    semanticProgressTotal?: number;
 }
 
-export type DocumentStatus = 'PROCESSING' | 'CHUNKED' | 'EMBEDDING' | 'COMPLETED' | 'FAILED' | 'DELETED'
+export type DocumentStatus =
+    'PROCESSING'
+    | 'SEMANTIC_PROCESSING'
+    | 'CHUNKED'
+    | 'EMBEDDING'
+    | 'COMPLETED'
+    | 'FAILED'
+    | 'DELETED'
+
+// 语义切分进度响应
+export interface SemanticProgress {
+    status: DocumentStatus;
+    current: number;
+    total: number;
+    percentage: number;
+    errorMessage?: string;
+}
 
 // 文档分块
 export interface DocumentChunk {

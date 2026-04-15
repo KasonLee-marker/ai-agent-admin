@@ -18,6 +18,7 @@ import {
     Table,
     Tabs,
     Tag,
+    Tooltip,
     Upload
 } from 'antd'
 import {
@@ -28,12 +29,14 @@ import {
     FullscreenOutlined,
     InfoCircleOutlined,
     PlayCircleOutlined,
+    QuestionCircleOutlined,
     UploadOutlined
 } from '@ant-design/icons'
 import type {ColumnsType} from 'antd/es/table'
 import {
     deleteDocument,
     getDocumentChunks,
+    getSemanticProgress,
     getSupportedTypes,
     listDocuments,
     startEmbedding,
@@ -68,6 +71,48 @@ const DocumentPage: React.FC = () => {
         fetchSupportedTypes()
         fetchEmbeddingModels()
     }, [])
+
+    // 语义切分进度轮询
+    useEffect(() => {
+        const pollingDocuments = documents.filter(d => d.status === 'SEMANTIC_PROCESSING')
+        if (pollingDocuments.length === 0) return
+
+        const interval = setInterval(async () => {
+            let needRefreshAll = false
+            const updates: Document[] = []
+            for (const doc of pollingDocuments) {
+                try {
+                    const res = await getSemanticProgress(doc.id)
+                    if (res.success && res.data) {
+                        // 如果状态变成 CHUNKED 或 FAILED，需要重新获取完整列表
+                        if (['CHUNKED', 'FAILED'].includes(res.data.status)) {
+                            needRefreshAll = true
+                        }
+                        // 更新进度
+                        updates.push({
+                            ...doc,
+                            status: res.data.status,
+                            semanticProgressCurrent: res.data.current,
+                            semanticProgressTotal: res.data.total
+                        })
+                    }
+                } catch {
+                    // ignore errors
+                }
+            }
+            if (needRefreshAll) {
+                // 状态改变后重新获取完整列表（包含 chunksCreated）
+                fetchDocuments()
+            } else if (updates.length > 0) {
+                setDocuments(prev => prev.map(d => {
+                    const update = updates.find(u => u.id === d.id)
+                    return update || d
+                }))
+            }
+        }, 2000) // 每2秒轮询一次
+
+        return () => clearInterval(interval)
+    }, [documents])
 
     const fetchDocuments = async () => {
         setLoading(true)
@@ -195,7 +240,8 @@ const DocumentPage: React.FC = () => {
                 name: values.name,
                 chunkStrategy: values.chunkStrategy,
                 chunkSize: values.chunkSize,
-                chunkOverlap: values.chunkOverlap
+                chunkOverlap: values.chunkOverlap,
+                embeddingModelId: values.semanticEmbeddingModelId // 语义分块时传递
             })
             if (res.success) {
                 message.success(`${uploadFile.name} 上传成功，正在处理...`)
@@ -220,6 +266,7 @@ const DocumentPage: React.FC = () => {
         color: string
     }> = {
         PROCESSING: {status: 'processing', text: '正在提取', color: 'blue'},
+        SEMANTIC_PROCESSING: {status: 'processing', text: '语义切分中', color: 'purple'},
         CHUNKED: {status: 'warning', text: '已分块', color: 'orange'},
         EMBEDDING: {status: 'processing', text: '正在向量化', color: 'cyan'},
         COMPLETED: {status: 'success', text: '已完成', color: 'green'},
@@ -257,6 +304,23 @@ const DocumentPage: React.FC = () => {
                 return (
                     <Space direction="vertical" size="small">
                         <Badge status={config.status} text={config.text}/>
+                        {status === 'SEMANTIC_PROCESSING' && (
+                            <div style={{fontSize: 12, color: '#666'}}>
+                                {record.semanticProgressTotal && record.semanticProgressTotal > 0 ? (
+                                    <>
+                                        {record.semanticProgressCurrent || 0}/{record.semanticProgressTotal} 句子
+                                        <Progress
+                                            percent={Math.round(((record.semanticProgressCurrent || 0) / record.semanticProgressTotal) * 100)}
+                                            size="small"
+                                            showInfo={false}
+                                            style={{width: 80, marginLeft: 8}}
+                                        />
+                                    </>
+                                ) : (
+                                    <span style={{color: '#999'}}>准备中...</span>
+                                )}
+                            </div>
+                        )}
                         {status === 'EMBEDDING' && record.chunksEmbedded && record.chunksCreated && (
                             <Progress
                                 percent={Math.round((record.chunksEmbedded / record.chunksCreated) * 100)}
@@ -273,7 +337,17 @@ const DocumentPage: React.FC = () => {
             title: '分块策略',
             dataIndex: 'chunkStrategy',
             key: 'chunkStrategy',
-            render: (strategy: string) => strategy === 'PARAGRAPH' ? '按段落' : '固定大小'
+            render: (strategy: string | undefined) => {
+                const strategyMap: Record<string, string> = {
+                    'FIXED_SIZE': '固定大小',
+                    'PARAGRAPH': '按段落',
+                    'SENTENCE': '按句子',
+                    'RECURSIVE': '递归分块',
+                    'SEMANTIC': '语义分块'
+                }
+                const s = strategy || 'FIXED_SIZE'
+                return strategyMap[s] || s
+            }
         },
         {
             title: '创建时间',
@@ -420,7 +494,17 @@ const DocumentPage: React.FC = () => {
                                                    text={statusConfig[selectedDocument.status]?.text}/>
                                         </Descriptions.Item>
                                         <Descriptions.Item label="分块策略">
-                                            {selectedDocument.chunkStrategy === 'PARAGRAPH' ? '按段落' : '固定大小'}
+                                            {(() => {
+                                                const strategyMap: Record<string, string> = {
+                                                    'FIXED_SIZE': '固定大小',
+                                                    'PARAGRAPH': '按段落',
+                                                    'SENTENCE': '按句子',
+                                                    'RECURSIVE': '递归分块',
+                                                    'SEMANTIC': '语义分块'
+                                                }
+                                                const strategy = selectedDocument.chunkStrategy || 'FIXED_SIZE'
+                                                return strategyMap[strategy] || strategy
+                                            })()}
                                         </Descriptions.Item>
                                         <Descriptions.Item
                                             label="分块大小">{selectedDocument.chunkSize || '-'}</Descriptions.Item>
@@ -445,6 +529,23 @@ const DocumentPage: React.FC = () => {
                                     <span style={{color: '#999'}}>
                                         {selectedDocument.status === 'EMBEDDING' && '文档正在计算向量，请稍后...'}
                                         {selectedDocument.status === 'PROCESSING' && '文档正在提取文本，请稍后...'}
+                                        {selectedDocument.status === 'SEMANTIC_PROCESSING' && (
+                                            <>
+                                                文档正在语义切分中...
+                                                {selectedDocument.semanticProgressTotal && selectedDocument.semanticProgressTotal > 0 ? (
+                                                    <div style={{marginTop: 8}}>
+                                                        {selectedDocument.semanticProgressCurrent || 0}/{selectedDocument.semanticProgressTotal} 句子
+                                                        <Progress
+                                                            percent={Math.round(((selectedDocument.semanticProgressCurrent || 0) / selectedDocument.semanticProgressTotal) * 100)}
+                                                            size="small"
+                                                            style={{width: 200, marginTop: 4}}
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <div style={{marginTop: 8, color: '#999'}}>准备中...</div>
+                                                )}
+                                            </>
+                                        )}
                                         {selectedDocument.status === 'FAILED' && `处理失败: ${selectedDocument.errorMessage}`}
                                     </span>
                                 </div>
@@ -470,7 +571,7 @@ const DocumentPage: React.FC = () => {
                 <Form form={uploadForm} layout="vertical" initialValues={{
                     chunkStrategy: 'FIXED_SIZE',
                     chunkSize: 500,
-                    chunkOverlap: 50
+                    chunkOverlap: 100
                 }}>
                     <Form.Item label="文件">
                         <Space>
@@ -484,26 +585,82 @@ const DocumentPage: React.FC = () => {
                         <Input placeholder="可选，默认使用文件名"/>
                     </Form.Item>
 
-                    <Form.Item name="chunkStrategy" label="分块策略">
+                    <Form.Item name="chunkStrategy" label={
+                        <Space>
+                            <span>分块策略</span>
+                            <Tooltip title={
+                                <div>
+                                    <p><strong>固定大小</strong>：按指定字符数分块，在句子边界处分割</p>
+                                    <p><strong>按段落</strong>：以双换行分隔段落，过长段落会进一步分割</p>
+                                    <p><strong>按句子</strong>：以中英文句号、问号分隔，合并到目标大小</p>
+                                    <p><strong>递归分块</strong>：段落→句子→固定大小，保证语义完整性</p>
+                                    <p><strong>语义分块</strong>：调用 Embedding API 计算句子相似度，在语义断点处分割（需选择
+                                        Embedding 模型）</p>
+                                </div>
+                            }>
+                                <QuestionCircleOutlined style={{color: '#1890ff'}}/>
+                            </Tooltip>
+                        </Space>
+                    }>
                         <Radio.Group>
                             <Radio.Button value="FIXED_SIZE">固定大小</Radio.Button>
                             <Radio.Button value="PARAGRAPH">按段落</Radio.Button>
+                            <Radio.Button value="SENTENCE">按句子</Radio.Button>
+                            <Radio.Button value="RECURSIVE">递归分块</Radio.Button>
+                            <Radio.Button value="SEMANTIC">语义分块</Radio.Button>
                         </Radio.Group>
                     </Form.Item>
 
+                    {/* 分块大小和重叠：仅 FIXED_SIZE、SENTENCE、RECURSIVE 需要 */}
                     <Form.Item shouldUpdate={(prev, curr) => prev.chunkStrategy !== curr.chunkStrategy}>
-                        {({getFieldValue}) => (
-                            getFieldValue('chunkStrategy') === 'FIXED_SIZE' && (
+                        {({getFieldValue}) => {
+                            const strategy = getFieldValue('chunkStrategy')
+                            const needsChunkSize = ['FIXED_SIZE', 'SENTENCE', 'RECURSIVE'].includes(strategy)
+                            const needsOverlap = ['FIXED_SIZE', 'SENTENCE', 'RECURSIVE', 'PARAGRAPH'].includes(strategy)
+
+                            return (
                                 <>
-                                    <Form.Item name="chunkSize" label="分块大小（字符数）">
-                                        <InputNumber min={100} max={2000} step={100}/>
-                                    </Form.Item>
-                                    <Form.Item name="chunkOverlap" label="重叠大小（字符数）">
-                                        <InputNumber min={0} max={200} step={10}/>
-                                    </Form.Item>
+                                    {needsChunkSize && (
+                                        <Form.Item name="chunkSize" label="分块大小（字符数）">
+                                            <InputNumber min={100} max={2000} step={100}/>
+                                        </Form.Item>
+                                    )}
+                                    {needsOverlap && (
+                                        <Form.Item name="chunkOverlap" label="重叠大小（字符数）">
+                                            <InputNumber min={0} max={500} step={50}/>
+                                        </Form.Item>
+                                    )}
+                                    {strategy === 'PARAGRAPH' && (
+                                        <Card size="small" style={{marginBottom: 16, background: '#f5f5f5'}}>
+                                            <span style={{color: '#666'}}>
+                                                💡 段落分块按自然段落分割，过长段落会自动在句子边界处分割
+                                            </span>
+                                        </Card>
+                                    )}
+                                    {strategy === 'SEMANTIC' && (
+                                        <>
+                                            <Form.Item label="Embedding 模型">
+                                                <Select
+                                                    style={{width: '100%'}}
+                                                    value={getFieldValue('semanticEmbeddingModelId') || selectedEmbedModelId}
+                                                    onChange={(val) => uploadForm.setFieldValue('semanticEmbeddingModelId', val)}
+                                                    options={embeddingModels.map(m => ({
+                                                        value: m.id,
+                                                        label: m.isDefaultEmbedding ? `${m.name} (默认)` : m.name
+                                                    }))}
+                                                    placeholder="选择 Embedding 模型"
+                                                />
+                                            </Form.Item>
+                                            <Card size="small" style={{marginBottom: 16, background: '#f5f5f5'}}>
+                                                <span style={{color: '#666'}}>
+                                                    💡 语义分块会调用 Embedding API 计算句子相似度，在语义断点处自动分割，无需指定固定大小
+                                                </span>
+                                            </Card>
+                                        </>
+                                    )}
                                 </>
                             )
-                        )}
+                        }}
                     </Form.Item>
                 </Form>
             </Modal>

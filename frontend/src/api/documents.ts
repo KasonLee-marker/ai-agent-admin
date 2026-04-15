@@ -1,15 +1,16 @@
 import client from './client'
 import {ApiResponse, PageParams, PageResponse} from '@/types/api'
-import {Document, DocumentChunk, SupportedType} from '@/types/document'
+import {Document, DocumentChunk, SemanticProgress, SupportedType} from '@/types/document'
 
 const BASE_URL = '/documents'
 
 // 上传文档（支持分块策略参数）
 export async function uploadDocument(file: File, options?: {
     name?: string
-    chunkStrategy?: 'FIXED_SIZE' | 'PARAGRAPH'
+    chunkStrategy?: 'FIXED_SIZE' | 'PARAGRAPH' | 'SENTENCE' | 'RECURSIVE' | 'SEMANTIC'
     chunkSize?: number
     chunkOverlap?: number
+    embeddingModelId?: string
 }): Promise<ApiResponse<Document>> {
     const formData = new FormData()
     formData.append('file', file)
@@ -17,6 +18,7 @@ export async function uploadDocument(file: File, options?: {
     if (options?.chunkStrategy) formData.append('chunkStrategy', options.chunkStrategy)
     if (options?.chunkSize) formData.append('chunkSize', options.chunkSize.toString())
     if (options?.chunkOverlap) formData.append('chunkOverlap', options.chunkOverlap.toString())
+    if (options?.embeddingModelId) formData.append('embeddingModelId', options.embeddingModelId)
     return client.post(`${BASE_URL}/upload`, formData, {
         headers: {'Content-Type': 'multipart/form-data'}
     })
@@ -56,4 +58,9 @@ export async function getDocumentStatus(id: string): Promise<ApiResponse<Documen
 // 获取支持的文件类型
 export async function getSupportedTypes(): Promise<ApiResponse<SupportedType[]>> {
     return client.get(`${BASE_URL}/supported-types`)
+}
+
+// 获取语义切分进度（仅 SEMANTIC 策略）
+export async function getSemanticProgress(id: string): Promise<ApiResponse<SemanticProgress>> {
+    return client.get(`${BASE_URL}/${id}/semantic-progress`)
 }

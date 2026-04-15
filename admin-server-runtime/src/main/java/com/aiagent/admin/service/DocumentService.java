@@ -20,20 +20,21 @@ public interface DocumentService {
      *   <li>按指定策略分块</li>
      *   <li>保存分块记录（状态：CHUNKED）</li>
      * </ol>
-     * Embedding 需要单独调用 startEmbedding 方法触发。
+     * Embedding 需要单独调用 startEmbedding 方法触发（除 SEMANTIC 策略外）。
      * </p>
      *
-     * @param file         上传的文件
-     * @param name         文档名称（可选）
-     * @param chunkStrategy 分块策略（FIXED_SIZE 或 PARAGRAPH）
-     * @param chunkSize    分块大小（字符数，仅 FIXED_SIZE 策略有效）
-     * @param chunkOverlap 分块重叠（字符数，仅 FIXED_SIZE 策略有效）
-     * @param createdBy    创建者标识
+     * @param file             上传的文件
+     * @param name             文档名称（可选）
+     * @param chunkStrategy    分块策略（FIXED_SIZE/PARAGRAPH/SENTENCE/RECURSIVE/SEMANTIC）
+     * @param chunkSize        分块大小（字符数，仅部分策略需要）
+     * @param chunkOverlap     分块重叠（字符数）
+     * @param embeddingModelId Embedding模型ID（语义分块时必填）
+     * @param createdBy        创建者标识
      * @return 文档响应 DTO（状态为 PROCESSING）
      */
     DocumentResponse uploadDocument(MultipartFile file, String name,
                                     String chunkStrategy, Integer chunkSize, Integer chunkOverlap,
-                                    String createdBy);
+                                    String embeddingModelId, String createdBy);
 
     /**
      * 开始对已分块的文档进行 Embedding 计算
@@ -87,4 +88,16 @@ public interface DocumentService {
      * 获取支持的文件类型详细信息（用于前端展示）
      */
     List<SupportedTypeResponse> getSupportedTypesInfo();
+
+    /**
+     * 获取语义切分进度
+     * <p>
+     * 返回文档的语义切分处理进度，包含已处理句子数、总句子数和百分比。
+     * 仅对 SEMANTIC 策略的文档有意义。
+     * </p>
+     *
+     * @param documentId 文档唯一标识
+     * @return 语义切分进度响应 DTO
+     */
+    SemanticProgressResponse getSemanticProgress(String documentId);
 }

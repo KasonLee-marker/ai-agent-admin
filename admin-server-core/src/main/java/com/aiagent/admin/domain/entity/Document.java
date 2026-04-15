@@ -60,6 +60,26 @@ public class Document {
     @Builder.Default
     private Integer chunkOverlap = 50;
 
+    /**
+     * 语义切分进度 - 已处理句子数
+     * <p>
+     * 仅在 SEMANTIC 分块策略时使用，用于显示处理进度。
+     * </p>
+     */
+    @Column(name = "semantic_progress_current")
+    @Builder.Default
+    private Integer semanticProgressCurrent = 0;
+
+    /**
+     * 语义切分进度 - 总句子数
+     * <p>
+     * 仅在 SEMANTIC 分块策略时使用，用于显示处理进度。
+     * </p>
+     */
+    @Column(name = "semantic_progress_total")
+    @Builder.Default
+    private Integer semanticProgressTotal = 0;
+
     @Column(name = "chunks_created")
     @Builder.Default
     private Integer chunksCreated = 0;  // 已创建的分块数
@@ -88,11 +108,12 @@ public class Document {
     private String createdBy;
 
     public enum DocumentStatus {
-        PROCESSING,   // 正在提取文本
-        CHUNKED,      // 已分块，等待embedding
-        EMBEDDING,    // 正在计算向量
-        COMPLETED,    // 完成（已embedding）
-        FAILED,       // 失败
-        DELETED       // 已删除
+        PROCESSING,          // 正在提取文本
+        SEMANTIC_PROCESSING, // 语义切分处理中（调用 Embedding API）
+        CHUNKED,             // 已分块，等待embedding
+        EMBEDDING,           // 正在计算向量
+        COMPLETED,           // 完成（已embedding）
+        FAILED,              // 失败
+        DELETED              // 已删除
     }
 }

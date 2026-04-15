@@ -69,4 +69,22 @@ public class DocumentResponse {
 
     @Schema(description = "创建人")
     private String createdBy;
+
+    /**
+     * 语义切分进度 - 已处理句子数
+     * <p>
+     * 仅在 SEMANTIC 分块策略时使用，表示已计算 Embedding 的句子数量。
+     * </p>
+     */
+    @Schema(description = "语义切分已处理句子数")
+    private Integer semanticProgressCurrent;
+
+    /**
+     * 语义切分进度 - 总句子数
+     * <p>
+     * 仅在 SEMANTIC 分块策略时使用，表示文档的总句子数量。
+     * </p>
+     */
+    @Schema(description = "语义切分总句子数")
+    private Integer semanticProgressTotal;
 }

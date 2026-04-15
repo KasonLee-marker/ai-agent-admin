@@ -1,9 +1,6 @@
 package com.aiagent.admin.api.controller;
 
-import com.aiagent.admin.api.dto.ApiResponse;
-import com.aiagent.admin.api.dto.DocumentChunkResponse;
-import com.aiagent.admin.api.dto.DocumentResponse;
-import com.aiagent.admin.api.dto.SupportedTypeResponse;
+import com.aiagent.admin.api.dto.*;
 import com.aiagent.admin.service.DocumentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -56,12 +53,13 @@ public class DocumentController {
     public ResponseEntity<ApiResponse<DocumentResponse>> uploadDocument(
             @Parameter(description = "文档文件") @RequestParam("file") MultipartFile file,
             @Parameter(description = "文档名称") @RequestParam(value = "name", required = false) String name,
-            @Parameter(description = "分块策略") @RequestParam(value = "chunkStrategy", defaultValue = "FIXED_SIZE") String chunkStrategy,
-            @Parameter(description = "分块大小") @RequestParam(value = "chunkSize", defaultValue = "500") Integer chunkSize,
-            @Parameter(description = "分块重叠") @RequestParam(value = "chunkOverlap", defaultValue = "50") Integer chunkOverlap,
+            @Parameter(description = "分块策略（FIXED_SIZE/PARAGRAPH/SENTENCE/RECURSIVE/SEMANTIC）") @RequestParam(value = "chunkStrategy", defaultValue = "FIXED_SIZE") String chunkStrategy,
+            @Parameter(description = "分块大小（字符数）") @RequestParam(value = "chunkSize", required = false) Integer chunkSize,
+            @Parameter(description = "分块重叠（字符数）") @RequestParam(value = "chunkOverlap", required = false) Integer chunkOverlap,
+            @Parameter(description = "Embedding模型ID（语义分块时必填）") @RequestParam(value = "embeddingModelId", required = false) String embeddingModelId,
             @Parameter(description = "创建人") @RequestHeader(value = "X-User-Id", defaultValue = "anonymous") String createdBy) {
 
-        DocumentResponse response = documentService.uploadDocument(file, name, chunkStrategy, chunkSize, chunkOverlap, createdBy);
+        DocumentResponse response = documentService.uploadDocument(file, name, chunkStrategy, chunkSize, chunkOverlap, embeddingModelId, createdBy);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -127,6 +125,15 @@ public class DocumentController {
             @Parameter(description = "Embedding模型ID") @RequestParam(value = "embeddingModelId", required = false) String embeddingModelId) {
 
         DocumentResponse response = documentService.startEmbedding(id, embeddingModelId);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @GetMapping("/{id}/semantic-progress")
+    @Operation(summary = "获取语义切分进度", description = "获取文档的语义切分处理进度（仅SEMANTIC策略）")
+    public ResponseEntity<ApiResponse<SemanticProgressResponse>> getSemanticProgress(
+            @Parameter(description = "文档ID") @PathVariable String id) {
+
+        SemanticProgressResponse response = documentService.getSemanticProgress(id);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 }

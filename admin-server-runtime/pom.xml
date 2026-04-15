@@ -64,6 +64,13 @@
             <artifactId>spring-ai-openai</artifactId>
         </dependency>
 
+        <!-- LangChain4j - 文档分块 -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j</artifactId>
+            <version>0.36.2</version>
+        </dependency>
+
         <!-- OkHttp for detailed HTTP logging -->
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
@@ -99,6 +106,12 @@
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
+        </dependency>
+
+        <!-- Spring Test (for MockMultipartFile in async processing) -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-test</artifactId>
         </dependency>
 
         <!-- MapStruct -->

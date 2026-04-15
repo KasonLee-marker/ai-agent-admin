@@ -17,6 +17,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -27,6 +28,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -55,6 +57,9 @@ class DocumentServiceImplTest {
 
     @Mock
     private ModelConfigRepository modelConfigRepository;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private DocumentServiceImpl documentService;
@@ -191,5 +196,31 @@ class DocumentServiceImplTest {
         assertNotNull(result);
         assertEquals(1, result.size());
         assertEquals("chunk-123", result.get(0).getChunkId());
+    }
+
+    @Test
+    void testDefaultOverlap() {
+        // Given - 创建文档时不指定 overlap
+        when(documentRepository.save(any(Document.class))).thenReturn(testDocument);
+        when(idGenerator.generateId()).thenReturn("doc-123");
+
+        // Mock MultipartFile with content type
+        org.springframework.web.multipart.MultipartFile mockFile = mock(org.springframework.web.multipart.MultipartFile.class);
+        when(mockFile.getContentType()).thenReturn("text/plain");
+        when(mockFile.getSize()).thenReturn(100L);
+
+        // When - 传入 name 参数，所以 getOriginalFilename 不会被调用
+        documentService.uploadDocument(
+                mockFile,
+                "test.txt",  // 明确指定 name，避免调用 getOriginalFilename
+                "FIXED_SIZE",
+                500,
+                null, // 不指定 overlap，应使用默认值 100
+                null, // embeddingModelId
+                "user1"
+        );
+
+        // Then - 通过 verify 检查保存的文档 overlap 为 100
+        verify(documentRepository).save(argThat(doc -> doc.getChunkOverlap() == 100));
     }
 }

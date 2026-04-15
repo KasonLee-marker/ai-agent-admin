@@ -11,27 +11,20 @@ import com.aiagent.admin.service.DocumentService;
 import com.aiagent.admin.service.EmbeddingService;
 import com.aiagent.admin.service.EmbeddingStorageService;
 import com.aiagent.admin.service.IdGenerator;
+import com.aiagent.admin.service.event.DocumentUploadEvent;
+import com.aiagent.admin.service.event.EmbeddingStartEvent;
 import com.aiagent.admin.service.mapper.DocumentChunkMapper;
 import com.aiagent.admin.service.mapper.DocumentMapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.pdfbox.Loader;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.text.PDFTextStripper;
-import org.apache.poi.xwpf.usermodel.XWPFDocument;
-import org.apache.poi.xwpf.usermodel.XWPFParagraph;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -53,8 +46,8 @@ import java.util.stream.Collectors;
  * 文档处理流程：
  * <ol>
  *   <li>验证文件类型</li>
- *   <li>创建文档记录（状态：PROCESSING）</li>
- *   <li>异步提取文本内容</li>
+ *   <li>创建文档记录（状态：PROCESSING 或 SEMANTIC_PROCESSING）</li>
+ *   <li>异步提取文本内容（由 {@link DocumentAsyncService} 处理）</li>
  *   <li>按指定策略分块</li>
  *   <li>保存分块记录（状态：CHUNKED）</li>
  *   <li>用户触发 Embedding（状态：EMBEDDING）</li>
@@ -63,7 +56,7 @@ import java.util.stream.Collectors;
  * </p>
  *
  * @see DocumentService
- * @see DocumentChunk
+ * @see DocumentAsyncService
  */
 @Service
 @RequiredArgsConstructor
@@ -78,7 +71,7 @@ public class DocumentServiceImpl implements DocumentService {
     private final EmbeddingService embeddingService;
     private final EmbeddingStorageService embeddingStorageService;
     private final ModelConfigRepository modelConfigRepository;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ApplicationEventPublisher eventPublisher;
 
     /** 支持的文件内容类型集合 */
     private static final Set<String> SUPPORTED_CONTENT_TYPES = Set.of(
@@ -107,23 +100,25 @@ public class DocumentServiceImpl implements DocumentService {
      * <p>
      * 创建文档记录后异步执行文本提取和分块。
      * 文档初始状态为 PROCESSING，分块完成后更新为 CHUNKED。
-     * Embedding 需要用户单独触发。
+     * 对于 SEMANTIC 策略，初始状态为 SEMANTIC_PROCESSING。
+     * Embedding 需要用户单独触发（除 SEMANTIC 策略外）。
      * </p>
      *
-     * @param file         上传的文件
-     * @param name         文档名称（可选，默认使用文件名）
-     * @param chunkStrategy 分块策略（FIXED_SIZE 或 PARAGRAPH）
-     * @param chunkSize    分块大小（字符数）
-     * @param chunkOverlap 分块重叠（字符数）
-     * @param createdBy    创建者标识
-     * @return 文档响应 DTO（状态为 PROCESSING）
+     * @param file             上传的文件
+     * @param name             文档名称（可选，默认使用文件名）
+     * @param chunkStrategy    分块策略（FIXED_SIZE/PARAGRAPH/SENTENCE/RECURSIVE/SEMANTIC）
+     * @param chunkSize        分块大小（字符数）
+     * @param chunkOverlap     分块重叠（字符数）
+     * @param embeddingModelId Embedding模型ID（语义分块时必填）
+     * @param createdBy        创建者标识
+     * @return 文档响应 DTO（状态为 PROCESSING 或 SEMANTIC_PROCESSING）
      * @throws IllegalArgumentException 文件类型不支持时抛出
      */
     @Override
     @Transactional
     public DocumentResponse uploadDocument(MultipartFile file, String name,
                                            String chunkStrategy, Integer chunkSize, Integer chunkOverlap,
-                                           String createdBy) {
+                                           String embeddingModelId, String createdBy) {
         String contentType = file.getContentType();
 
         // 根据文件扩展名推断实际类型
@@ -136,6 +131,21 @@ public class DocumentServiceImpl implements DocumentService {
                     ". Supported types: PDF, Word (.docx), TXT, Markdown, CSV");
         }
 
+        // 语义分块需要 Embedding 模型
+        if ("SEMANTIC".equals(chunkStrategy)) {
+            if (embeddingModelId == null || embeddingModelId.isEmpty()) {
+                // 尝试使用默认 Embedding 模型
+                embeddingModelId = modelConfigRepository.findByIsDefaultEmbeddingTrueAndIsActiveTrue()
+                        .map(ModelConfig::getId)
+                        .orElseThrow(() -> new IllegalArgumentException("Semantic chunking requires an embedding model. No default model configured."));
+            }
+        }
+
+        // 根据 chunkStrategy 决定初始状态
+        Document.DocumentStatus initialStatus = "SEMANTIC".equals(chunkStrategy)
+                ? Document.DocumentStatus.SEMANTIC_PROCESSING
+                : Document.DocumentStatus.PROCESSING;
+
         Document document = Document.builder()
                 .id(idGenerator.generateId())
                 .name(name != null ? name : file.getOriginalFilename())
@@ -143,17 +153,28 @@ public class DocumentServiceImpl implements DocumentService {
                 .fileSize(file.getSize())
                 .chunkStrategy(chunkStrategy != null ? chunkStrategy : "FIXED_SIZE")
                 .chunkSize(chunkSize != null ? chunkSize : 500)
-                .chunkOverlap(chunkOverlap != null ? chunkOverlap : 50)
+                .chunkOverlap(chunkOverlap != null ? chunkOverlap : 100)
                 .chunksCreated(0)
                 .chunksEmbedded(0)
-                .status(Document.DocumentStatus.PROCESSING)
+                .status(initialStatus)
                 .createdBy(createdBy)
                 .build();
 
         document = documentRepository.save(document);
 
-        // 异步处理（提取文本 + 分块）
-        processDocumentAsync(document.getId(), file, contentType);
+        // 在事务提交前先读取文件内容（因为异步执行时临时文件可能已被 Tomcat 清理）
+        byte[] fileContent;
+        String originalFilename = file.getOriginalFilename();
+        try {
+            fileContent = file.getBytes();
+        } catch (java.io.IOException e) {
+            throw new RuntimeException("Failed to read file content: " + e.getMessage(), e);
+        }
+
+        // 发布事件，在事务提交后异步处理文档
+        // TransactionalEventListener 确保只有事务成功提交后才执行异步任务
+        eventPublisher.publishEvent(new DocumentUploadEvent(
+                document.getId(), fileContent, contentType, originalFilename, embeddingModelId));
 
         return documentMapper.toResponse(document);
     }
@@ -199,14 +220,17 @@ public class DocumentServiceImpl implements DocumentService {
         document.setStatus(Document.DocumentStatus.EMBEDDING);
         documentRepository.save(document);
 
-        // 异步执行 Embedding，传入模型配置
-        embedChunksAsync(documentId, embeddingConfig);
+        // 发布事件，在事务提交后异步执行 Embedding
+        eventPublisher.publishEvent(new EmbeddingStartEvent(documentId, embeddingConfig));
 
         return documentMapper.toResponse(document);
     }
 
     /**
      * 根据模型名称推断向量维度
+     *
+     * @param modelName 模型名称
+     * @return 向量维度
      */
     private int inferEmbeddingDimension(String modelName) {
         if (modelName == null) return 1536;
@@ -239,276 +263,10 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     /**
-     * 异步处理文档（提取文本 + 分块，不含 Embedding）
-     *
-     * @param documentId  文档唯一标识
-     * @param file        上传的文件
-     * @param contentType 文件内容类型
-     */
-    @Async
-    protected void processDocumentAsync(String documentId, MultipartFile file, String contentType) {
-        try {
-            Document document = documentRepository.findById(documentId)
-                    .orElseThrow(() -> new EntityNotFoundException("Document not found"));
-
-            // 提取文本
-            String text = extractText(file.getInputStream(), contentType);
-
-            // 分块
-            List<String> chunks = splitText(text, document.getChunkStrategy(),
-                    document.getChunkSize(), document.getChunkOverlap());
-
-            // 创建分块实体（不含 embedding）
-            List<DocumentChunk> chunkEntities = new ArrayList<>();
-            for (int i = 0; i < chunks.size(); i++) {
-                DocumentChunk chunk = DocumentChunk.builder()
-                        .id(idGenerator.generateId())
-                        .documentId(documentId)
-                        .chunkIndex(i)
-                        .content(chunks.get(i))
-                        .embedding(null)  // 暂不计算 embedding
-                        .metadata(String.format("{\"documentId\":\"%s\",\"documentName\":\"%s\",\"chunkIndex\":%d}",
-                                documentId, document.getName().replace("\"", "\\\""), i))
-                        .build();
-                chunkEntities.add(chunk);
-            }
-
-            // 保存分块
-            documentChunkRepository.saveAll(chunkEntities);
-
-            // 更新文档状态为 CHUNKED
-            document.setStatus(Document.DocumentStatus.CHUNKED);
-            document.setChunksCreated(chunks.size());
-            documentRepository.save(document);
-
-            log.info("Document chunked successfully: {} with {} chunks", documentId, chunks.size());
-
-        } catch (Exception e) {
-            log.error("Error processing document: {}", documentId, e);
-            documentRepository.findById(documentId).ifPresent(doc -> {
-                doc.setStatus(Document.DocumentStatus.FAILED);
-                doc.setErrorMessage(e.getMessage());
-                documentRepository.save(doc);
-            });
-        }
-    }
-
-    /**
-     * 异步执行 Embedding 计算
-     * <p>
-     * 执行流程：
-     * <ol>
-     *   <li>获取文档分块列表</li>
-     *   <li>分批调用 Embedding API</li>
-     *   <li>将向量存储到对应的维度表（pgvector）</li>
-     *   <li>更新进度</li>
-     * </ol>
-     * </p>
-     *
-     * @param documentId      文档唯一标识
-     * @param embeddingConfig Embedding 模型配置
-     */
-    @Async
-    protected void embedChunksAsync(String documentId, ModelConfig embeddingConfig) {
-        try {
-            Document document = documentRepository.findById(documentId)
-                    .orElseThrow(() -> new EntityNotFoundException("Document not found"));
-
-            List<DocumentChunk> chunks = documentChunkRepository.findByDocumentIdOrderByChunkIndexAsc(documentId);
-
-            log.info("Starting embedding for document {} with {} chunks using model {} (dimension {})",
-                    documentId, chunks.size(), embeddingConfig.getName(), embeddingConfig.getEmbeddingDimension());
-
-            // 确保向量表存在
-            String tableName = embeddingConfig.getEmbeddingTableName();
-            Integer dimension = embeddingConfig.getEmbeddingDimension();
-
-            if (tableName == null || dimension == null) {
-                throw new IllegalStateException("Embedding model has no dimension or table configured. Please run health check first.");
-            }
-
-            // 分批处理 embedding（每批 10 个，避免 API 限流）
-            int batchSize = 10;
-            int embeddedCount = 0;
-
-            for (int i = 0; i < chunks.size(); i += batchSize) {
-                int end = Math.min(i + batchSize, chunks.size());
-                List<DocumentChunk> batch = chunks.subList(i, end);
-
-                // 批量计算 embedding，使用指定的模型配置
-                List<String> texts = batch.stream()
-                        .map(DocumentChunk::getContent)
-                        .collect(Collectors.toList());
-
-                List<float[]> embeddings = embeddingService.embedBatchWithModel(texts, embeddingConfig);
-
-                // 存储向量到 pgvector 表
-                List<EmbeddingStorageService.VectorData> vectorDataList = new ArrayList<>();
-                for (int j = 0; j < batch.size(); j++) {
-                    DocumentChunk chunk = batch.get(j);
-                    vectorDataList.add(new EmbeddingStorageService.VectorData(
-                            chunk.getId(),
-                            documentId,
-                            embeddings.get(j)
-                    ));
-                }
-                embeddingStorageService.storeVectorsBatch(vectorDataList, dimension, tableName);
-
-                embeddedCount += batch.size();
-
-                // 更新进度
-                document.setChunksEmbedded(embeddedCount);
-                documentRepository.save(document);
-
-                log.info("Embedded {} / {} chunks for document {}", embeddedCount, chunks.size(), documentId);
-            }
-
-            // 完成
-            document.setStatus(Document.DocumentStatus.COMPLETED);
-            documentRepository.save(document);
-
-            log.info("Document embedding completed: {} with dimension {}, stored in table {}",
-                    documentId, dimension, tableName);
-
-        } catch (Exception e) {
-            log.error("Error embedding document: {}", documentId, e);
-            documentRepository.findById(documentId).ifPresent(doc -> {
-                doc.setStatus(Document.DocumentStatus.FAILED);
-                doc.setErrorMessage("Embedding failed: " + e.getMessage());
-                documentRepository.save(doc);
-            });
-        }
-    }
-
-    /**
-     * 根据文件类型提取文本内容
-     */
-    private String extractText(InputStream inputStream, String contentType) throws IOException {
-        return switch (contentType) {
-            case "application/pdf" -> extractPdfText(inputStream);
-            case "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ->
-                    extractWordText(inputStream);
-            case "text/plain", "text/markdown", "text/csv" -> new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
-            default -> throw new IllegalArgumentException("Unsupported content type: " + contentType);
-        };
-    }
-
-    /**
-     * 使用 Apache PDFBox 提取 PDF 文件文本
-     */
-    private String extractPdfText(InputStream inputStream) throws IOException {
-        try (PDDocument pdfDocument = Loader.loadPDF(inputStream.readAllBytes())) {
-            PDFTextStripper stripper = new PDFTextStripper();
-            return stripper.getText(pdfDocument);
-        }
-    }
-
-    /**
-     * 使用 Apache POI 提取 Word 文件文本
-     */
-    private String extractWordText(InputStream inputStream) throws IOException {
-        try (XWPFDocument doc = new XWPFDocument(inputStream)) {
-            return doc.getParagraphs().stream()
-                    .map(XWPFParagraph::getText)
-                    .collect(Collectors.joining("\n"));
-        }
-    }
-
-    /**
-     * 将文本分割成块
-     * <p>
-     * 支持两种策略：
-     * <ul>
-     *   <li>FIXED_SIZE: 固定大小分块，尝试在句号/换行/空格处分割</li>
-     *   <li>PARAGRAPH: 按段落分块（双换行分隔）</li>
-     * </ul>
-     * </p>
-     *
-     * @param text         要分割的文本
-     * @param strategy     分块策略
-     * @param chunkSize    分块大小（仅 FIXED_SIZE 有效）
-     * @param chunkOverlap 分块重叠（仅 FIXED_SIZE 有效）
-     * @return 文本块列表
-     */
-    private List<String> splitText(String text, String strategy, Integer chunkSize, Integer chunkOverlap) {
-        List<String> chunks = new ArrayList<>();
-        if (text == null || text.isBlank()) {
-            return chunks;
-        }
-
-        if ("PARAGRAPH".equals(strategy)) {
-            // 按段落分块（双换行分隔）
-            // 注意：不能把换行符替换掉，只替换多余空格
-            text = text.replaceAll("[ \\t]+", " ").trim();
-
-            String[] paragraphs = text.split("\\n\\s*\\n+");
-            for (String para : paragraphs) {
-                String trimmed = para.trim();
-                if (!trimmed.isEmpty()) {
-                    // 如果段落超过 chunkSize，需要进一步分割
-                    if (trimmed.length() > chunkSize) {
-                        int start = 0;
-                        while (start < trimmed.length()) {
-                            int end = Math.min(start + chunkSize, trimmed.length());
-                            // 尝试在句子边界分割
-                            if (end < trimmed.length()) {
-                                int lastPeriod = Math.max(
-                                        trimmed.lastIndexOf('。', end),
-                                        trimmed.lastIndexOf('.', end));
-                                if (lastPeriod > start + chunkSize / 2) {
-                                    end = lastPeriod + 1;
-                                }
-                            }
-                            String subChunk = trimmed.substring(start, end).trim();
-                            if (!subChunk.isEmpty()) {
-                                chunks.add(subChunk);
-                            }
-                            start = end;
-                        }
-                    } else {
-                        chunks.add(trimmed);
-                    }
-                }
-            }
-        } else {
-            // 固定大小分块 - 先清理空白
-            text = text.replaceAll("\\s+", " ").trim();
-
-            int size = chunkSize != null ? chunkSize : 500;
-            int overlap = chunkOverlap != null ? chunkOverlap : 50;
-
-            int start = 0;
-            while (start < text.length()) {
-                int end = Math.min(start + size, text.length());
-
-                // 尝试在合适的位置分割
-                if (end < text.length()) {
-                    int lastPeriod = text.lastIndexOf('。', end);
-                    int lastNewline = text.lastIndexOf('\n', end);
-                    int lastSpace = text.lastIndexOf(' ', end);
-
-                    int breakPoint = Math.max(Math.max(lastPeriod, lastNewline), lastSpace);
-                    if (breakPoint > start + size / 2) {
-                        end = breakPoint + 1;
-                    }
-                }
-
-                String chunk = text.substring(start, end).trim();
-                if (!chunk.isEmpty()) {
-                    chunks.add(chunk);
-                }
-
-                start = end - overlap;
-                if (start < 0) start = 0;
-                if (start >= text.length()) break;
-            }
-        }
-
-        return chunks;
-    }
-
-    /**
      * 根据ID获取文档详情
+     *
+     * @param documentId 文档唯一标识
+     * @return 文档响应 DTO
      */
     @Override
     @Transactional(readOnly = true)
@@ -520,6 +278,10 @@ public class DocumentServiceImpl implements DocumentService {
 
     /**
      * 分页查询用户的文档列表
+     *
+     * @param createdBy 创建者标识
+     * @param pageable  分页参数
+     * @return 文档响应分页列表
      */
     @Override
     @Transactional(readOnly = true)
@@ -530,6 +292,8 @@ public class DocumentServiceImpl implements DocumentService {
 
     /**
      * 删除文档及其所有分块
+     *
+     * @param documentId 文档唯一标识
      */
     @Override
     @Transactional
@@ -545,6 +309,9 @@ public class DocumentServiceImpl implements DocumentService {
 
     /**
      * 获取文档的所有分块列表
+     *
+     * @param documentId 文档唯一标识
+     * @return 分块响应列表
      */
     @Override
     @Transactional(readOnly = true)
@@ -557,6 +324,9 @@ public class DocumentServiceImpl implements DocumentService {
 
     /**
      * 获取文档处理状态
+     *
+     * @param documentId 文档唯一标识
+     * @return 文档响应 DTO
      */
     @Override
     @Transactional(readOnly = true)
@@ -575,6 +345,9 @@ public class DocumentServiceImpl implements DocumentService {
      *   <li>补充分块内容信息</li>
      * </ol>
      * </p>
+     *
+     * @param request 向量搜索请求
+     * @return 搜索结果列表
      */
     @Override
     public List<VectorSearchResult> searchSimilar(VectorSearchRequest request) {
@@ -617,6 +390,8 @@ public class DocumentServiceImpl implements DocumentService {
 
     /**
      * 获取系统支持的文件类型列表
+     *
+     * @return 支持的文件类型列表
      */
     @Override
     public List<String> getSupportedContentTypes() {
@@ -625,6 +400,8 @@ public class DocumentServiceImpl implements DocumentService {
 
     /**
      * 获取支持的文件类型详细信息（用于前端展示）
+     *
+     * @return 支持的文件类型详细信息列表
      */
     @Override
     public List<SupportedTypeResponse> getSupportedTypesInfo() {
@@ -659,8 +436,40 @@ public class DocumentServiceImpl implements DocumentService {
 
     /**
      * 检查文件类型是否支持
+     *
+     * @param contentType 文件内容类型
+     * @return 是否支持
      */
     private boolean isSupportedContentTypes(String contentType) {
         return contentType != null && SUPPORTED_CONTENT_TYPES.contains(contentType);
+    }
+
+    /**
+     * 获取语义切分进度
+     * <p>
+     * 返回文档的语义切分处理进度，包含已处理句子数、总句子数和百分比。
+     * 仅对 SEMANTIC 策略的文档有意义，其他策略返回空进度。
+     * </p>
+     *
+     * @param documentId 文档唯一标识
+     * @return 语义切分进度响应 DTO
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public SemanticProgressResponse getSemanticProgress(String documentId) {
+        Document document = documentRepository.findById(documentId)
+                .orElseThrow(() -> new EntityNotFoundException("Document not found: " + documentId));
+
+        Integer current = document.getSemanticProgressCurrent() != null ? document.getSemanticProgressCurrent() : 0;
+        Integer total = document.getSemanticProgressTotal() != null ? document.getSemanticProgressTotal() : 0;
+        Integer percentage = total > 0 ? (int) ((current * 100.0) / total) : 0;
+
+        return SemanticProgressResponse.builder()
+                .status(document.getStatus())
+                .current(current)
+                .total(total)
+                .percentage(percentage)
+                .errorMessage(document.getErrorMessage())
+                .build();
     }
 }
