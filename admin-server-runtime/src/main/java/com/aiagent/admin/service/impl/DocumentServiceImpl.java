@@ -71,6 +71,7 @@ public class DocumentServiceImpl implements DocumentService {
     private final RerankService rerankService;
     private final ModelConfigRepository modelConfigRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final KnowledgeBaseService knowledgeBaseService;
 
     /** 支持的文件内容类型集合 */
     private static final Set<String> SUPPORTED_CONTENT_TYPES = Set.of(
@@ -301,8 +302,16 @@ public class DocumentServiceImpl implements DocumentService {
         Document document = documentRepository.findById(documentId)
                 .orElseThrow(() -> new EntityNotFoundException("Document not found: " + documentId));
 
+        // 记录知识库ID，删除后需要更新统计
+        String knowledgeBaseId = document.getKnowledgeBaseId();
+
         documentChunkRepository.deleteByDocumentId(documentId);
         documentRepository.delete(document);
+
+        // 更新知识库统计数据
+        if (knowledgeBaseId != null) {
+            knowledgeBaseService.updateStatistics(knowledgeBaseId);
+        }
 
         log.info("Document deleted: {}", documentId);
     }

@@ -96,7 +96,6 @@ const KnowledgeBasesPage: React.FC = () => {
     const [uploading, setUploading] = useState(false)
     const [embedModalVisible, setEmbedModalVisible] = useState(false)
     const [embedDocumentId, setEmbedDocumentId] = useState<string | null>(null)
-    const [selectedEmbedModelId, setSelectedEmbedModelId] = useState<string | null>(null)
     const [chunkModalVisible, setChunkModalVisible] = useState(false)
     const [selectedChunk, setSelectedChunk] = useState<DocumentChunk | null>(null)
     const [selectedDocument, setSelectedDocument] = useState<Document | null>(null)
@@ -169,10 +168,6 @@ const KnowledgeBasesPage: React.FC = () => {
             if (res.success) {
                 const embedModels = res.data.filter(m => m.modelType === 'EMBEDDING')
                 setEmbeddingModels(embedModels)
-                const defaultModel = embedModels.find(m => m.isDefaultEmbedding)
-                if (defaultModel) {
-                    setSelectedEmbedModelId(defaultModel.id)
-                }
             }
         } catch {
             // ignore
@@ -311,9 +306,13 @@ const KnowledgeBasesPage: React.FC = () => {
     }
 
     const handleStartEmbedding = async () => {
-        if (!embedDocumentId) return
+        if (!embedDocumentId || !selectedKb?.defaultEmbeddingModelId) {
+            message.error('知识库未设置默认 Embedding 模型')
+            return
+        }
         try {
-            const res = await startEmbedding(embedDocumentId, selectedEmbedModelId || undefined)
+            // 使用知识库默认模型
+            const res = await startEmbedding(embedDocumentId, selectedKb.defaultEmbeddingModelId)
             if (res.success) {
                 message.success('开始计算向量')
                 setEmbedModalVisible(false)
@@ -339,7 +338,7 @@ const KnowledgeBasesPage: React.FC = () => {
                 chunkStrategy: values.chunkStrategy,
                 chunkSize: values.chunkSize,
                 chunkOverlap: values.chunkOverlap,
-                embeddingModelId: values.embeddingModelId
+                embeddingModelId: selectedKb?.defaultEmbeddingModelId // 使用知识库默认模型
             })
             if (res.success) {
                 message.success(`${uploadFile.name} 上传成功`)
@@ -558,10 +557,6 @@ const KnowledgeBasesPage: React.FC = () => {
         beforeUpload: (file) => {
             setUploadFile(file)
             uploadForm.setFieldValue('name', file.name)
-            // 如果知识库有默认模型，自动选择
-            if (selectedKb?.defaultEmbeddingModelId) {
-                uploadForm.setFieldValue('embeddingModelId', selectedKb.defaultEmbeddingModelId)
-            }
             setUploadModalVisible(true)
             return false
         },
@@ -815,14 +810,15 @@ const KnowledgeBasesPage: React.FC = () => {
                                         </Form.Item>
                                     )}
                                     {strategy === 'SEMANTIC' && (
-                                        <Form.Item name="embeddingModelId" label="Embedding 模型">
-                                            <Select
-                                                options={embeddingModels.map(m => ({
-                                                    value: m.id,
-                                                    label: m.isDefaultEmbedding ? `${m.name} (默认)` : m.name
-                                                }))}
-                                                placeholder="选择模型"
+                                        <Form.Item label="Embedding 模型">
+                                            <Input
+                                                disabled
+                                                value={selectedKb?.defaultEmbeddingModelName || embeddingModels.find(m => m.id === selectedKb?.defaultEmbeddingModelId)?.name || '未设置'}
+                                                style={{background: '#f5f5f5', color: '#666'}}
                                             />
+                                            <div style={{fontSize: 12, color: '#999', marginTop: 4}}>
+                                                文档使用知识库默认模型，如需更换请在知识库设置中修改
+                                            </div>
                                         </Form.Item>
                                     )}
                                 </>
@@ -832,23 +828,26 @@ const KnowledgeBasesPage: React.FC = () => {
                 </Form>
             </Modal>
 
-            {/* Embedding Modal */}
+            {/* Embedding Modal - 使用知识库默认模型 */}
             <Modal
-                title="选择 Embedding 模型"
+                title="开始向量化"
                 open={embedModalVisible}
                 onCancel={() => setEmbedModalVisible(false)}
                 onOk={handleStartEmbedding}
+                okText="开始向量化"
                 width={400}
             >
-                <Select
-                    style={{width: '100%'}}
-                    value={selectedEmbedModelId}
-                    onChange={setSelectedEmbedModelId}
-                    options={embeddingModels.map(m => ({
-                        value: m.id,
-                        label: m.isDefaultEmbedding ? `${m.name} (默认)` : m.name
-                    }))}
+                <div style={{marginBottom: 16}}>
+                    <span style={{color: '#666'}}>将使用知识库默认 Embedding 模型进行向量化：</span>
+                </div>
+                <Input
+                    disabled
+                    style={{width: '100%', background: '#f5f5f5', color: '#333'}}
+                    value={selectedKb?.defaultEmbeddingModelName || embeddingModels.find(m => m.id === selectedKb?.defaultEmbeddingModelId)?.name || '未设置'}
                 />
+                <div style={{fontSize: 12, color: '#999', marginTop: 8}}>
+                    文档向量将存储到 {embeddingModels.find(m => m.id === selectedKb?.defaultEmbeddingModelId)?.embeddingDimension || '未知'} 维向量表
+                </div>
             </Modal>
 
             {/* 分块内容 Modal */}

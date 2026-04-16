@@ -95,10 +95,11 @@ Completed:
 
 ## 变更文件清单
 
-| 文件 | 变更类型 | 说明 |
-|------|----------|------|
-| `admin-server-runtime/.../KnowledgeBaseRequest.java` | 修改 | @NotBlank 验证 defaultEmbeddingModelId |
-| `admin-server-runtime/.../KnowledgeBaseServiceImpl.java` | 修改 | 添加 isEmbeddingModel(), 更新 toResponse(), 模型变更检测 |
-| `admin-server-runtime/.../KnowledgeBaseResponse.java` | 已存在 | 包含 reindex 状态字段 |
-| `frontend/src/types/knowledgeBase.ts` | 修改 | defaultEmbeddingModelId 改为必填, 新增 reindex 字段 |
-| `frontend/src/pages/KnowledgeBases/index.tsx` | 修改 | 表单添加 required 规则和提示 |
+| 文件                                                       | 变更类型 | 说明                                             |
+|----------------------------------------------------------|------|------------------------------------------------|
+| `admin-server-runtime/.../KnowledgeBaseRequest.java`     | 修改   | @NotBlank 验证 defaultEmbeddingModelId           |
+| `admin-server-runtime/.../KnowledgeBaseServiceImpl.java` | 修改   | 添加 isEmbeddingModel(), 更新 toResponse(), 模型变更检测 |
+| `admin-server-runtime/.../KnowledgeBaseResponse.java`    | 已存在  | 包含 reindex 状态字段                                |
+| `admin-server-runtime/.../DocumentServiceImpl.java`      | 修改   | 删除文档后更新知识库统计                                   |
+| `frontend/src/types/knowledgeBase.ts`                    | 修改   | defaultEmbeddingModelId 改为必填, 新增 reindex 字段    |
+| `frontend/src/pages/KnowledgeBases/index.tsx`            | 修改   | 表单添加 required 规则和提示, 文档上传/向量化使用KB默认模型(置灰只读)    |

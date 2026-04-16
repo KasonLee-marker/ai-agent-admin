@@ -341,8 +341,9 @@ cd frontend
 npm install          # Install dependencies
 npm run dev          # Dev server on port 5173 (proxies /api to :8080)
 
-# 如端口被占用，杀掉占用进程：
-powershell -Command "Get-Process | Where-Object { $_.ProcessName -like '*node*' -or $_.ProcessName -like '*vite*' } | Stop-Process -Force"
+# 如端口 5173 被占用，查找并杀掉占用进程：
+netstat -ano | grep ":5173" | grep LISTENING  # 找到 PID（最后一列数字）
+taskkill /F /PID <PID>                          # 杀掉该进程
 
 npm run build        # Production build (tsc + vite)
 npm run lint         # ESLint check
