@@ -5,8 +5,8 @@ import {
     CloudServerOutlined,
     DashboardOutlined,
     DatabaseOutlined,
-    FileSearchOutlined,
     FileTextOutlined,
+    FolderOutlined,
     LineChartOutlined,
     LogoutOutlined,
     MessageOutlined,
@@ -51,7 +51,7 @@ const menuItems: MenuProps['items'] = [
         type: 'group' as const,
         label: '知识库',
         children: [
-            {key: '/documents', icon: <FileSearchOutlined/>, label: '文档管理'},
+            {key: '/knowledge-bases', icon: <FolderOutlined/>, label: '知识库管理'},
         ]
     },
 ]

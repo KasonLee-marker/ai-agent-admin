@@ -25,6 +25,7 @@ public interface DocumentService {
      *
      * @param file             上传的文件
      * @param name             文档名称（可选）
+     * @param knowledgeBaseId  知识库ID（可选）
      * @param chunkStrategy    分块策略（FIXED_SIZE/PARAGRAPH/SENTENCE/RECURSIVE/SEMANTIC）
      * @param chunkSize        分块大小（字符数，仅部分策略需要）
      * @param chunkOverlap     分块重叠（字符数）
@@ -32,7 +33,7 @@ public interface DocumentService {
      * @param createdBy        创建者标识
      * @return 文档响应 DTO（状态为 PROCESSING）
      */
-    DocumentResponse uploadDocument(MultipartFile file, String name,
+    DocumentResponse uploadDocument(MultipartFile file, String name, String knowledgeBaseId,
                                     String chunkStrategy, Integer chunkSize, Integer chunkOverlap,
                                     String embeddingModelId, String createdBy);
 

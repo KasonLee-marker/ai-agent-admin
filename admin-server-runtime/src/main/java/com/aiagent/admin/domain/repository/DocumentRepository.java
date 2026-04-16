@@ -21,4 +21,39 @@ public interface DocumentRepository extends JpaRepository<Document, String> {
     List<Document> findByStatus(DocumentStatus status);
 
     boolean existsByName(String name);
+
+    // ========== 知识库关联查询 ==========
+
+    /**
+     * 查询知识库下的所有文档
+     *
+     * @param knowledgeBaseId 知识库 ID
+     * @return 文档列表
+     */
+    List<Document> findByKnowledgeBaseId(String knowledgeBaseId);
+
+    /**
+     * 统计知识库下的文档数量
+     *
+     * @param knowledgeBaseId 知识库 ID
+     * @return 文档数量
+     */
+    long countByKnowledgeBaseId(String knowledgeBaseId);
+
+    /**
+     * 检查知识库下是否有文档
+     *
+     * @param knowledgeBaseId 知识库 ID
+     * @return 是否存在文档
+     */
+    boolean existsByKnowledgeBaseId(String knowledgeBaseId);
+
+    /**
+     * 查询知识库下指定状态的文档
+     *
+     * @param knowledgeBaseId 知识库 ID
+     * @param status          文档状态
+     * @return 文档列表
+     */
+    List<Document> findByKnowledgeBaseIdAndStatus(String knowledgeBaseId, DocumentStatus status);
 }

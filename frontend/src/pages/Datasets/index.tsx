@@ -70,6 +70,13 @@ const DatasetPage: React.FC = () => {
             const res = await listDatasets()
             if (res.success) {
                 setDatasets(res.data.content || [])
+                // 如果当前选中了数据集，更新其状态以反映最新的itemCount
+                if (selectedDataset) {
+                    const updated = res.data.content?.find((d: Dataset) => d.id === selectedDataset.id)
+                    if (updated) {
+                        setSelectedDataset(updated)
+                    }
+                }
             }
         } finally {
             setLoading(false)
@@ -160,6 +167,7 @@ const DatasetPage: React.FC = () => {
             await deleteDatasetItem(selectedDataset.id, itemId)
             message.success('删除成功')
             fetchItems(selectedDataset.id)
+            fetchDatasets() // 刷新数据集列表以更新itemCount
         } catch {
             message.error('删除失败')
         }
@@ -177,7 +185,10 @@ const DatasetPage: React.FC = () => {
                 message.success('添加成功')
             }
             setItemModalVisible(false)
+            // 刷新数据项列表
             fetchItems(selectedDataset.id)
+            // 同时刷新数据集列表以更新itemCount
+            fetchDatasets()
         } catch {
             message.error('操作失败')
         }

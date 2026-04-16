@@ -1,5 +1,6 @@
 import React, {useEffect, useState} from 'react'
 import {
+    Alert,
     Button,
     Card,
     Col,
@@ -43,7 +44,7 @@ import {
 import {listDatasets} from '@/api/datasets'
 import {listPrompts} from '@/api/prompts'
 import {listModels} from '@/api/models'
-import {listDocuments} from '@/api/documents'
+import {listAllKnowledgeBases} from '@/api/knowledgeBase'
 import {
     CreateEvaluationRequest,
     EvaluationJob,
@@ -62,7 +63,7 @@ const EvaluationPage: React.FC = () => {
     const [datasets, setDatasets] = useState<Dataset[]>([])
     const [prompts, setPrompts] = useState<PromptTemplate[]>([])
     const [models, setModels] = useState<ModelConfig[]>([])
-    const [documents, setDocuments] = useState<{ id: string, name: string }[]>([])
+    const [knowledgeBases, setKnowledgeBases] = useState<{ id: string, name: string }[]>([])
     const [loading, setLoading] = useState(false)
     const [resultsLoading, setResultsLoading] = useState(false)
     const [modalVisible, setModalVisible] = useState(false)
@@ -70,6 +71,11 @@ const EvaluationPage: React.FC = () => {
     const [selectedEvaluation, setSelectedEvaluation] = useState<EvaluationJob | null>(null)
     const [activeTab, setActiveTab] = useState<string>('list')
     const [form] = Form.useForm()
+    // 表单联动状态
+    const [enableRag, setEnableRag] = useState(false)
+    const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null)
+    const [selectedKnowledgeBaseId, setSelectedKnowledgeBaseId] = useState<string | null>(null)
+    const [selectedEmbeddingModelId, setSelectedEmbeddingModelId] = useState<string | null>(null)
 
     useEffect(() => {
         fetchEvaluations()
@@ -90,16 +96,19 @@ const EvaluationPage: React.FC = () => {
 
     const fetchOptions = async () => {
         try {
-            const [dsRes, ptRes, mdRes, docRes] = await Promise.all([
+            const [dsRes, ptRes, mdRes, kbRes] = await Promise.all([
                 listDatasets(),
                 listPrompts(),
                 listModels(),
-                listDocuments()
+                listAllKnowledgeBases()
             ])
             if (dsRes.success) setDatasets(dsRes.data.content || [])
             if (ptRes.success) setPrompts(ptRes.data.content || [])
             if (mdRes.success) setModels(mdRes.data || [])
-            if (docRes.success) setDocuments((docRes.data.content || []).map(d => ({id: d.id, name: d.name})))
+            if (kbRes.success) setKnowledgeBases((kbRes.data || []).map((kb: {
+                id: string,
+                name: string
+            }) => ({id: kb.id, name: kb.name})))
         } catch {
             // ignore
         }
@@ -122,12 +131,22 @@ const EvaluationPage: React.FC = () => {
     const handleCreate = () => {
         setEditingEvaluation(null)
         form.resetFields()
+        // 重置联动状态
+        setEnableRag(false)
+        setSelectedDatasetId(null)
+        setSelectedKnowledgeBaseId(null)
+        setSelectedEmbeddingModelId(null)
         setModalVisible(true)
     }
 
     const handleEdit = (record: EvaluationJob) => {
         setEditingEvaluation(record)
         form.setFieldsValue(record)
+        // 初始化联动状态
+        setEnableRag(record.enableRag || false)
+        setSelectedDatasetId(record.datasetId || null)
+        setSelectedKnowledgeBaseId(record.knowledgeBaseId || null)
+        setSelectedEmbeddingModelId(record.embeddingModelId || null)
         setModalVisible(true)
     }
 
@@ -210,6 +229,63 @@ const EvaluationPage: React.FC = () => {
         COMPLETED: {color: 'success', text: '已完成'},
         FAILED: {color: 'error', text: '失败'},
         CANCELLED: {color: 'warning', text: '已取消'}
+    }
+
+    // 获取数据集选择后的提示
+    const getDatasetHint = (): { type: 'info' | 'warning', message: string } | null => {
+        if (!selectedDatasetId) return null
+        const dataset = datasets.find(d => d.id === selectedDatasetId)
+        if (!dataset) return null
+
+        // 查询数据集的数据项是否有output字段
+        // 这里简化处理：如果itemCount > 0则认为有期望输出
+        if (dataset.itemCount > 0) {
+            return {
+                type: 'info',
+                message: '建议选择Embedding模型以计算语义相似度'
+            }
+        } else {
+            return {
+                type: 'warning',
+                message: '当前数据集无期望输出，无法计算语义相似度和AI评分'
+            }
+        }
+    }
+
+    // 获取知识库字段提示
+    const getKnowledgeBaseHint = (): string | undefined => {
+        if (enableRag && !selectedKnowledgeBaseId) {
+            return 'RAG模式需要选择知识库进行文档检索'
+        }
+        if (selectedKnowledgeBaseId && !enableRag) {
+            return '已选择知识库，建议开启RAG评估模式'
+        }
+        return undefined
+    }
+
+    // 获取知识库字段样式类型
+    const getKnowledgeBaseValidateStatus = (): 'warning' | 'error' | undefined => {
+        if (enableRag && !selectedKnowledgeBaseId) {
+            return 'error'
+        }
+        if (selectedKnowledgeBaseId && !enableRag) {
+            return 'warning'
+        }
+        return undefined
+    }
+
+    // 获取Embedding模型提示
+    const getEmbeddingHint = (): string | undefined => {
+        if (!selectedEmbeddingModelId) {
+            if (enableRag) {
+                return 'RAG评估建议选择Embedding模型计算语义相似度'
+            }
+            const datasetHint = getDatasetHint()
+            if (datasetHint && datasetHint.type === 'info') {
+                return '建议选择Embedding模型'
+            }
+        }
+        return undefined
     }
 
     const getProgress = (job: EvaluationJob) => {
@@ -429,56 +505,110 @@ const EvaluationPage: React.FC = () => {
                 open={modalVisible}
                 onOk={handleSubmit}
                 onCancel={() => setModalVisible(false)}
-                width={600}
+                width={650}
             >
                 <Form form={form} layout="vertical">
-                    <Form.Item name="name" label="名称" rules={[{required: true}]}>
-                        <Input/>
+                    <Form.Item name="name" label="名称" rules={[{required: true, message: '名称不能为空'}]}>
+                        <Input maxLength={200} showCount/>
                     </Form.Item>
                     <Form.Item name="description" label="描述">
-                        <Input.TextArea rows={2}/>
+                        <Input.TextArea rows={2} maxLength={1000} showCount/>
                     </Form.Item>
-                    <Form.Item name="datasetId" label="数据集" rules={[{required: true}]}>
-                        <Select>
+                    <Form.Item
+                        name="datasetId"
+                        label="数据集"
+                        rules={[{required: true, message: '请选择数据集'}]}
+                    >
+                        <Select
+                            onChange={(value) => setSelectedDatasetId(value)}
+                            placeholder="请选择数据集"
+                        >
                             {datasets.map(d => (
-                                <Select.Option key={d.id} value={d.id}>{d.name} ({d.itemCount}项)</Select.Option>
+                                <Select.Option key={d.id} value={d.id}>
+                                    {d.name} ({d.itemCount}项)
+                                </Select.Option>
                             ))}
                         </Select>
                     </Form.Item>
-                    <Form.Item name="promptTemplateId" label="Prompt模板">
-                        <Select allowClear>
+                    {/* 数据集选择后的提示 */}
+                    {selectedDatasetId && getDatasetHint() && (
+                        <Alert
+                            type={getDatasetHint()!.type}
+                            message={getDatasetHint()!.message}
+                            showIcon
+                            style={{marginBottom: 16}}
+                        />
+                    )}
+                    <Form.Item name="promptTemplateId" label="Prompt模板" help="可选，不选则使用系统默认模板">
+                        <Select allowClear placeholder="可选，不选则使用默认模板">
                             {prompts.map(p => (
                                 <Select.Option key={p.id} value={p.id}>{p.name}</Select.Option>
                             ))}
                         </Select>
                     </Form.Item>
-                    <Form.Item name="modelConfigId" label="对话模型">
-                        <Select allowClear>
+                    <Form.Item name="modelConfigId" label="对话模型" help="可选，不选则使用系统默认对话模型">
+                        <Select allowClear placeholder="可选，不选则使用系统默认">
                             {models.filter(m => m.modelType === 'CHAT').map(m => (
                                 <Select.Option key={m.id} value={m.id}>{m.name}</Select.Option>
                             ))}
                         </Select>
                     </Form.Item>
-                    <Form.Item name="embeddingModelId" label="Embedding模型"
-                               help="用于计算语义相似度，不选则使用系统默认">
-                        <Select allowClear>
+                    <Form.Item
+                        name="embeddingModelId"
+                        label="Embedding模型"
+                        help={getEmbeddingHint()}
+                    >
+                        <Select
+                            allowClear
+                            placeholder="用于计算语义相似度"
+                            onChange={(value) => setSelectedEmbeddingModelId(value)}
+                        >
                             {models.filter(m => m.modelType === 'EMBEDDING').map(m => (
                                 <Select.Option key={m.id} value={m.id}>{m.name}</Select.Option>
                             ))}
                         </Select>
                     </Form.Item>
-                    <Form.Item name="documentId" label="知识库（RAG评估）"
-                               help="选择后评估时会检索知识库内容">
-                        <Select allowClear>
-                            {documents.map(d => (
-                                <Select.Option key={d.id} value={d.id}>{d.name}</Select.Option>
+                    <Form.Item
+                        name="knowledgeBaseId"
+                        label={
+                            enableRag
+                                ? <span>知识库 <span style={{color: '#ff4d4f'}}>*</span></span>
+                                : '知识库（RAG评估）'
+                        }
+                        rules={[{
+                            required: enableRag,
+                            message: '启用RAG评估时必须选择知识库'
+                        }]}
+                        validateStatus={getKnowledgeBaseValidateStatus()}
+                        help={getKnowledgeBaseHint()}
+                    >
+                        <Select
+                            allowClear
+                            placeholder={enableRag ? '请选择知识库' : '可选，用于RAG评估'}
+                            onChange={(value) => setSelectedKnowledgeBaseId(value)}
+                            style={enableRag && !selectedKnowledgeBaseId ? {borderColor: '#1890ff'} : undefined}
+                        >
+                            {knowledgeBases.map(kb => (
+                                <Select.Option key={kb.id} value={kb.id}>{kb.name}</Select.Option>
                             ))}
                         </Select>
                     </Form.Item>
-                    <Form.Item name="enableRag" label="启用RAG评估"
-                               valuePropName="checked"
-                               help="启用后计算检索指标和语义相似度">
-                        <Switch/>
+                    <Form.Item
+                        name="enableRag"
+                        label="启用RAG评估"
+                        valuePropName="checked"
+                        help={enableRag ? '开启后将检索知识库内容，计算检索指标和语义相似度' : '开启后需要选择知识库'}
+                    >
+                        <Switch
+                            onChange={(checked) => {
+                                setEnableRag(checked)
+                                // 开启RAG时，如果知识库未选择，触发验证
+                                if (checked && !selectedKnowledgeBaseId) {
+                                    form.validateFields(['knowledgeBaseId']).catch(() => {
+                                    })
+                                }
+                            }}
+                        />
                     </Form.Item>
                 </Form>
             </Modal>

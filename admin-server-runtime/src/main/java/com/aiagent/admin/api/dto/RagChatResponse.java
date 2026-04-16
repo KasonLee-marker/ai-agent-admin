@@ -21,6 +21,9 @@ public class RagChatResponse {
     @Schema(description = "引用的文档片段")
     private List<VectorSearchResult> sources;
 
+    @Schema(description = "会话ID（用于多轮对话）")
+    private String sessionId;
+
     @Schema(description = "响应延迟（毫秒）")
     private Long latencyMs;
 

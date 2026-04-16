@@ -7,7 +7,7 @@ export interface EvaluationJob {
     promptTemplateId?: string;
     modelConfigId?: string;
     /** 关联的知识库ID（用于RAG评估） */
-    documentId?: string;
+    knowledgeBaseId?: string;
     /** 是否启用RAG评估模式 */
     enableRag?: boolean;
     /** Embedding 模型配置ID（用于计算语义相似度） */
@@ -75,7 +75,7 @@ export interface CreateEvaluationRequest {
     promptTemplateId?: string;
     modelConfigId?: string;
     /** 关联的知识库ID（用于RAG评估） */
-    documentId?: string;
+    knowledgeBaseId?: string;
     /** 是否启用RAG评估模式 */
     enableRag?: boolean;
     /** Embedding 模型配置ID（用于计算语义相似度） */

@@ -1,14 +1,35 @@
 import React, {useEffect, useRef, useState} from 'react'
-import {Button, Card, Collapse, Divider, Empty, Input, Layout, List, message, Select, Space, Tag} from 'antd'
-import {ClearOutlined, FileTextOutlined, InfoCircleOutlined, SendOutlined} from '@ant-design/icons'
-import {ragChat, vectorSearch} from '@/api/rag'
+import {
+    Button,
+    Card,
+    Collapse,
+    Divider,
+    Empty,
+    Input,
+    Layout,
+    List,
+    message,
+    Select,
+    Slider,
+    Space,
+    Switch,
+    Tag
+} from 'antd'
+import {ClearOutlined, FileTextOutlined, InfoCircleOutlined, PlusOutlined, SendOutlined} from '@ant-design/icons'
+import {ragChatStream, vectorSearch} from '@/api/rag'
 import {listDocuments} from '@/api/documents'
 import {listModels} from '@/api/models'
 import {listPrompts} from '@/api/prompts'
-import {RagChatResponse, RagSource, VectorSearchResult} from '@/types/rag'
+import {listAllKnowledgeBases} from '@/api/knowledgeBase'
+import {RagSource, VectorSearchResult} from '@/types/rag'
 import {Document} from '@/types/document'
 import {ModelConfig} from '@/types/model'
 import {PromptTemplate} from '@/types/prompt'
+import {KnowledgeBase} from '@/types/knowledgeBase'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import rehypeHighlight from 'rehype-highlight'
+import 'highlight.js/styles/github.css'
 
 const {Sider, Content} = Layout
 
@@ -22,11 +43,21 @@ interface ChatMessage {
 
 const RagPage: React.FC = () => {
     const [documents, setDocuments] = useState<Document[]>([])
+    const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([])
     const [prompts, setPrompts] = useState<PromptTemplate[]>([])
     const [models, setModels] = useState<ModelConfig[]>([])
+    const [embeddingModels, setEmbeddingModels] = useState<ModelConfig[]>([])
+    const [rerankModels, setRerankModels] = useState<ModelConfig[]>([])
     const [selectedDocIds, setSelectedDocIds] = useState<string[]>([])
+    const [selectedKnowledgeBaseId, setSelectedKnowledgeBaseId] = useState<string | null>(null)
     const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null)
     const [selectedModelId, setSelectedModelId] = useState<string | null>(null)
+    const [selectedEmbeddingModelId, setSelectedEmbeddingModelId] = useState<string | null>(null)
+    const [selectedRerankModelId, setSelectedRerankModelId] = useState<string | null>(null)
+    const [enableRerank, setEnableRerank] = useState(false)
+    const [topK, setTopK] = useState(5)
+    const [threshold, setThreshold] = useState(0.5)
+    const [strategy, setStrategy] = useState('VECTOR')
     const [messages, setMessages] = useState<ChatMessage[]>([])
     const [inputValue, setInputValue] = useState('')
     const [sending, setSending] = useState(false)
@@ -37,6 +68,7 @@ const RagPage: React.FC = () => {
 
     useEffect(() => {
         fetchDocuments()
+        fetchKnowledgeBases()
         fetchPrompts()
         fetchModels()
     }, [])
@@ -50,6 +82,17 @@ const RagPage: React.FC = () => {
             const res = await listDocuments()
             if (res.success) {
                 setDocuments(res.data.content?.filter(d => d.status === 'COMPLETED') || [])
+            }
+        } catch {
+            // ignore
+        }
+    }
+
+    const fetchKnowledgeBases = async () => {
+        try {
+            const res = await listAllKnowledgeBases()
+            if (res.success) {
+                setKnowledgeBases(res.data || [])
             }
         } catch {
             // ignore
@@ -71,14 +114,25 @@ const RagPage: React.FC = () => {
         try {
             const res = await listModels({isActive: true})
             if (res.success) {
-                // 只显示 CHAT 类型模型用于 RAG 对话
+                // CHAT 类型模型用于 RAG 对话
                 const chatModels = res.data.filter(m => m.modelType === 'CHAT')
                 setModels(chatModels)
-                // 自动选择默认模型
-                const defaultModel = chatModels.find(m => m.isDefault)
-                if (defaultModel) {
-                    setSelectedModelId(defaultModel.id)
+                const defaultChatModel = chatModels.find(m => m.isDefault)
+                if (defaultChatModel) {
+                    setSelectedModelId(defaultChatModel.id)
                 }
+
+                // EMBEDDING 类型模型用于向量检索
+                const embedModels = res.data.filter(m => m.modelType === 'EMBEDDING')
+                setEmbeddingModels(embedModels)
+                const defaultEmbedModel = embedModels.find(m => m.isDefaultEmbedding)
+                if (defaultEmbedModel) {
+                    setSelectedEmbeddingModelId(defaultEmbedModel.id)
+                }
+
+                // RERANK 类型模型用于重排序
+                const rerankModelList = res.data.filter(m => m.modelType === 'RERANK')
+                setRerankModels(rerankModelList)
             }
         } catch {
             // ignore
@@ -98,31 +152,65 @@ const RagPage: React.FC = () => {
         setInputValue('')
         setSending(true)
 
+        // 添加一个临时的 AI 消息用于流式显示
+        const tempAiMessage: ChatMessage = {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: '',
+            timestamp: new Date()
+        }
+        setMessages(prev => [...prev, tempAiMessage])
+
         try {
             if (mode === 'rag') {
-                const res = await ragChat({
-                    query: userMessage.content,
-                    promptTemplateId: selectedPromptId || undefined,
-                    documentIds: selectedDocIds.length > 0 ? selectedDocIds : undefined,
-                    topK: 5,
-                    sessionId: sessionId || undefined,
-                    modelId: selectedModelId || undefined
-                })
-
-                if (res.success) {
-                    const data: RagChatResponse = res.data
-                    setSessionId(data.sessionId)
-
-                    const assistantMessage: ChatMessage = {
-                        id: (Date.now() + 1).toString(),
-                        role: 'assistant',
-                        content: data.answer,
-                        sources: data.sources,
-                        timestamp: new Date()
+                // 使用流式方法
+                await ragChatStream(
+                    {
+                        question: userMessage.content,
+                        promptTemplateId: selectedPromptId || undefined,
+                        documentIds: selectedDocIds.length > 0 ? selectedDocIds : undefined,
+                        topK: topK,
+                        threshold: threshold,
+                        sessionId: sessionId || undefined,
+                        modelId: selectedModelId || undefined,
+                        embeddingModelId: selectedEmbeddingModelId || undefined,
+                        knowledgeBaseId: selectedKnowledgeBaseId || undefined,
+                        strategy: strategy,
+                        enableRerank: enableRerank,
+                        rerankModelId: enableRerank && selectedRerankModelId ? selectedRerankModelId : undefined
+                    },
+                    (text) => {
+                        // 实时更新流式文本
+                        setMessages(prev => {
+                            const newMessages = [...prev]
+                            const aiMsgIndex = newMessages.findIndex(m => m.id === tempAiMessage.id)
+                            if (aiMsgIndex !== -1) {
+                                newMessages[aiMsgIndex] = {
+                                    ...newMessages[aiMsgIndex],
+                                    content: text,
+                                }
+                            }
+                            return newMessages
+                        })
+                    },
+                    (newSessionId) => {
+                        // 流式完成
+                        setSending(false)
+                        // 如果返回了新的 sessionId，更新状态
+                        if (newSessionId && !sessionId) {
+                            setSessionId(newSessionId)
+                        }
+                    },
+                    (error) => {
+                        // 错误处理
+                        message.error(`请求失败: ${error.message}`)
+                        setSending(false)
+                        // 移除临时消息
+                        setMessages(prev => prev.filter(m => m.id !== tempAiMessage.id))
                     }
-                    setMessages(prev => [...prev, assistantMessage])
-                }
+                )
             } else {
+                // 向量检索模式（保持同步）
                 const res = await vectorSearch({
                     query: userMessage.content,
                     topK: 10,
@@ -132,10 +220,10 @@ const RagPage: React.FC = () => {
                 if (res.success) {
                     setSearchResults(res.data || [])
                 }
+                setSending(false)
             }
         } catch {
             message.error('请求失败')
-        } finally {
             setSending(false)
         }
     }
@@ -144,6 +232,13 @@ const RagPage: React.FC = () => {
         setMessages([])
         setSearchResults([])
         setSessionId(null)
+    }
+
+    // 新对话按钮处理
+    const handleNewConversation = () => {
+        setMessages([])
+        setSessionId(null)
+        message.success('已开始新对话')
     }
 
     const renderSource = (source: RagSource, index: number) => (
@@ -189,7 +284,18 @@ const RagPage: React.FC = () => {
                     {msg.role === 'user' ? '用户' : 'AI'}
                     <span style={{marginLeft: 8}}>{msg.timestamp.toLocaleTimeString()}</span>
                 </div>
-                <div style={{whiteSpace: 'pre-wrap'}}>{msg.content}</div>
+                {msg.role === 'user' ? (
+                    <div style={{whiteSpace: 'pre-wrap'}}>{msg.content}</div>
+                ) : (
+                    <div style={{fontSize: 14}}>
+                        <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            rehypePlugins={[rehypeHighlight]}
+                        >
+                            {msg.content || '...'}
+                        </ReactMarkdown>
+                    </div>
+                )}
                 {msg.sources && msg.sources.length > 0 && (
                     <>
                         <Divider style={{margin: '8px 0'}}/>
@@ -207,7 +313,7 @@ const RagPage: React.FC = () => {
 
     return (
         <Layout style={{height: 'calc(100vh - 150px)', background: '#fff'}}>
-            <Sider width={250} style={{background: '#fafafa', borderRight: '1px solid #eee'}}>
+            <Sider width={250} style={{background: '#fafafa', borderRight: '1px solid #eee', overflow: 'auto'}}>
                 <div style={{
                     padding: '8px 12px',
                     background: '#e6f7ff',
@@ -235,6 +341,94 @@ const RagPage: React.FC = () => {
                 <Divider style={{margin: '12px 0'}}/>
                 <div style={{padding: 16}}>
                     <div style={{marginBottom: 12}}>
+                        <span style={{fontWeight: 500}}>知识库筛选</span>
+                    </div>
+                    <Select
+                        allowClear
+                        placeholder="选择知识库（可选）"
+                        value={selectedKnowledgeBaseId}
+                        onChange={setSelectedKnowledgeBaseId}
+                        style={{width: '100%'}}
+                        options={knowledgeBases.map(kb => ({
+                            value: kb.id,
+                            label: `${kb.name} (${kb.documentCount}文档)`
+                        }))}
+                    />
+                </div>
+                <Divider style={{margin: '12px 0'}}/>
+                <div style={{padding: 16}}>
+                    <div style={{marginBottom: 12}}>
+                        <span style={{fontWeight: 500}}>检索配置</span>
+                    </div>
+                    <div style={{marginBottom: 12}}>
+                        <div style={{fontSize: 12, color: '#666', marginBottom: 4}}>返回数量 (topK)</div>
+                        <Slider
+                            min={1}
+                            max={20}
+                            value={topK}
+                            onChange={setTopK}
+                            marks={{1: '1', 5: '5', 10: '10', 20: '20'}}
+                        />
+                    </div>
+                    <div style={{marginBottom: 12}}>
+                        <div style={{fontSize: 12, color: '#666', marginBottom: 4}}>相似度阈值</div>
+                        <Slider
+                            min={0}
+                            max={1}
+                            step={0.1}
+                            value={threshold}
+                            onChange={setThreshold}
+                            marks={{0: '0', 0.5: '0.5', 1: '1'}}
+                        />
+                    </div>
+                    <div>
+                        <div style={{fontSize: 12, color: '#666', marginBottom: 4}}>检索策略</div>
+                        <Select
+                            value={strategy}
+                            onChange={setStrategy}
+                            style={{width: '100%'}}
+                            options={[
+                                {value: 'VECTOR', label: '向量检索'},
+                                {value: 'BM25', label: 'BM25 关键词'},
+                                {value: 'HYBRID', label: '混合检索'}
+                            ]}
+                        />
+                    </div>
+                    <div style={{marginTop: 12}}>
+                        <div style={{fontSize: 12, color: '#666', marginBottom: 4}}>
+                            <Space>
+                                启用 Rerank 重排序
+                                <InfoCircleOutlined title="使用 Rerank 模型对检索结果进行二次排序，提高检索精度"/>
+                            </Space>
+                        </div>
+                        <Switch
+                            checked={enableRerank}
+                            onChange={setEnableRerank}
+                            disabled={rerankModels.length === 0}
+                        />
+                        {enableRerank && rerankModels.length > 0 && (
+                            <Select
+                                allowClear
+                                placeholder="选择 Rerank 模型"
+                                value={selectedRerankModelId}
+                                onChange={setSelectedRerankModelId}
+                                style={{width: '100%', marginTop: 8}}
+                                options={rerankModels.map(m => ({
+                                    value: m.id,
+                                    label: m.name
+                                }))}
+                            />
+                        )}
+                        {rerankModels.length === 0 && (
+                            <div style={{fontSize: 12, color: '#999', marginTop: 4}}>
+                                请先在模型管理中添加 Rerank 模型
+                            </div>
+                        )}
+                    </div>
+                </div>
+                <Divider style={{margin: '12px 0'}}/>
+                <div style={{padding: 16}}>
+                    <div style={{marginBottom: 12}}>
                         <span style={{fontWeight: 500}}>对话模型</span>
                     </div>
                     <Select
@@ -246,6 +440,23 @@ const RagPage: React.FC = () => {
                         options={models.map(m => ({
                             value: m.id,
                             label: m.isDefault ? `${m.name} (默认)` : m.name
+                        }))}
+                    />
+                </div>
+                <Divider style={{margin: '12px 0'}}/>
+                <div style={{padding: 16}}>
+                    <div style={{marginBottom: 12}}>
+                        <span style={{fontWeight: 500}}>检索模型</span>
+                    </div>
+                    <Select
+                        allowClear
+                        placeholder="选择 Embedding 模型"
+                        value={selectedEmbeddingModelId}
+                        onChange={setSelectedEmbeddingModelId}
+                        style={{width: '100%'}}
+                        options={embeddingModels.map(m => ({
+                            value: m.id,
+                            label: m.isDefaultEmbedding ? `${m.name} (默认)` : m.name
                         }))}
                     />
                 </div>
@@ -286,9 +497,16 @@ const RagPage: React.FC = () => {
                 </div>
                 <Divider style={{margin: '12px 0'}}/>
                 <div style={{padding: 16}}>
-                    <Button icon={<ClearOutlined/>} onClick={handleClear} block>
-                        清空对话
-                    </Button>
+                    <Space direction="vertical" style={{width: '100%'}}>
+                        <Button icon={<PlusOutlined/>} onClick={handleNewConversation} block type="primary">
+                            新对话
+                        </Button>
+                        {messages.length > 0 && (
+                            <Button icon={<ClearOutlined/>} onClick={handleClear} block>
+                                清空对话
+                            </Button>
+                        )}
+                    </Space>
                 </div>
             </Sider>
             <Content style={{display: 'flex', flexDirection: 'column'}}>

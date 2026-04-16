@@ -32,7 +32,13 @@ public class EvaluationJob {
     @Column(length = 1000)
     private String description;
 
-    @Column(nullable = false, length = 100)
+    /**
+     * Prompt模板ID（可选）
+     * <p>
+     * 如果不指定，评估时将使用默认的系统提示词。
+     * </p>
+     */
+    @Column(length = 100)
     private String promptTemplateId;
 
     /**
@@ -41,7 +47,13 @@ public class EvaluationJob {
     @Column(name = "prompt_template_version")
     private Integer promptTemplateVersion;
 
-    @Column(nullable = false, length = 100)
+    /**
+     * 对话模型配置ID（可选）
+     * <p>
+     * 如果不指定，将使用系统默认的对话模型。
+     * </p>
+     */
+    @Column(length = 100)
     private String modelConfigId;
 
     @Column(nullable = false, length = 100)
@@ -53,8 +65,8 @@ public class EvaluationJob {
      * 设置后，评估时会从该知识库检索相关文档作为上下文。
      * </p>
      */
-    @Column(name = "document_id", length = 100)
-    private String documentId;
+    @Column(name = "knowledge_base_id", length = 100)
+    private String knowledgeBaseId;
 
     /**
      * 使用的 Embedding 模型配置ID（用于计算语义相似度）

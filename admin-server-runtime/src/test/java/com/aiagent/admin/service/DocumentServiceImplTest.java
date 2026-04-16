@@ -181,7 +181,7 @@ class DocumentServiceImplTest {
                 .documentId("doc-123")
                 .score(0.95)
                 .build());
-        when(embeddingStorageService.searchSimilar(any(float[].class), any(ModelConfig.class), any(), anyInt(), anyDouble()))
+        when(embeddingStorageService.searchSimilar(any(float[].class), any(ModelConfig.class), any(), any(), anyInt(), anyDouble()))
                 .thenReturn(mockResults);
 
         // Mock 分块查询
@@ -213,6 +213,7 @@ class DocumentServiceImplTest {
         documentService.uploadDocument(
                 mockFile,
                 "test.txt",  // 明确指定 name，避免调用 getOriginalFilename
+                null, // knowledgeBaseId
                 "FIXED_SIZE",
                 500,
                 null, // 不指定 overlap，应使用默认值 100

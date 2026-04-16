@@ -91,3 +91,4 @@ work/
 .env.*.local
 /.playwright-mcp/
 rebel.xml
+/frontend/test-results/

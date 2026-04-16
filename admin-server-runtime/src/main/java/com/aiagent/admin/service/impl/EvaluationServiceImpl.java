@@ -3,10 +3,7 @@ package com.aiagent.admin.service.impl;
 import com.aiagent.admin.api.dto.*;
 import com.aiagent.admin.domain.entity.*;
 import com.aiagent.admin.domain.repository.*;
-import com.aiagent.admin.service.DocumentService;
-import com.aiagent.admin.service.EmbeddingService;
-import com.aiagent.admin.service.EncryptionService;
-import com.aiagent.admin.service.EvaluationService;
+import com.aiagent.admin.service.*;
 import com.aiagent.admin.service.mapper.EvaluationMapper;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.AllArgsConstructor;
@@ -70,6 +67,8 @@ public class EvaluationServiceImpl implements EvaluationService {
     private final DatasetItemRepository datasetItemRepository;
     private final PromptTemplateRepository promptTemplateRepository;
     private final ModelConfigRepository modelConfigRepository;
+    private final ModelConfigService modelConfigService;
+    private final KnowledgeBaseRepository knowledgeBaseRepository;
     private final EvaluationMapper evaluationMapper;
     private final EncryptionService encryptionService;
     private final EmbeddingService embeddingService;
@@ -236,17 +235,39 @@ public class EvaluationServiceImpl implements EvaluationService {
             throw new IllegalStateException("Job is already running");
         }
 
-        PromptTemplate promptTemplate = promptTemplateRepository.findById(job.getPromptTemplateId())
-                .orElseThrow(() -> new EntityNotFoundException("Prompt template not found"));
+        // Prompt模板是可选的，如果未指定则使用默认系统提示词
+        PromptTemplate promptTemplate = null;
+        if (job.getPromptTemplateId() != null && !job.getPromptTemplateId().isEmpty()) {
+            promptTemplate = promptTemplateRepository.findById(job.getPromptTemplateId())
+                    .orElseThrow(() -> new EntityNotFoundException("Prompt template not found"));
+            // 记录使用的提示词模板版本号（便于复现）
+            job.setPromptTemplateVersion(promptTemplate.getVersion());
+        }
 
-        // 记录使用的提示词模板版本号（便于复现）
-        job.setPromptTemplateVersion(promptTemplate.getVersion());
-
-        ModelConfig modelConfig = modelConfigRepository.findById(job.getModelConfigId())
-                .orElseThrow(() -> new EntityNotFoundException("Model config not found"));
+        // 对话模型是可选的，如果未指定则使用系统默认对话模型
+        ModelConfig modelConfig;
+        if (job.getModelConfigId() != null && !job.getModelConfigId().isEmpty()) {
+            modelConfig = modelConfigRepository.findById(job.getModelConfigId())
+                    .orElseThrow(() -> new EntityNotFoundException("Model config not found"));
+        } else {
+            modelConfig = modelConfigService.findDefaultEntity()
+                    .orElseThrow(() -> new EntityNotFoundException("No default model configured"));
+            log.info("Using default model {} for evaluation job {}", modelConfig.getId(), id);
+        }
 
         Dataset dataset = datasetRepository.findById(job.getDatasetId())
                 .orElseThrow(() -> new EntityNotFoundException("Dataset not found"));
+
+        // 如果启用了 RAG 但没有指定 embedding 模型，从知识库获取默认配置
+        if (Boolean.TRUE.equals(job.getEnableRag()) && job.getKnowledgeBaseId() != null
+                && (job.getEmbeddingModelId() == null || job.getEmbeddingModelId().isEmpty())) {
+            KnowledgeBase kb = knowledgeBaseRepository.findById(job.getKnowledgeBaseId())
+                    .orElseThrow(() -> new EntityNotFoundException("Knowledge base not found"));
+            if (kb.getDefaultEmbeddingModelId() != null && !kb.getDefaultEmbeddingModelId().isEmpty()) {
+                job.setEmbeddingModelId(kb.getDefaultEmbeddingModelId());
+                log.info("Using knowledge base default embedding model {} for RAG evaluation", kb.getDefaultEmbeddingModelId());
+            }
+        }
 
         List<DatasetItem> items = datasetItemRepository.findByDatasetIdAndVersionAndStatusNot(
                 job.getDatasetId(), dataset.getVersion(), DatasetItem.ItemStatus.DELETED);
@@ -327,9 +348,12 @@ public class EvaluationServiceImpl implements EvaluationService {
             String renderedPrompt;
             List<VectorSearchResult> retrievedDocs = null;
 
-            if (Boolean.TRUE.equals(job.getEnableRag()) && job.getDocumentId() != null) {
-                // RAG评估流程
-                retrievedDocs = retrieveDocuments(job.getDocumentId(), item.getInput(), 5);
+            // 获取基础提示词模板（如果有）
+            String baseTemplate = promptTemplate != null ? promptTemplate.getContent() : null;
+
+            if (Boolean.TRUE.equals(job.getEnableRag()) && job.getKnowledgeBaseId() != null) {
+                // RAG评估流程 - 使用评估任务指定的 embedding 模型进行检索
+                retrievedDocs = retrieveDocuments(job.getKnowledgeBaseId(), job.getEmbeddingModelId(), item.getInput(), 5);
                 result.setRetrievedDocIds(serializeDocIds(retrievedDocs));
 
                 // 计算检索评估指标（如有期望文档ID）
@@ -338,10 +362,10 @@ public class EvaluationServiceImpl implements EvaluationService {
                 }
 
                 // 构建包含检索上下文的提示词
-                renderedPrompt = buildRagPrompt(promptTemplate.getContent(), item.getInput(), retrievedDocs);
+                renderedPrompt = buildRagPrompt(baseTemplate, item.getInput(), retrievedDocs);
             } else {
                 // 基础评估流程
-                renderedPrompt = renderPrompt(promptTemplate.getContent(), item.getInput());
+                renderedPrompt = renderPrompt(baseTemplate, item.getInput());
             }
 
             result.setRenderedPrompt(renderedPrompt);
@@ -432,23 +456,26 @@ public class EvaluationServiceImpl implements EvaluationService {
     /**
      * 检索相关文档
      *
-     * @param documentId 知识库ID
+     * @param knowledgeBaseId 知识库ID
+     * @param embeddingModelId Embedding模型ID（可选，用于指定检索时使用的向量表）
      * @param query      查询文本
      * @param topK       返回数量
      * @return 检索结果列表
      */
-    private List<VectorSearchResult> retrieveDocuments(String documentId, String query, int topK) {
+    private List<VectorSearchResult> retrieveDocuments(String knowledgeBaseId, String embeddingModelId, String query, int topK) {
         VectorSearchRequest request = new VectorSearchRequest();
-        request.setDocumentId(documentId);
+        request.setKnowledgeBaseId(knowledgeBaseId);
+        request.setEmbeddingModelId(embeddingModelId);
         request.setQuery(query);
         request.setTopK(topK);
+        request.setThreshold(0.3); // 降低阈值以获取更多相关结果
         return documentService.searchSimilar(request);
     }
 
     /**
      * 构建RAG提示词（包含检索上下文）
      *
-     * @param template      提示词模板
+     * @param template      提示词模板（可选）
      * @param input         用户输入
      * @param retrievedDocs 检索到的文档
      * @return 渲染后的提示词
@@ -459,6 +486,12 @@ public class EvaluationServiceImpl implements EvaluationService {
                 .map(VectorSearchResult::getContent)
                 .reduce((a, b) -> a + "\n\n---\n\n" + b)
                 .orElse("");
+
+        // 如果没有提供模板，使用默认的RAG提示词模板
+        if (template == null || template.isEmpty()) {
+            template = "请根据以下参考信息回答问题。如果参考信息中没有相关内容，请说明。\n\n" +
+                    "参考信息：\n{context}\n\n问题：{{input}}";
+        }
 
         // 渲染模板（支持 {context} 和 {input} 变量）
         String result = template.replace("{context}", context);
@@ -738,19 +771,16 @@ public class EvaluationServiceImpl implements EvaluationService {
     /**
      * 验证评估任务创建请求参数
      * <p>
-     * 检查必要参数：提示词模板 ID、模型配置 ID、数据集 ID。
+     * 检查必要参数：模型配置 ID、数据集 ID。
+     * Prompt模板ID是可选的，如果不指定则使用默认系统提示词。
      * </p>
      *
      * @param request 创建任务请求
      * @throws IllegalArgumentException 必要参数缺失时抛出
      */
     private void validateJobRequest(EvaluationJobCreateRequest request) {
-        if (request.getPromptTemplateId() == null || request.getPromptTemplateId().isEmpty()) {
-            throw new IllegalArgumentException("Prompt template ID is required");
-        }
-        if (request.getModelConfigId() == null || request.getModelConfigId().isEmpty()) {
-            throw new IllegalArgumentException("Model config ID is required");
-        }
+        // promptTemplateId 和 modelConfigId 现在都是可选的
+        // 如果不指定 modelConfigId，评估时会使用系统默认对话模型
         if (request.getDatasetId() == null || request.getDatasetId().isEmpty()) {
             throw new IllegalArgumentException("Dataset ID is required");
         }
@@ -774,12 +804,17 @@ public class EvaluationServiceImpl implements EvaluationService {
     private EvaluationJobResponse toJobResponseWithNames(EvaluationJob job) {
         EvaluationJobResponse response = evaluationMapper.toJobResponse(job);
 
-        // Fetch names for related entities
-        promptTemplateRepository.findById(job.getPromptTemplateId())
-                .ifPresent(pt -> response.setPromptTemplateName(pt.getName()));
+        // Fetch names for related entities (promptTemplateId is optional)
+        if (job.getPromptTemplateId() != null && !job.getPromptTemplateId().isEmpty()) {
+            promptTemplateRepository.findById(job.getPromptTemplateId())
+                    .ifPresent(pt -> response.setPromptTemplateName(pt.getName()));
+        }
 
-        modelConfigRepository.findById(job.getModelConfigId())
-                .ifPresent(mc -> response.setModelConfigName(mc.getName()));
+        // Fetch model config name if specified
+        if (job.getModelConfigId() != null && !job.getModelConfigId().isEmpty()) {
+            modelConfigRepository.findById(job.getModelConfigId())
+                    .ifPresent(mc -> response.setModelConfigName(mc.getName()));
+        }
 
         datasetRepository.findById(job.getDatasetId())
                 .ifPresent(ds -> response.setDatasetName(ds.getName()));
@@ -788,6 +823,12 @@ public class EvaluationServiceImpl implements EvaluationService {
         if (job.getEmbeddingModelId() != null && !job.getEmbeddingModelId().isEmpty()) {
             modelConfigRepository.findById(job.getEmbeddingModelId())
                     .ifPresent(em -> response.setEmbeddingModelName(em.getName()));
+        }
+
+        // Fill knowledge base name if specified
+        if (job.getKnowledgeBaseId() != null && !job.getKnowledgeBaseId().isEmpty()) {
+            knowledgeBaseRepository.findById(job.getKnowledgeBaseId())
+                    .ifPresent(kb -> response.setKnowledgeBaseName(kb.getName()));
         }
 
         // Set computed metrics

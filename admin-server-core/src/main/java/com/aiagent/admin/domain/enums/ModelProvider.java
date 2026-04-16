@@ -89,6 +89,17 @@ public enum ModelProvider {
             BuiltinModel.of("text-embedding-v1", "Embedding V1", "1024维向量"),
             BuiltinModel.of("text-embedding-v2", "Embedding V2", "1536维向量"),
             BuiltinModel.of("text-embedding-v3", "Embedding V3", "1024维向量，最新版")
+    )),
+
+    // ============ Rerank 模型供应商 ============
+
+    COHERE_RERANK("Cohere Rerank", "https://api.cohere.ai", ModelType.RERANK, List.of(
+            BuiltinModel.of("rerank-english-v3.0", "Rerank English V3", "英文重排序，高精度"),
+            BuiltinModel.of("rerank-multilingual-v3.0", "Rerank Multilingual V3", "多语言重排序，支持中文")
+    )),
+    JINA_RERANK("Jina Rerank", "https://api.jina.ai", ModelType.RERANK, List.of(
+            BuiltinModel.of("jina-reranker-v1-base-en", "Jina Reranker V1", "英文重排序"),
+            BuiltinModel.of("jina-reranker-v2-base-multilingual", "Jina Reranker V2", "多语言重排序，支持中文")
     ));
 
     private final String displayName;
@@ -119,15 +130,17 @@ public enum ModelProvider {
     /**
      * 模型类型枚举
      * <p>
-     * 区分 Chat 模型和 Embedding 模型：
+     * 区分 Chat 模型、Embedding 模型和 Rerank 模型：
      * <ul>
      *   <li>CHAT - 用于对话生成、评估回答</li>
      *   <li>EMBEDDING - 用于文本向量计算、相似度检索</li>
+     *   <li>RERANK - 用于检索结果重排序，提高检索精度</li>
      * </ul>
      * </p>
      */
     public enum ModelType {
         CHAT,
-        EMBEDDING
+        EMBEDDING,
+        RERANK
     }
 }

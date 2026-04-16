@@ -38,9 +38,6 @@ public interface EvaluationMapper {
     EvaluationJob toJobEntity(EvaluationJobCreateRequest request);
 
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "promptTemplateId", ignore = true)
-    @Mapping(target = "modelConfigId", ignore = true)
-    @Mapping(target = "datasetId", ignore = true)
     @Mapping(target = "status", ignore = true)
     @Mapping(target = "totalItems", ignore = true)
     @Mapping(target = "completedItems", ignore = true)
@@ -52,6 +49,7 @@ public interface EvaluationMapper {
     @Mapping(target = "startedAt", ignore = true)
     @Mapping(target = "completedAt", ignore = true)
     @Mapping(target = "errorMessage", ignore = true)
+    @Mapping(target = "promptTemplateVersion", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     @Mapping(target = "createdBy", ignore = true)

@@ -7,10 +7,7 @@ import com.aiagent.admin.domain.entity.ModelConfig;
 import com.aiagent.admin.domain.repository.DocumentChunkRepository;
 import com.aiagent.admin.domain.repository.DocumentRepository;
 import com.aiagent.admin.domain.repository.ModelConfigRepository;
-import com.aiagent.admin.service.DocumentService;
-import com.aiagent.admin.service.EmbeddingService;
-import com.aiagent.admin.service.EmbeddingStorageService;
-import com.aiagent.admin.service.IdGenerator;
+import com.aiagent.admin.service.*;
 import com.aiagent.admin.service.event.DocumentUploadEvent;
 import com.aiagent.admin.service.event.EmbeddingStartEvent;
 import com.aiagent.admin.service.mapper.DocumentChunkMapper;
@@ -70,6 +67,8 @@ public class DocumentServiceImpl implements DocumentService {
     private final IdGenerator idGenerator;
     private final EmbeddingService embeddingService;
     private final EmbeddingStorageService embeddingStorageService;
+    private final BM25SearchService bm25SearchService;
+    private final RerankService rerankService;
     private final ModelConfigRepository modelConfigRepository;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -116,7 +115,7 @@ public class DocumentServiceImpl implements DocumentService {
      */
     @Override
     @Transactional
-    public DocumentResponse uploadDocument(MultipartFile file, String name,
+    public DocumentResponse uploadDocument(MultipartFile file, String name, String knowledgeBaseId,
                                            String chunkStrategy, Integer chunkSize, Integer chunkOverlap,
                                            String embeddingModelId, String createdBy) {
         String contentType = file.getContentType();
@@ -151,6 +150,7 @@ public class DocumentServiceImpl implements DocumentService {
                 .name(name != null ? name : file.getOriginalFilename())
                 .contentType(contentType)
                 .fileSize(file.getSize())
+                .knowledgeBaseId(knowledgeBaseId)
                 .chunkStrategy(chunkStrategy != null ? chunkStrategy : "FIXED_SIZE")
                 .chunkSize(chunkSize != null ? chunkSize : 500)
                 .chunkOverlap(chunkOverlap != null ? chunkOverlap : 100)
@@ -335,7 +335,41 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     /**
-     * 执行向量相似度搜索
+     * 执行相似度搜索（支持多种策略）
+     * <p>
+     * 根据请求中的 strategy 参数选择检索方式：
+     * <ul>
+     *   <li>VECTOR: 向量检索（语义相似度）</li>
+     *   <li>BM25: 关键词检索（精确匹配）</li>
+     *   <li>HYBRID: 混合检索（RRF 融合向量 + BM25）</li>
+     * </ul>
+     * </p>
+     *
+     * @param request 向量搜索请求
+     * @return 搜索结果列表
+     */
+    @Override
+    public List<VectorSearchResult> searchSimilar(VectorSearchRequest request) {
+        String strategy = request.getStrategy() != null ? request.getStrategy() : "VECTOR";
+        int topK = request.getTopK() != null ? request.getTopK() : 5;
+
+        switch (strategy) {
+            case "BM25":
+                return bm25SearchService.searchBM25(
+                        request.getQuery(),
+                        request.getKnowledgeBaseId(),
+                        request.getDocumentId(),
+                        topK);
+            case "HYBRID":
+                return searchHybrid(request);
+            case "VECTOR":
+            default:
+                return searchVector(request);
+        }
+    }
+
+    /**
+     * 执行向量相似度检索
      * <p>
      * 使用 pgvector 进行向量检索：
      * <ol>
@@ -349,8 +383,7 @@ public class DocumentServiceImpl implements DocumentService {
      * @param request 向量搜索请求
      * @return 搜索结果列表
      */
-    @Override
-    public List<VectorSearchResult> searchSimilar(VectorSearchRequest request) {
+    private List<VectorSearchResult> searchVector(VectorSearchRequest request) {
         // 获取 embedding 模型配置
         ModelConfig embeddingConfig;
         if (request.getEmbeddingModelId() != null && !request.getEmbeddingModelId().isEmpty()) {
@@ -372,9 +405,16 @@ public class DocumentServiceImpl implements DocumentService {
         // 使用 EmbeddingStorageService 进行向量检索
         int topK = request.getTopK() != null ? request.getTopK() : 5;
         double threshold = request.getThreshold() != null ? request.getThreshold() : 0.1;
+        String knowledgeBaseId = request.getKnowledgeBaseId();
+
+        // 如果启用 rerank，需要获取更多候选结果
+        int searchTopK = topK;
+        if (Boolean.TRUE.equals(request.getEnableRerank()) && request.getRerankModelId() != null) {
+            searchTopK = topK * 4; // 获取 4 倍候选结果供 rerank 筛选
+        }
 
         List<VectorSearchResult> results = embeddingStorageService.searchSimilar(
-                queryEmbedding, embeddingConfig, request.getDocumentId(), topK, threshold);
+                queryEmbedding, embeddingConfig, request.getDocumentId(), knowledgeBaseId, searchTopK, threshold);
 
         // 补充分块内容信息
         results.forEach(result -> {
@@ -385,7 +425,82 @@ public class DocumentServiceImpl implements DocumentService {
             });
         });
 
+        // 如果启用 rerank，进行二次排序
+        if (Boolean.TRUE.equals(request.getEnableRerank()) && request.getRerankModelId() != null && !results.isEmpty()) {
+            ModelConfig rerankConfig = modelConfigRepository.findById(request.getRerankModelId())
+                    .orElseThrow(() -> new EntityNotFoundException("Rerank model not found: " + request.getRerankModelId()));
+
+            results = rerankService.rerank(request.getQuery(), results, rerankConfig, topK);
+            log.info("Rerank applied: {} candidates -> {} results", searchTopK, results.size());
+        }
+
         return results;
+    }
+
+    /**
+     * 执行混合检索（HYBRID）
+     * <p>
+     * 使用 RRF (Reciprocal Rank Fusion) 算法融合向量检索和 BM25 检索结果：
+     * <ol>
+     *   <li>并行执行向量检索和 BM25 检索</li>
+     *   <li>对每个结果计算 RRF 分数：1/(k + rank)</li>
+     *   <li>按融合分数排序，返回 topK 结果</li>
+     * </ol>
+     * </p>
+     * <p>
+     * RRF 公式：score = Σ 1/(k + rank_i)，其中 k 通常为 60。
+     * </p>
+     *
+     * @param request 向量搜索请求
+     * @return 融合后的搜索结果列表
+     */
+    private List<VectorSearchResult> searchHybrid(VectorSearchRequest request) {
+        int topK = request.getTopK() != null ? request.getTopK() : 5;
+        int rrfK = 60; // RRF 常数
+
+        // 1. 执行向量检索和 BM25 检索
+        List<VectorSearchResult> vectorResults = searchVector(request);
+        List<VectorSearchResult> bm25Results = bm25SearchService.searchBM25(
+                request.getQuery(),
+                request.getKnowledgeBaseId(),
+                request.getDocumentId(),
+                topK);
+
+        // 2. 使用 RRF 融合排名
+        java.util.Map<String, Double> rrfScores = new java.util.HashMap<>();
+        java.util.Map<String, VectorSearchResult> resultMap = new java.util.HashMap<>();
+
+        // 向量检索结果计分
+        for (int i = 0; i < vectorResults.size(); i++) {
+            String chunkId = vectorResults.get(i).getChunkId();
+            rrfScores.merge(chunkId, 1.0 / (rrfK + i + 1), Double::sum);
+            resultMap.put(chunkId, vectorResults.get(i));
+        }
+
+        // BM25 检索结果计分
+        for (int i = 0; i < bm25Results.size(); i++) {
+            String chunkId = bm25Results.get(i).getChunkId();
+            rrfScores.merge(chunkId, 1.0 / (rrfK + i + 1), Double::sum);
+            // 如果向量检索中没有该结果，添加到 map
+            if (!resultMap.containsKey(chunkId)) {
+                resultMap.put(chunkId, bm25Results.get(i));
+            }
+        }
+
+        // 3. 按融合分数排序，返回 topK
+        List<VectorSearchResult> fusedResults = rrfScores.entrySet().stream()
+                .sorted(java.util.Map.Entry.<String, Double>comparingByValue().reversed())
+                .limit(topK)
+                .map(e -> {
+                    VectorSearchResult result = resultMap.get(e.getKey());
+                    // 更新分数为融合分数
+                    result.setScore(e.getValue());
+                    return result;
+                })
+                .collect(Collectors.toList());
+
+        log.debug("Hybrid search: vector={}, bm25={}, fused={}", vectorResults.size(), bm25Results.size(), fusedResults.size());
+        return fusedResults;
     }
 
     /**

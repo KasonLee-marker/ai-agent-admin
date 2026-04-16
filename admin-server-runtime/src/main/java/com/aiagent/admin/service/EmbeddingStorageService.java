@@ -65,12 +65,13 @@ public interface EmbeddingStorageService {
      * @param queryVector     查询向量
      * @param embeddingConfig Embedding 模型配置（包含维度和表名）
      * @param documentId      文档 ID 过滤（可选）
+     * @param knowledgeBaseId 知识库 ID 过滤（可选）
      * @param topK            返回数量
      * @param threshold       相似度阈值
      * @return 相似度检索结果列表
      */
     List<VectorSearchResult> searchSimilar(float[] queryVector, ModelConfig embeddingConfig,
-                                           String documentId, int topK, double threshold);
+                                           String documentId, String knowledgeBaseId, int topK, double threshold);
 
     /**
      * 向量数据包装类

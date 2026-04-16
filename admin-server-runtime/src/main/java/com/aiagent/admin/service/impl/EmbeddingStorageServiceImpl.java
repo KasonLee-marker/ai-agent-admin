@@ -99,7 +99,7 @@ public class EmbeddingStorageServiceImpl implements EmbeddingStorageService {
 
     @Override
     public List<VectorSearchResult> searchSimilar(float[] queryVector, ModelConfig embeddingConfig,
-                                                  String documentId, int topK, double threshold) {
+                                                  String documentId, String knowledgeBaseId, int topK, double threshold) {
         String tableName = embeddingConfig.getEmbeddingTableName();
         if (tableName == null || tableName.isEmpty()) {
             // 尝试根据维度获取表名
@@ -119,16 +119,32 @@ public class EmbeddingStorageServiceImpl implements EmbeddingStorageService {
 
         // 使用 pgvector 的余弦相似度运算符 <=> 进行检索
         // 注意：<=> 返回的是距离（0=最相似），所以需要取前 topK 个最小的距离
+        // 根据 documentId 和 knowledgeBaseId 组合构建不同的 SQL
+        boolean hasDocumentId = documentId != null && !documentId.isEmpty();
+        boolean hasKnowledgeBaseId = knowledgeBaseId != null && !knowledgeBaseId.isEmpty();
+
         String sql;
-        if (documentId != null && !documentId.isEmpty()) {
+        if (hasDocumentId) {
+            // 指定文档 ID：直接过滤
             sql = String.format("""
-                    SELECT chunk_id, document_id, 1 - (embedding <=> ?::vector) as score, created_at
-                    FROM %s
-                    WHERE document_id = ? AND 1 - (embedding <=> ?::vector) > ?
-                    ORDER BY embedding <=> ?::vector ASC
+                    SELECT e.chunk_id, e.document_id, 1 - (e.embedding <=> ?::vector) as score, e.created_at
+                    FROM %s e
+                    WHERE e.document_id = ? AND 1 - (e.embedding <=> ?::vector) > ?
+                    ORDER BY e.embedding <=> ?::vector ASC
+                    LIMIT ?
+                    """, tableName);
+        } else if (hasKnowledgeBaseId) {
+            // 指定知识库：关联 documents 表过滤
+            sql = String.format("""
+                    SELECT e.chunk_id, e.document_id, 1 - (e.embedding <=> ?::vector) as score, e.created_at
+                    FROM %s e
+                    JOIN documents d ON e.document_id = d.id
+                    WHERE d.knowledge_base_id = ? AND 1 - (e.embedding <=> ?::vector) > ?
+                    ORDER BY e.embedding <=> ?::vector ASC
                     LIMIT ?
                     """, tableName);
         } else {
+            // 无过滤条件
             sql = String.format("""
                     SELECT chunk_id, document_id, 1 - (embedding <=> ?::vector) as score, created_at
                     FROM %s
@@ -140,7 +156,7 @@ public class EmbeddingStorageServiceImpl implements EmbeddingStorageService {
 
         List<VectorSearchResult> results = new ArrayList<>();
 
-        if (documentId != null && !documentId.isEmpty()) {
+        if (hasDocumentId) {
             jdbcTemplate.query(sql, ps -> {
                 ps.setString(1, queryVectorStr);
                 ps.setString(2, documentId);
@@ -155,12 +171,28 @@ public class EmbeddingStorageServiceImpl implements EmbeddingStorageService {
                         .score(rs.getDouble("score"))
                         .build());
             });
+        } else if (hasKnowledgeBaseId) {
+            jdbcTemplate.query(sql, ps -> {
+                ps.setString(1, queryVectorStr);         // SELECT's vector
+                ps.setString(2, knowledgeBaseId);        // WHERE's knowledge_base_id
+                ps.setString(3, queryVectorStr);         // WHERE's vector
+                ps.setDouble(4, threshold);              // WHERE's threshold
+                ps.setString(5, queryVectorStr);         // ORDER BY's vector
+                ps.setInt(6, topK);                      // LIMIT
+            }, rs -> {
+                results.add(VectorSearchResult.builder()
+                        .chunkId(rs.getString("chunk_id"))
+                        .documentId(rs.getString("document_id"))
+                        .score(rs.getDouble("score"))
+                        .build());
+            });
         } else {
             jdbcTemplate.query(sql, ps -> {
-                ps.setString(1, queryVectorStr);
-                ps.setDouble(2, threshold);
-                ps.setString(3, queryVectorStr);
-                ps.setInt(4, topK);
+                ps.setString(1, queryVectorStr);  // SELECT's vector
+                ps.setString(2, queryVectorStr);  // WHERE's vector
+                ps.setDouble(3, threshold);       // WHERE's threshold
+                ps.setString(4, queryVectorStr);  // ORDER BY's vector
+                ps.setInt(5, topK);               // LIMIT
             }, rs -> {
                 results.add(VectorSearchResult.builder()
                         .chunkId(rs.getString("chunk_id"))

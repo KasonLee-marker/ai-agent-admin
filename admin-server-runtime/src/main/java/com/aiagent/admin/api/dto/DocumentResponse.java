@@ -55,6 +55,18 @@ public class DocumentResponse {
     @Schema(description = "向量维度")
     private Integer embeddingDimension;
 
+    /**
+     * 所属知识库 ID
+     */
+    @Schema(description = "知识库ID")
+    private String knowledgeBaseId;
+
+    /**
+     * 所属知识库名称
+     */
+    @Schema(description = "知识库名称")
+    private String knowledgeBaseName;
+
     @Schema(description = "状态")
     private Document.DocumentStatus status;
 

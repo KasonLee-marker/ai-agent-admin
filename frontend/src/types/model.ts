@@ -14,7 +14,7 @@ export interface ModelConfig {
     isDefaultEmbedding: boolean;
     isActive: boolean;
     healthStatus: 'HEALTHY' | 'UNHEALTHY' | 'UNKNOWN';
-    modelType: 'CHAT' | 'EMBEDDING';
+    modelType: 'CHAT' | 'EMBEDDING' | 'RERANK';
     /** 向量维度（仅 EMBEDDING 类型有效） */
     embeddingDimension?: number;
     /** 向量表名（仅 EMBEDDING 类型有效） */

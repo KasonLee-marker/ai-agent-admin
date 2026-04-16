@@ -8,11 +8,13 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Flux;
 
 /**
  * 检索增强生成（RAG）REST 控制器
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 提供基于文档检索的对话 API：
  * <ul>
  *   <li>RAG 对话：先检索相关文档片段，再生成回复</li>
+ *   <li>RAG 流式对话：SSE 格式的流式响应</li>
  * </ul>
  * </p>
  * <p>
@@ -49,5 +52,11 @@ public class RagController {
 
         RagChatResponse response = ragService.chat(request);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @Operation(summary = "RAG流式对话", description = "基于检索增强生成的流式对话接口（SSE格式）")
+    public Flux<String> chatStream(@Valid @RequestBody RagChatRequest request) {
+        return ragService.chatStream(request);
     }
 }

@@ -13,6 +13,8 @@ export interface Document {
     embeddingModelId?: string;
     embeddingModelName?: string;
     embeddingDimension?: number;
+    knowledgeBaseId?: string;
+    knowledgeBaseName?: string;
     errorMessage?: string;
     metadata?: Record<string, unknown>;
     createdAt: string;

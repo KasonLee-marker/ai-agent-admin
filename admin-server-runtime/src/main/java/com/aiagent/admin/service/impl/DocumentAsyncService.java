@@ -5,10 +5,10 @@ import com.aiagent.admin.domain.entity.DocumentChunk;
 import com.aiagent.admin.domain.entity.ModelConfig;
 import com.aiagent.admin.domain.repository.DocumentChunkRepository;
 import com.aiagent.admin.domain.repository.DocumentRepository;
+import com.aiagent.admin.domain.repository.KnowledgeBaseRepository;
 import com.aiagent.admin.domain.repository.ModelConfigRepository;
-import com.aiagent.admin.service.EmbeddingService;
-import com.aiagent.admin.service.EmbeddingStorageService;
-import com.aiagent.admin.service.IdGenerator;
+import com.aiagent.admin.service.*;
+import com.aiagent.admin.service.event.EmbeddingStartEvent;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +17,7 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -53,9 +54,13 @@ public class DocumentAsyncService {
 
     private final DocumentRepository documentRepository;
     private final DocumentChunkRepository documentChunkRepository;
+    private final KnowledgeBaseRepository knowledgeBaseRepository;
     private final ModelConfigRepository modelConfigRepository;
     private final EmbeddingService embeddingService;
     private final EmbeddingStorageService embeddingStorageService;
+    private final VectorTableService vectorTableService;
+    private final KnowledgeBaseService knowledgeBaseService;
+    private final ApplicationEventPublisher eventPublisher;
     private final IdGenerator idGenerator;
 
     /**
@@ -128,6 +133,30 @@ public class DocumentAsyncService {
             documentRepository.save(document);
 
             log.info("Document chunked successfully: {} with {} chunks using strategy {}", documentId, chunks.size(), document.getChunkStrategy());
+
+            // 更新知识库统计数据（如果文档属于某个知识库）
+            if (document.getKnowledgeBaseId() != null) {
+                knowledgeBaseService.updateStatistics(document.getKnowledgeBaseId());
+            }
+
+            // 对于非语义分块策略，如果文档属于知识库，自动触发 embedding
+            if (!"SEMANTIC".equals(document.getChunkStrategy()) && document.getKnowledgeBaseId() != null) {
+                // 获取知识库的默认 embedding 模型
+                knowledgeBaseRepository.findById(document.getKnowledgeBaseId()).ifPresent(kb -> {
+                    if (kb.getDefaultEmbeddingModelId() != null) {
+                        modelConfigRepository.findById(kb.getDefaultEmbeddingModelId()).ifPresent(embeddingConfig -> {
+                            log.info("Auto-starting embedding for document {} using knowledge base default model {}", documentId, embeddingConfig.getName());
+                            // 设置 embedding 模型信息（dimension和tableName会在embedChunksAsync中动态获取）
+                            document.setEmbeddingModelId(embeddingConfig.getId());
+                            document.setEmbeddingModelName(embeddingConfig.getName());
+                            document.setStatus(Document.DocumentStatus.EMBEDDING);
+                            documentRepository.save(document);
+                            // 通过事件发布异步执行 embedding（避免 @Async 自调用问题）
+                            eventPublisher.publishEvent(new EmbeddingStartEvent(documentId, embeddingConfig));
+                        });
+                    }
+                });
+            }
 
         } catch (Exception e) {
             log.error("Error processing document: {}", documentId, e);
@@ -454,6 +483,7 @@ public class DocumentAsyncService {
      * 执行流程：
      * <ol>
      *   <li>获取文档分块列表</li>
+     *   <li>如果缺少dimension和tableName，先动态获取</li>
      *   <li>分批调用 Embedding API</li>
      *   <li>将向量存储到对应的维度表（pgvector）</li>
      *   <li>更新进度</li>
@@ -472,22 +502,47 @@ public class DocumentAsyncService {
 
             List<DocumentChunk> chunks = documentChunkRepository.findByDocumentIdOrderByChunkIndexAsc(documentId);
 
-            log.info("Starting embedding for document {} with {} chunks using model {} (dimension {})",
-                    documentId, chunks.size(), embeddingConfig.getName(), embeddingConfig.getEmbeddingDimension());
+            log.info("Starting embedding for document {} with {} chunks using model {}",
+                    documentId, chunks.size(), embeddingConfig.getName());
 
-            // 确保向量表存在
-            String tableName = embeddingConfig.getEmbeddingTableName();
+            // 如果缺少dimension和tableName，动态获取
             Integer dimension = embeddingConfig.getEmbeddingDimension();
+            String tableName = embeddingConfig.getEmbeddingTableName();
 
-            if (tableName == null || dimension == null) {
-                throw new IllegalStateException("Embedding model has no dimension or table configured. Please run health check first.");
+            if (dimension == null || tableName == null) {
+                log.info("Embedding model {} has no dimension/table configured, will dynamically determine", embeddingConfig.getName());
+                // 用第一个分块的内容调用一次embedding来获取dimension
+                if (!chunks.isEmpty()) {
+                    float[] sampleEmbedding = embeddingService.embedWithModel(chunks.get(0).getContent(), embeddingConfig);
+                    dimension = sampleEmbedding.length;
+                    tableName = vectorTableService.ensureTableExists(dimension);
+
+                    // 更新模型配置（供下次使用）
+                    embeddingConfig.setEmbeddingDimension(dimension);
+                    embeddingConfig.setEmbeddingTableName(tableName);
+                    modelConfigRepository.save(embeddingConfig);
+
+                    log.info("Determined embedding dimension {} for model {}, created table {}", dimension, embeddingConfig.getName(), tableName);
+                } else {
+                    throw new IllegalStateException("Document has no chunks to determine embedding dimension");
+                }
+            } else {
+                // 确保向量表存在
+                vectorTableService.ensureTableExists(dimension);
             }
+
+            // 更新文档的dimension信息
+            document.setEmbeddingDimension(dimension);
+            documentRepository.save(document);
 
             // 分批处理 embedding（每批 10 个，避免 API 限流）
             int batchSize = 10;
             int embeddedCount = 0;
 
-            for (int i = 0; i < chunks.size(); i += batchSize) {
+            // 如果dimension是从第一个chunk获取的，跳过第一个（已经计算过了）
+            int startIndex = (dimension != null && embeddingConfig.getEmbeddingDimension() == null) ? 1 : 0;
+
+            for (int i = startIndex; i < chunks.size(); i += batchSize) {
                 int end = Math.min(i + batchSize, chunks.size());
                 List<DocumentChunk> batch = chunks.subList(i, end);
 
@@ -512,6 +567,18 @@ public class DocumentAsyncService {
 
                 embeddedCount += batch.size();
 
+                // 如果是从第一个chunk获取dimension，需要额外存储第一个chunk的向量
+                if (startIndex == 1 && i == startIndex) {
+                    // 存储第一个chunk的向量
+                    DocumentChunk firstChunk = chunks.get(0);
+                    embeddingStorageService.storeVectorsBatch(List.of(new EmbeddingStorageService.VectorData(
+                            firstChunk.getId(),
+                            documentId,
+                            embeddingService.embedWithModel(firstChunk.getContent(), embeddingConfig)
+                    )), dimension, tableName);
+                    embeddedCount = 1 + batch.size();
+                }
+
                 // 更新进度
                 document.setChunksEmbedded(embeddedCount);
                 documentRepository.save(document);
@@ -522,6 +589,11 @@ public class DocumentAsyncService {
             // 完成
             document.setStatus(Document.DocumentStatus.COMPLETED);
             documentRepository.save(document);
+
+            // 更新知识库统计数据（如果文档属于某个知识库）
+            if (document.getKnowledgeBaseId() != null) {
+                knowledgeBaseService.updateStatistics(document.getKnowledgeBaseId());
+            }
 
             log.info("Document embedding completed: {} with dimension {}, stored in table {}",
                     documentId, dimension, tableName);

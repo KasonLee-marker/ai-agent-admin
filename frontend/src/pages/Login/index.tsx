@@ -1,6 +1,6 @@
 import React, {useState} from 'react'
-import {Form, Input, Button, Card, message} from 'antd'
-import {UserOutlined, LockOutlined} from '@ant-design/icons'
+import {Button, Card, Form, Input, message} from 'antd'
+import {LockOutlined, UserOutlined} from '@ant-design/icons'
 import {useNavigate} from 'react-router-dom'
 import {useAuthStore} from '@/stores/authStore'
 
@@ -43,14 +43,14 @@ const LoginPage: React.FC = () => {
                         name="username"
                         rules={[{required: true, message: '请输入用户名'}]}
                     >
-                        <Input prefix={<UserOutlined/>} placeholder="用户名: admin"/>
+                        <Input prefix={<UserOutlined/>} placeholder="请输入用户名"/>
                     </Form.Item>
 
                     <Form.Item
                         name="password"
                         rules={[{required: true, message: '请输入密码'}]}
                     >
-                        <Input.Password prefix={<LockOutlined/>} placeholder="密码: admin123"/>
+                        <Input.Password prefix={<LockOutlined/>} placeholder="请输入密码"/>
                     </Form.Item>
 
                     <Form.Item>

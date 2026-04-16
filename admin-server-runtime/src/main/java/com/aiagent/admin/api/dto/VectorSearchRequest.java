@@ -29,4 +29,41 @@ public class VectorSearchRequest {
 
     @Schema(description = "Embedding模型ID（可选，默认使用系统默认embedding模型）")
     private String embeddingModelId;
+
+    /**
+     * 知识库 ID 过滤
+     * <p>
+     * 仅检索指定知识库下的文档。
+     * </p>
+     */
+    @Schema(description = "知识库ID过滤（可选）")
+    private String knowledgeBaseId;
+
+    /**
+     * 检索策略
+     * <p>
+     * 支持：VECTOR（向量检索）、BM25（关键词检索）、HYBRID（混合检索）。
+     * </p>
+     */
+    @Schema(description = "检索策略（VECTOR/BM25/HYBRID）", defaultValue = "VECTOR")
+    private String strategy;
+
+    /**
+     * 是否启用 Rerank 重排序
+     * <p>
+     * 启用后，先获取候选结果（topK * 4），再调用 Rerank API 进行二次排序，
+     * 返回最终 topK 个结果。
+     * </p>
+     */
+    @Schema(description = "是否启用 Rerank 重排序", defaultValue = "false")
+    private Boolean enableRerank = false;
+
+    /**
+     * Rerank 模型 ID
+     * <p>
+     * 当 enableRerank=true 时使用，指定用于重排序的模型配置。
+     * </p>
+     */
+    @Schema(description = "Rerank 模型 ID（当 enableRerank=true 时使用）")
+    private String rerankModelId;
 }

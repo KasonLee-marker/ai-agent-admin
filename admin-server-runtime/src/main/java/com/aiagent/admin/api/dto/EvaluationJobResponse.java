@@ -19,11 +19,11 @@ public class EvaluationJobResponse {
     /**
      * 关联的知识库ID（用于RAG评估）
      */
-    private String documentId;
+    private String knowledgeBaseId;
     /**
      * 知识库名称
      */
-    private String documentName;
+    private String knowledgeBaseName;
     /**
      * 是否启用RAG评估模式
      */

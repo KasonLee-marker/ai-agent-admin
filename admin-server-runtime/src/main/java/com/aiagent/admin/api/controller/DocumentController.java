@@ -53,13 +53,14 @@ public class DocumentController {
     public ResponseEntity<ApiResponse<DocumentResponse>> uploadDocument(
             @Parameter(description = "文档文件") @RequestParam("file") MultipartFile file,
             @Parameter(description = "文档名称") @RequestParam(value = "name", required = false) String name,
+            @Parameter(description = "知识库ID") @RequestParam(value = "knowledgeBaseId", required = false) String knowledgeBaseId,
             @Parameter(description = "分块策略（FIXED_SIZE/PARAGRAPH/SENTENCE/RECURSIVE/SEMANTIC）") @RequestParam(value = "chunkStrategy", defaultValue = "FIXED_SIZE") String chunkStrategy,
             @Parameter(description = "分块大小（字符数）") @RequestParam(value = "chunkSize", required = false) Integer chunkSize,
             @Parameter(description = "分块重叠（字符数）") @RequestParam(value = "chunkOverlap", required = false) Integer chunkOverlap,
             @Parameter(description = "Embedding模型ID（语义分块时必填）") @RequestParam(value = "embeddingModelId", required = false) String embeddingModelId,
             @Parameter(description = "创建人") @RequestHeader(value = "X-User-Id", defaultValue = "anonymous") String createdBy) {
 
-        DocumentResponse response = documentService.uploadDocument(file, name, chunkStrategy, chunkSize, chunkOverlap, embeddingModelId, createdBy);
+        DocumentResponse response = documentService.uploadDocument(file, name, knowledgeBaseId, chunkStrategy, chunkSize, chunkOverlap, embeddingModelId, createdBy);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 

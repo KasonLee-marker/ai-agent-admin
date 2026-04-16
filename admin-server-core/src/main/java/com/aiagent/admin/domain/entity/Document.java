@@ -48,6 +48,15 @@ public class Document {
     @Builder.Default
     private Integer embeddingDimension = 0;  // 向量维度
 
+    /**
+     * 所属知识库 ID
+     * <p>
+     * 文档可以归属于某个知识库，用于组织管理和检索筛选。
+     * </p>
+     */
+    @Column(name = "knowledge_base_id", length = 64)
+    private String knowledgeBaseId;
+
     @Column(name = "chunk_strategy", length = 20)
     @Builder.Default
     private String chunkStrategy = "FIXED_SIZE";  // FIXED_SIZE 或 PARAGRAPH

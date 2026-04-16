@@ -384,6 +384,26 @@ spring.ai.openai:
 - **dev**: H2 in-memory (auto-created), `ddl-auto: update`
 - **prod**: PostgreSQL at `localhost:5432/admindb`, requires manual setup
 
+### Docker Database Operations
+
+**PostgreSQL 数据库运行在 Docker 容器中。执行 SQL 请使用 Docker 命令。**
+
+```bash
+# Find PostgreSQL container
+docker ps | grep postgres
+
+# Execute SQL (modify schema, etc.)
+docker exec -it <container_name> psql -U postgres -d admindb -c "ALTER TABLE xxx ..."
+
+# Interactive SQL session
+docker exec -it <container_name> psql -U adminuser -d admindb
+
+# Connection details from application.yml:
+# - Host: localhost:5432
+# - Database: admindb
+# - User: adminuser / adminpass123
+```
+
 ### Maven Repositories
 
 - Spring Milestones: `https://repo.spring.io/milestone` (required for Spring AI 0.8.1)
@@ -394,6 +414,11 @@ spring.ai.openai:
 2. **Double scale attribute**: JPA doesn't support scale on Double → Remove precision/scale
 3. **Azure OpenAI auto-config**: Causes errors → Use OpenAI-compatible mode instead
 4. **pgvector store import**: Spring AI pgvector has issues → Custom simplified implementation
+5. **RAG evaluation retrieval returns empty**:
+   - Cause 1: `retrieveDocuments()` didn't pass `embeddingModelId`, using wrong model/dimension table
+   - Cause 2: Default threshold 0.7 was too high (70% similarity), filtering out valid results
+   - Solution: Pass `embeddingModelId` from evaluation job, lower threshold to 0.3
+   - Also added fallback: if job has no embeddingModelId, use knowledge base's `default_embedding_model_id`
 
 ## API Response Format
 
@@ -412,6 +437,29 @@ All endpoints return `ApiResponse<T>`:
 ## Test Credentials
 
 - Frontend login: `admin` / `admin123`
+
+## Browser Automation Testing
+
+**使用 MCP Playwright 进行浏览器自动化测试，不要通过 npx 安装独立的 Playwright。**
+
+MCP Playwright 工具已集成在环境中，提供以下能力：
+
+- `browser_navigate` - 导航到指定 URL
+- `browser_snapshot` - 获取页面可访问性快照（用于元素定位）
+- `browser_click` - 点击元素
+- `browser_type` - 输入文本
+- `browser_fill_form` - 批量填写表单
+- `browser_take_screenshot` - 截图
+- `browser_console_messages` - 查看控制台日志
+- `browser_network_requests` - 查看网络请求
+
+**测试流程示例**：
+
+1. 导航到页面: `browser_navigate("http://localhost:5175/login")`
+2. 获取页面快照: `browser_snapshot()` 查找元素 ref
+3. 填写表单: `browser_type(ref, "admin")`
+4. 点击按钮: `browser_click(ref)`
+5. 检查结果: `browser_snapshot()` 或 `browser_console_messages()`
 
 ## API Documentation
 

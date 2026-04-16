@@ -7,6 +7,7 @@ const BASE_URL = '/documents'
 // 上传文档（支持分块策略参数）
 export async function uploadDocument(file: File, options?: {
     name?: string
+    knowledgeBaseId?: string
     chunkStrategy?: 'FIXED_SIZE' | 'PARAGRAPH' | 'SENTENCE' | 'RECURSIVE' | 'SEMANTIC'
     chunkSize?: number
     chunkOverlap?: number
@@ -15,6 +16,7 @@ export async function uploadDocument(file: File, options?: {
     const formData = new FormData()
     formData.append('file', file)
     if (options?.name) formData.append('name', options.name)
+    if (options?.knowledgeBaseId) formData.append('knowledgeBaseId', options.knowledgeBaseId)
     if (options?.chunkStrategy) formData.append('chunkStrategy', options.chunkStrategy)
     if (options?.chunkSize) formData.append('chunkSize', options.chunkSize.toString())
     if (options?.chunkOverlap) formData.append('chunkOverlap', options.chunkOverlap.toString())
