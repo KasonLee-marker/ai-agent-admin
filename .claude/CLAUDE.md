@@ -333,14 +333,23 @@ cd admin-server-start && mvn spring-boot:run -Dspring-boot.run.profiles=prod
 
 ### Frontend (React + Vite)
 
+**启动前端项目时，确保端口 5173 可用。如端口被占用，先杀掉占用进程再启动。**
+
 ```bash
+# 启动前端（端口 5173）
 cd frontend
 npm install          # Install dependencies
 npm run dev          # Dev server on port 5173 (proxies /api to :8080)
+
+# 如端口被占用，杀掉占用进程：
+powershell -Command "Get-Process | Where-Object { $_.ProcessName -like '*node*' -or $_.ProcessName -like '*vite*' } | Stop-Process -Force"
+
 npm run build        # Production build (tsc + vite)
 npm run lint         # ESLint check
 npm run preview      # Preview production build
 ```
+
+**注意：前端必须运行在 5173 端口，因为 Vite 配置的 API 代理指向后端 8080 端口。**
 
 ## Architecture Overview
 
