@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react'
-import {Button, Form, Input, message, Modal, Popconfirm, Space, Table, Tag} from 'antd'
+import {Button, Form, Input, message, Modal, Popconfirm, Space, Table, Tag, Tooltip} from 'antd'
 import {DeleteOutlined, EditOutlined, HistoryOutlined, PlusOutlined} from '@ant-design/icons'
 import type {ColumnsType} from 'antd/es/table'
 import {createPrompt, deletePrompt, listPrompts, updatePrompt} from '@/api/prompts'
@@ -86,18 +86,19 @@ const PromptListPage: React.FC = () => {
         {
             title: '操作',
             key: 'action',
+            width: 100,
             render: (_, record) => (
                 <Space>
-                    <Button type="link" icon={<EditOutlined/>} onClick={() => handleEdit(record)}>
-                        编辑
-                    </Button>
-                    <Button type="link" icon={<HistoryOutlined/>}>
-                        历史
-                    </Button>
+                    <Tooltip title="编辑">
+                        <Button type="link" icon={<EditOutlined/>} onClick={() => handleEdit(record)} />
+                    </Tooltip>
+                    <Tooltip title="历史版本">
+                        <Button type="link" icon={<HistoryOutlined/>} />
+                    </Tooltip>
                     <Popconfirm title="确定删除?" onConfirm={() => handleDelete(record.id)}>
-                        <Button type="link" danger icon={<DeleteOutlined/>}>
-                            删除
-                        </Button>
+                        <Tooltip title="删除">
+                            <Button type="link" danger icon={<DeleteOutlined/>} />
+                        </Tooltip>
                     </Popconfirm>
                 </Space>
             )

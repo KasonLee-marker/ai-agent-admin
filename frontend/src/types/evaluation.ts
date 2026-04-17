@@ -16,8 +16,8 @@ export interface EvaluationJob {
     status: EvaluationStatus;
     totalItems: number;
     completedItems: number;
-    successItems: number;
-    failedItems: number;
+    successCount: number;
+    failedCount: number;
     createdAt: string;
     updatedAt: string;
     createdBy?: string;
@@ -53,8 +53,9 @@ export interface EvaluationResult {
 // 评估指标统计
 export interface EvaluationMetrics {
     totalItems: number;
-    passedItems: number;
-    failedItems: number;
+    completedItems: number;
+    successCount: number;
+    failedCount: number;
     averageScore?: number;
     /** 平均语义相似度 */
     averageSemanticSimilarity?: number;
@@ -64,7 +65,7 @@ export interface EvaluationMetrics {
     averageFaithfulness?: number;
     averageLatencyMs?: number;
     totalTokenCount?: number;
-    passRate?: number;
+    successRate?: number;
 }
 
 // 创建评估任务请求
@@ -86,6 +87,15 @@ export interface CreateEvaluationRequest {
 export interface UpdateEvaluationRequest {
     name?: string;
     description?: string;
+    datasetId?: string;
+    promptTemplateId?: string;
+    modelConfigId?: string;
+    /** 关联的知识库ID（用于RAG评估） */
+    knowledgeBaseId?: string;
+    /** 是否启用RAG评估模式 */
+    enableRag?: boolean;
+    /** Embedding 模型配置ID（用于计算语义相似度） */
+    embeddingModelId?: string;
 }
 
 // 对比请求

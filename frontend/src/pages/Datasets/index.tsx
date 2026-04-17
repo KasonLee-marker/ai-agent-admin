@@ -14,7 +14,7 @@ import {
     Tooltip,
     Upload
 } from 'antd'
-import {DeleteOutlined, DownloadOutlined, EditOutlined, PlusOutlined, UploadOutlined} from '@ant-design/icons'
+import {DeleteOutlined, DownloadOutlined, EditOutlined, EyeOutlined, PlusOutlined, UploadOutlined} from '@ant-design/icons'
 import type {ColumnsType} from 'antd/es/table'
 import {
     createDataset,
@@ -291,20 +291,22 @@ const DatasetPage: React.FC = () => {
         {
             title: '操作',
             key: 'action',
-            width: 180,
+            width: 100,
             fixed: 'right' as const,
             render: (_, record) => (
                 <Space>
-                    <Button type="link" onClick={() => handleSelectDataset(record)}>
-                        查看
-                    </Button>
-                    <Button type="link" icon={<EditOutlined/>} onClick={() => handleEdit(record)}>
-                        编辑
-                    </Button>
-                    <Popconfirm title="确定删除?" onConfirm={() => handleDelete(record.id)}>
-                        <Button type="link" danger icon={<DeleteOutlined/>}>
-                            删除
+                    <Tooltip title="查看">
+                        <Button type="link" onClick={() => handleSelectDataset(record)}>
+                            <EyeOutlined/>
                         </Button>
+                    </Tooltip>
+                    <Tooltip title="编辑">
+                        <Button type="link" icon={<EditOutlined/>} onClick={() => handleEdit(record)} />
+                    </Tooltip>
+                    <Popconfirm title="确定删除?" onConfirm={() => handleDelete(record.id)}>
+                        <Tooltip title="删除">
+                            <Button type="link" danger icon={<DeleteOutlined/>} />
+                        </Tooltip>
                     </Popconfirm>
                 </Space>
             )
@@ -335,17 +337,17 @@ const DatasetPage: React.FC = () => {
         {
             title: '操作',
             key: 'action',
-            width: 120,
+            width: 80,
             fixed: 'right' as const,
             render: (_, record) => (
                 <Space>
-                    <Button type="link" icon={<EditOutlined/>} onClick={() => handleEditItem(record)}>
-                        编辑
-                    </Button>
+                    <Tooltip title="编辑">
+                        <Button type="link" icon={<EditOutlined/>} onClick={() => handleEditItem(record)} />
+                    </Tooltip>
                     <Popconfirm title="确定删除?" onConfirm={() => handleDeleteItem(record.id)}>
-                        <Button type="link" danger icon={<DeleteOutlined/>}>
-                            删除
-                        </Button>
+                        <Tooltip title="删除">
+                            <Button type="link" danger icon={<DeleteOutlined/>} />
+                        </Tooltip>
                     </Popconfirm>
                 </Space>
             )

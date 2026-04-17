@@ -430,17 +430,21 @@ const KnowledgeBasesPage: React.FC = () => {
         {
             title: '操作',
             key: 'action',
-            width: 200,
+            width: 100,
             render: (_, record) => (
                 <Space>
-                    <Button type="link" onClick={() => handleEnterKb(record)}>
-                        进入
-                    </Button>
-                    <Button type="link" icon={<EditOutlined/>} onClick={() => handleEditKb(record)}>
-                        编辑
-                    </Button>
+                    <Tooltip title="进入">
+                        <Button type="link" onClick={() => handleEnterKb(record)}>
+                            <FolderOutlined/>
+                        </Button>
+                    </Tooltip>
+                    <Tooltip title="编辑">
+                        <Button type="link" icon={<EditOutlined/>} onClick={() => handleEditKb(record)} />
+                    </Tooltip>
                     <Popconfirm title="确定删除?" onConfirm={() => handleDeleteKb(record.id)}>
-                        <Button type="link" danger icon={<DeleteOutlined/>}>删除</Button>
+                        <Tooltip title="删除">
+                            <Button type="link" danger icon={<DeleteOutlined/>} />
+                        </Tooltip>
                     </Popconfirm>
                 </Space>
             )
@@ -496,24 +500,26 @@ const KnowledgeBasesPage: React.FC = () => {
         {
             title: '操作',
             key: 'action',
-            width: 200,
+            width: 100,
             render: (_, record) => (
                 <Space>
                     {record.status === 'CHUNKED' && (
-                        <Button type="link" icon={<PlayCircleOutlined/>} onClick={() => {
-                            setEmbedDocumentId(record.id);
-                            setEmbedModalVisible(true);
-                        }}>
-                            向量化
-                        </Button>
+                        <Tooltip title="向量化">
+                            <Button type="link" icon={<PlayCircleOutlined/>} onClick={() => {
+                                setEmbedDocumentId(record.id);
+                                setEmbedModalVisible(true);
+                            }} />
+                        </Tooltip>
                     )}
                     {['COMPLETED', 'CHUNKED'].includes(record.status) && (
-                        <Button type="link" icon={<EyeOutlined/>} onClick={() => handleViewChunks(record)}>
-                            分块
-                        </Button>
+                        <Tooltip title="查看分块">
+                            <Button type="link" icon={<EyeOutlined/>} onClick={() => handleViewChunks(record)} />
+                        </Tooltip>
                     )}
                     <Popconfirm title="确定删除?" onConfirm={() => handleDeleteDoc(record.id)}>
-                        <Button type="link" danger icon={<DeleteOutlined/>}>删除</Button>
+                        <Tooltip title="删除">
+                            <Button type="link" danger icon={<DeleteOutlined/>} />
+                        </Tooltip>
                     </Popconfirm>
                 </Space>
             )

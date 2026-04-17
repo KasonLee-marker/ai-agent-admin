@@ -18,7 +18,8 @@ import {
     Switch,
     Table,
     Tabs,
-    Tag
+    Tag,
+    Tooltip
 } from 'antd'
 import {
     BarChartOutlined,
@@ -82,6 +83,43 @@ const EvaluationPage: React.FC = () => {
         fetchOptions()
     }, [])
 
+    // 静默刷新进度（不设置 loading，避免表格闪烁）
+    const refreshProgress = async () => {
+        try {
+            const res = await listEvaluations()
+            if (res.success) {
+                setEvaluations(res.data.content || [])
+            }
+        } catch {
+            // ignore
+        }
+    }
+
+    // RUNNING 状态任务进度轮询（静默刷新，500ms 高频轮询）
+    useEffect(() => {
+        const runningTasks = evaluations.filter(e => e.status === 'RUNNING')
+        if (runningTasks.length === 0) return
+
+        const interval = setInterval(refreshProgress, 500)
+        return () => clearInterval(interval)
+    }, [evaluations])
+
+    // 监听选中任务的完成状态，自动加载结果
+    useEffect(() => {
+        if (selectedEvaluation) {
+            // 从最新列表中同步任务状态
+            const updatedTask = evaluations.find(e => e.id === selectedEvaluation.id)
+            if (updatedTask && updatedTask.status !== selectedEvaluation.status) {
+                setSelectedEvaluation(updatedTask)
+                // 任务完成时自动加载结果
+                if (updatedTask.status === 'COMPLETED') {
+                    fetchResults(updatedTask.id)
+                    setActiveTab('results')
+                }
+            }
+        }
+    }, [evaluations, selectedEvaluation?.id])
+
     const fetchEvaluations = async () => {
         setLoading(true)
         try {
@@ -141,7 +179,17 @@ const EvaluationPage: React.FC = () => {
 
     const handleEdit = (record: EvaluationJob) => {
         setEditingEvaluation(record)
-        form.setFieldsValue(record)
+        // 设置表单值（Switch 需要单独处理 valuePropName="checked"）
+        form.setFieldsValue({
+            name: record.name,
+            description: record.description,
+            datasetId: record.datasetId,
+            promptTemplateId: record.promptTemplateId,
+            modelConfigId: record.modelConfigId,
+            embeddingModelId: record.embeddingModelId,
+            knowledgeBaseId: record.knowledgeBaseId,
+            enableRag: record.enableRag || false
+        })
         // 初始化联动状态
         setEnableRag(record.enableRag || false)
         setSelectedDatasetId(record.datasetId || null)
@@ -189,6 +237,8 @@ const EvaluationPage: React.FC = () => {
         try {
             await rerunEvaluation(id)
             message.success('重新评估任务已启动')
+            // 保持在列表页，不跳转到结果页
+            setActiveTab('list')
             fetchEvaluations()
         } catch {
             message.error('重新评估失败')
@@ -252,28 +302,6 @@ const EvaluationPage: React.FC = () => {
         }
     }
 
-    // 获取知识库字段提示
-    const getKnowledgeBaseHint = (): string | undefined => {
-        if (enableRag && !selectedKnowledgeBaseId) {
-            return 'RAG模式需要选择知识库进行文档检索'
-        }
-        if (selectedKnowledgeBaseId && !enableRag) {
-            return '已选择知识库，建议开启RAG评估模式'
-        }
-        return undefined
-    }
-
-    // 获取知识库字段样式类型
-    const getKnowledgeBaseValidateStatus = (): 'warning' | 'error' | undefined => {
-        if (enableRag && !selectedKnowledgeBaseId) {
-            return 'error'
-        }
-        if (selectedKnowledgeBaseId && !enableRag) {
-            return 'warning'
-        }
-        return undefined
-    }
-
     // 获取Embedding模型提示
     const getEmbeddingHint = (): string | undefined => {
         if (!selectedEmbeddingModelId) {
@@ -294,12 +322,13 @@ const EvaluationPage: React.FC = () => {
     }
 
     const evaluationColumns: ColumnsType<EvaluationJob> = [
-        {title: '名称', dataIndex: 'name', key: 'name'},
-        {title: '描述', dataIndex: 'description', key: 'description', ellipsis: true},
+        {title: '名称', dataIndex: 'name', key: 'name', width: 120, ellipsis: true},
+        {title: '描述', dataIndex: 'description', key: 'description', width: 100, ellipsis: true},
         {
             title: '状态',
             dataIndex: 'status',
             key: 'status',
+            width: 80,
             render: (status: EvaluationStatus) => (
                 <Tag color={statusMap[status]?.color}>{statusMap[status]?.text}</Tag>
             )
@@ -307,9 +336,20 @@ const EvaluationPage: React.FC = () => {
         {
             title: '进度',
             key: 'progress',
+            width: 150,
             render: (_, record) => (
                 record.status === 'RUNNING' ? (
-                    <Progress percent={getProgress(record)} size="small"/>
+                    <Progress
+                        percent={getProgress(record)}
+                        size="small"
+                        status="active"
+                        strokeColor={{
+                            '0%': '#108ee9',
+                            '100%': '#87d068',
+                        }}
+                        strokeWidth={6}
+                        format={() => `${record.completedItems}/${record.totalItems}`}
+                    />
                 ) : `${record.completedItems}/${record.totalItems}`
             )
         },
@@ -317,43 +357,51 @@ const EvaluationPage: React.FC = () => {
             title: '创建时间',
             dataIndex: 'createdAt',
             key: 'createdAt',
+            width: 160,
+            render: (date: string) => new Date(date).toLocaleString()
+        },
+        {
+            title: '更新时间',
+            dataIndex: 'updatedAt',
+            key: 'updatedAt',
+            width: 160,
             render: (date: string) => new Date(date).toLocaleString()
         },
         {
             title: '操作',
             key: 'action',
-            width: 280,
+            width: 120,
             fixed: 'right',
             render: (_, record) => (
                 <Space onClick={(e) => e.stopPropagation()}>
                     {record.status === 'PENDING' && (
-                        <Button type="link" icon={<PlayCircleOutlined/>} onClick={() => handleRun(record.id)}>
-                            运行
-                        </Button>
+                        <Tooltip title="运行">
+                            <Button type="link" icon={<PlayCircleOutlined/>} onClick={() => handleRun(record.id)} />
+                        </Tooltip>
                     )}
                     {record.status === 'RUNNING' && (
-                        <Button type="link" icon={<StopOutlined/>} onClick={() => handleCancel(record.id)}>
-                            取消
-                        </Button>
+                        <Tooltip title="取消">
+                            <Button type="link" icon={<StopOutlined/>} onClick={() => handleCancel(record.id)} />
+                        </Tooltip>
                     )}
                     {(record.status === 'COMPLETED' || record.status === 'FAILED' || record.status === 'CANCELLED') && (
                         <>
-                            <Button type="link" icon={<ReloadOutlined/>} onClick={() => handleRerun(record.id)}>
-                                重新评估
-                            </Button>
-                            <Button type="link" icon={<BarChartOutlined/>}
-                                    onClick={() => handleSelectEvaluation(record)}>
-                                结果
-                            </Button>
+                            <Tooltip title="重新评估">
+                                <Button type="link" icon={<ReloadOutlined/>} onClick={() => handleRerun(record.id)} />
+                            </Tooltip>
+                            <Tooltip title="查看结果">
+                                <Button type="link" icon={<BarChartOutlined/>}
+                                        onClick={() => handleSelectEvaluation(record)} />
+                            </Tooltip>
                         </>
                     )}
-                    <Button type="link" icon={<EditOutlined/>} onClick={() => handleEdit(record)}>
-                        编辑
-                    </Button>
+                    <Tooltip title="编辑">
+                        <Button type="link" icon={<EditOutlined/>} onClick={() => handleEdit(record)} />
+                    </Tooltip>
                     <Popconfirm title="确定删除?" onConfirm={() => handleDelete(record.id)}>
-                        <Button type="link" danger icon={<DeleteOutlined/>}>
-                            删除
-                        </Button>
+                        <Tooltip title="删除">
+                            <Button type="link" danger icon={<DeleteOutlined/>} />
+                        </Tooltip>
                     </Popconfirm>
                 </Space>
             )
@@ -449,7 +497,7 @@ const EvaluationPage: React.FC = () => {
                             dataSource={evaluations}
                             rowKey="id"
                             loading={loading}
-                            scroll={{x: 1000}}
+                            scroll={{x: 1200}}
                             onRow={(record) => ({
                                 onClick: () => handleSelectEvaluation(record),
                                 style: {cursor: 'pointer'}
@@ -468,15 +516,15 @@ const EvaluationPage: React.FC = () => {
                                         <Statistic title="总数" value={metrics?.totalItems || 0}/>
                                     </Col>
                                     <Col span={4}>
-                                        <Statistic title="通过数" value={metrics?.passedItems || 0}
+                                        <Statistic title="成功数" value={metrics?.successCount || 0}
                                                    valueStyle={{color: '#3f8600'}}/>
                                     </Col>
                                     <Col span={4}>
-                                        <Statistic title="失败数" value={metrics?.failedItems || 0}
+                                        <Statistic title="失败数" value={metrics?.failedCount || 0}
                                                    valueStyle={{color: '#cf1322'}}/>
                                     </Col>
                                     <Col span={4}>
-                                        <Statistic title="通过率" value={metrics?.passRate || 0} suffix="%"
+                                        <Statistic title="成功率" value={metrics?.successRate || 0} suffix="%"
                                                    precision={1}/>
                                     </Col>
                                     <Col span={4}>
@@ -579,8 +627,6 @@ const EvaluationPage: React.FC = () => {
                             required: enableRag,
                             message: '启用RAG评估时必须选择知识库'
                         }]}
-                        validateStatus={getKnowledgeBaseValidateStatus()}
-                        help={getKnowledgeBaseHint()}
                     >
                         <Select
                             allowClear
