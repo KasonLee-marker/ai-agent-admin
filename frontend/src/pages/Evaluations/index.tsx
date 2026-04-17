@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react'
+import React, {useEffect, useRef, useState} from 'react'
 import {
     Alert,
     Button,
@@ -96,12 +96,27 @@ const EvaluationPage: React.FC = () => {
     }
 
     // RUNNING 状态任务进度轮询（静默刷新，500ms 高频轮询）
+    const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
     useEffect(() => {
         const runningTasks = evaluations.filter(e => e.status === 'RUNNING')
-        if (runningTasks.length === 0) return
 
-        const interval = setInterval(refreshProgress, 500)
-        return () => clearInterval(interval)
+        if (runningTasks.length > 0 && !pollingRef.current) {
+            // 有运行中的任务且当前没有轮询，启动轮询
+            pollingRef.current = setInterval(refreshProgress, 500)
+        } else if (runningTasks.length === 0 && pollingRef.current) {
+            // 没有运行中的任务且有轮询，停止轮询
+            clearInterval(pollingRef.current)
+            pollingRef.current = null
+        }
+
+        return () => {
+            // 组件卸载时清理
+            if (pollingRef.current) {
+                clearInterval(pollingRef.current)
+                pollingRef.current = null
+            }
+        }
     }, [evaluations])
 
     // 监听选中任务的完成状态，自动加载结果
@@ -237,8 +252,12 @@ const EvaluationPage: React.FC = () => {
         try {
             await rerunEvaluation(id)
             message.success('重新评估任务已启动')
+            // 清空旧结果
+            setResults([])
+            setMetrics(null)
             // 保持在列表页，不跳转到结果页
             setActiveTab('list')
+            // 重新获取列表，fetchEvaluations 会更新 evaluations，然后 useEffect 会同步 selectedEvaluation
             fetchEvaluations()
         } catch {
             message.error('重新评估失败')

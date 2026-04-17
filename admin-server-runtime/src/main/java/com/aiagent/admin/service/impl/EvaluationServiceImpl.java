@@ -3,7 +3,8 @@ package com.aiagent.admin.service.impl;
 import com.aiagent.admin.api.dto.*;
 import com.aiagent.admin.domain.entity.*;
 import com.aiagent.admin.domain.repository.*;
-import com.aiagent.admin.service.*;
+import com.aiagent.admin.service.EvaluationService;
+import com.aiagent.admin.service.ModelConfigService;
 import com.aiagent.admin.service.mapper.EvaluationMapper;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -437,6 +438,7 @@ public class EvaluationServiceImpl implements EvaluationService {
      * 重新运行评估任务
      * <p>
      * 删除之前的评估结果，重置任务状态和计数器，然后委托给 runJob 异步执行。
+     * 注意：先保存 PENDING 状态，然后在事务提交后再启动异步任务，避免状态不一致。
      * </p>
      *
      * @param id 任务唯一标识
@@ -457,7 +459,7 @@ public class EvaluationServiceImpl implements EvaluationService {
         // 删除之前的评估结果
         evaluationResultRepository.deleteByJobId(id);
 
-        // 重置任务状态和计数器
+        // 重置任务状态为 PENDING
         job.setStatus(EvaluationJob.JobStatus.PENDING);
         job.setStartedAt(null);
         job.setCompletedAt(null);
@@ -468,9 +470,11 @@ public class EvaluationServiceImpl implements EvaluationService {
         job.setTotalInputTokens(0L);
         job.setTotalOutputTokens(0L);
         job.setErrorMessage(null);
-        evaluationJobRepository.save(job);
+        EvaluationJob savedJob = evaluationJobRepository.save(job);
 
-        // 委托给 runJob 执行
-        return runJob(id);
+        // 在当前事务提交后，再启动异步任务
+        // 这样可以确保前端查询时能看到 PENDING -> RUNNING 的状态转换
+        return CompletableFuture.completedFuture(toJobResponseWithNames(savedJob))
+                .thenApplyAsync(response -> runJob(id).join());
     }
 }
