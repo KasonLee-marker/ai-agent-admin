@@ -91,9 +91,9 @@ POST   /api/v1/prompts/{id}/rollback # 回滚到指定版本
 Status: [COMPLETED]
 Completed: 
 - Checkpoint 1: Started PostgreSQL container with pgvector (ankane/pgvector:latest)
-- Checkpoint 2: Created user 'aiagent' with password 'aiagent123'
-- Checkpoint 2: Created database 'aiagent_admin' with owner aiagent
-- Checkpoint 2: Granted all privileges to aiagent user
+- Checkpoint 2: Created user 'adminuser' with password 'adminpass123'
+- Checkpoint 2: Created database 'admindb' with owner adminuser
+- Checkpoint 2: Granted all privileges to adminuser user
 - Checkpoint 3: Enabled pgvector extension (v0.5.1)
 - Checkpoint 3: Created 'documents' table with UUID PK, name, content_type, total_chunks, metadata JSONB
 - Checkpoint 3: Created 'document_chunks' table with UUID PK, document_id FK, chunk_index, content, VECTOR(1536), metadata JSONB
@@ -102,9 +102,9 @@ Completed:
 
 Database Connection:
 - Host: localhost:5432
-- Database: aiagent_admin
-- User: aiagent / aiagent123
-- Container: postgres-pgvector (running)
+- Database: admindb
+- User: adminuser / adminpass123
+- Container: agent-postgres (running)
 
 Next: 创建实体类和数据库表 (Prompt管理模块)
 Blockers: None

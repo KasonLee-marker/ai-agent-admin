@@ -47,9 +47,9 @@ cd ai-agent-admin
 ```bash
 # 启动 PostgreSQL + pgvector（已内置向量插件）
 docker run -d \
-  --name agentx-postgres \
-  -e POSTGRES_USER=agentx \
-  -e POSTGRES_DB=aiagent \
+  --name agent-postgres \
+  -e POSTGRES_USER=adminuser \
+  -e POSTGRES_DB=admindb \
   -p 5432:5432 \
   pgvector/pgvector:pg15
 ```
@@ -65,7 +65,7 @@ docker run -d \
 #### 2.2 初始化数据库表结构
 
 ```bash
-docker exec -i agentx-postgres psql -U agentx -d aiagent < docs/database/schema.sql
+docker exec -i agent-postgres psql -U adminuser -d admindb < docs/database/schema.sql
 ```
 
 详见 [docs/database/README.md](./docs/database/README.md)

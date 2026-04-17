@@ -3,11 +3,11 @@
 ## 环境信息
 
 - **数据库**: PostgreSQL 15 + pgvector
-- **容器名**: agentx-postgres
+- **容器名**: agent-postgres
 - **端口**: 5432
-- **数据库名**: aiagent
-- **用户名**: aiagent_admin
-- **密码**: AiAgent@2026
+- **数据库名**: admindb
+- **用户名**: adminuser
+- **密码**: adminpass123
 
 ## 快速开始
 
@@ -15,31 +15,28 @@
 
 ```bash
 docker run -d \
-  --name agentx-postgres \
-  -e POSTGRES_USER=agentx \
-  -e POSTGRES_DB=aiagent \
+  --name agent-postgres \
+  -e POSTGRES_USER=adminuser \
+  -e POSTGRES_DB=admindb \
   -p 5432:5432 \
   pgvector/pgvector:pg15
-
-# 然后创建专用用户
-docker exec -i agentx-postgres psql -U agentx -d aiagent < docs/database/create_user.sql
 ```
 
 ### 2. 初始化数据库
 
 ```bash
 # 进入容器执行 SQL
-docker exec -i agentx-postgres psql -U agentx -d aiagent < docs/database/schema.sql
+docker exec -i agent-postgres psql -U adminuser -d admindb < docs/database/schema.sql
 ```
 
 ### 3. 验证连接
 
 ```bash
-# 本地连接（使用专用用户）
-docker exec -it agentx-postgres psql -U aiagent_admin -d aiagent
+# 本地连接
+docker exec -it agent-postgres psql -U adminuser -d admindb
 
 # 或者使用 psql 客户端
-psql -h localhost -U aiagent_admin -d aiagent
+psql -h localhost -U adminuser -d admindb
 ```
 
 ## 表结构
@@ -62,9 +59,9 @@ psql -h localhost -U aiagent_admin -d aiagent
 ```yaml
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/aiagent
-    username: aiagent_admin
-    password: AiAgent@2026
+    url: jdbc:postgresql://localhost:5432/admindb
+    username: adminuser
+    password: adminpass123
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:

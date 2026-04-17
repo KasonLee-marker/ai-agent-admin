@@ -16,13 +16,13 @@
 ### 查看所有表
 
 ```bash
-docker exec agentx-postgres psql -U adminuser -d admindb -c "\dt"
+docker exec agent-postgres psql -U adminuser -d admindb -c "\dt"
 ```
 
 ### 查看表结构
 
 ```bash
-docker exec agentx-postgres psql -U adminuser -d admindb -c "\d <表名>"
+docker exec agent-postgres psql -U adminuser -d admindb -c "\d <表名>"
 ```
 
 ## 常用表名

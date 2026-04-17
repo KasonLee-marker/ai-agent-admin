@@ -9,7 +9,7 @@
 
 ```sql
 docker
-exec agentx-postgres psql -U agentx -d admindb -c "CREATE EXTENSION IF NOT EXISTS vector;"
+exec agent-postgres psql -U adminuser -d admindb -c "CREATE EXTENSION IF NOT EXISTS vector;"
 ```
 
 - **结果**：pgvector 0.8.2 安装成功
