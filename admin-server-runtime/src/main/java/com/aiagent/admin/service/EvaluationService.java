@@ -3,8 +3,6 @@ package com.aiagent.admin.service;
 import com.aiagent.admin.api.dto.*;
 import org.springframework.data.domain.Pageable;
 
-import java.util.concurrent.CompletableFuture;
-
 public interface EvaluationService {
 
     EvaluationJobResponse createJob(EvaluationJobCreateRequest request);
@@ -17,7 +15,7 @@ public interface EvaluationService {
 
     PageResponse<EvaluationJobResponse> listJobs(String status, String keyword, Pageable pageable);
 
-    CompletableFuture<EvaluationJobResponse> runJob(String id);
+    EvaluationJobResponse runJob(String id);
 
     void cancelJob(String id);
 
@@ -38,5 +36,5 @@ public interface EvaluationService {
      * @param id 任务唯一标识
      * @return 异步执行结果（CompletableFuture）
      */
-    CompletableFuture<EvaluationJobResponse> rerunJob(String id);
+    EvaluationJobResponse rerunJob(String id);
 }

@@ -12,8 +12,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.concurrent.CompletableFuture;
-
 /**
  * 模型评估管理 REST 控制器
  * <p>
@@ -85,7 +83,7 @@ public class EvaluationController {
 
     @PostMapping("/{id}/run")
     @Operation(summary = "Run an evaluation job")
-    public ApiResponse<CompletableFuture<EvaluationJobResponse>> runJob(
+    public ApiResponse<EvaluationJobResponse> runJob(
             @Parameter(description = "Job ID") @PathVariable String id) {
         return ApiResponse.success(evaluationService.runJob(id));
     }
@@ -100,7 +98,7 @@ public class EvaluationController {
 
     @PostMapping("/{id}/rerun")
     @Operation(summary = "Rerun an evaluation job (delete previous results and run again)")
-    public ApiResponse<CompletableFuture<EvaluationJobResponse>> rerunJob(
+    public ApiResponse<EvaluationJobResponse> rerunJob(
             @Parameter(description = "Job ID") @PathVariable String id) {
         return ApiResponse.success(evaluationService.rerunJob(id));
     }

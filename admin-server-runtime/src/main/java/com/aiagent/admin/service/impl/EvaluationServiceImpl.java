@@ -13,10 +13,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * 评估服务实现类
@@ -195,7 +196,7 @@ public class EvaluationServiceImpl implements EvaluationService {
      */
     @Override
     @Transactional
-    public CompletableFuture<EvaluationJobResponse> runJob(String id) {
+    public EvaluationJobResponse runJob(String id) {
         EvaluationJob job = evaluationJobRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Evaluation job not found with id: " + id));
 
@@ -204,11 +205,13 @@ public class EvaluationServiceImpl implements EvaluationService {
         }
 
         // 验证并加载所需数据
-        PromptTemplate promptTemplate = null;
+        PromptTemplate promptTemplate;
         if (job.getPromptTemplateId() != null && !job.getPromptTemplateId().isEmpty()) {
             promptTemplate = promptTemplateRepository.findById(job.getPromptTemplateId())
                     .orElseThrow(() -> new EntityNotFoundException("Prompt template not found"));
             job.setPromptTemplateVersion(promptTemplate.getVersion());
+        } else {
+            promptTemplate = null;
         }
 
         ModelConfig modelConfig;
@@ -241,27 +244,50 @@ public class EvaluationServiceImpl implements EvaluationService {
 
         // 更新任务状态为 RUNNING（异步执行前）
         job.setStatus(EvaluationJob.JobStatus.RUNNING);
+        // 设置开始时间
         job.setStartedAt(LocalDateTime.now());
-        job.setCompletedAt(null);  // 清除完成时间
+        // 清除完成数量
         job.setCompletedItems(0);
+        // 清除完成时间
+        job.setCompletedAt(null);
+        // 清除成功和失败数量
         job.setSuccessCount(0);
         job.setFailedCount(0);
+        // 清除总延迟
+        // 清除总延迟
         job.setTotalLatencyMs(0L);
+        // 清除总 Token 使用
         job.setTotalInputTokens(0L);
         job.setTotalOutputTokens(0L);
+        // 清除错误信息
         job.setErrorMessage(null);
         job.setTotalItems(items.size());
         evaluationJobRepository.save(job);
 
-        // 委托异步服务执行
-        evaluationAsyncService.executeEvaluation(
-                id, items, promptTemplate, modelConfig,
-                job.getEmbeddingModelId(), job.getKnowledgeBaseId(), job.getEnableRag(),
-                items.size()  // 传递 totalItems，避免事务可见性问题
-        );
 
-        // 立即返回，不等待异步执行完成
-        return CompletableFuture.completedFuture(toJobResponseWithNames(job));
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    // 委托异步服务执行
+                    evaluationAsyncService.executeEvaluation(
+                            id, items, promptTemplate, modelConfig,
+                            job.getEmbeddingModelId(), job.getKnowledgeBaseId(), job.getEnableRag(),
+                            items.size()  // 传递 totalItems，避免事务可见性问题
+                    );
+                }
+            });
+        } else {
+            // 委托异步服务执行
+            evaluationAsyncService.executeEvaluation(
+                    id, items, promptTemplate, modelConfig,
+                    job.getEmbeddingModelId(), job.getKnowledgeBaseId(), job.getEnableRag(),
+                    items.size()  // 传递 totalItems，避免事务可见性问题
+            );
+        }
+
+
+        return toJobResponseWithNames(job);
     }
 
     /**
@@ -448,7 +474,7 @@ public class EvaluationServiceImpl implements EvaluationService {
      */
     @Override
     @Transactional
-    public CompletableFuture<EvaluationJobResponse> rerunJob(String id) {
+    public EvaluationJobResponse rerunJob(String id) {
         EvaluationJob job = evaluationJobRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Evaluation job not found with id: " + id));
 
@@ -472,9 +498,23 @@ public class EvaluationServiceImpl implements EvaluationService {
         job.setErrorMessage(null);
         EvaluationJob savedJob = evaluationJobRepository.save(job);
 
-        // 在当前事务提交后，再启动异步任务
+        // 注册事务提交后的回调，确保事务提交后再启动异步任务
         // 这样可以确保前端查询时能看到 PENDING -> RUNNING 的状态转换
-        return CompletableFuture.completedFuture(toJobResponseWithNames(savedJob))
-                .thenApplyAsync(response -> runJob(id).join());
+        // 通过 evaluationAsyncService.triggerRerunAfterCommit 调用，避免 @Transactional 自调用问题
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    // 事务已提交，通过异步服务触发 runJob，确保 @Transactional 生效
+                    evaluationAsyncService.triggerRerunAfterCommit(EvaluationServiceImpl.this, id);
+                }
+            });
+        } else {
+            // 如果没有事务（理论上不应该发生），直接启动异步任务
+            evaluationAsyncService.triggerRerunAfterCommit(EvaluationServiceImpl.this, id);
+        }
+
+        // 立即返回前端响应（基于保存的 PENDING 状态）
+        return toJobResponseWithNames(savedJob);
     }
 }

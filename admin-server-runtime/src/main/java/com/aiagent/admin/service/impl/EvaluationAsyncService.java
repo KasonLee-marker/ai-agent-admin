@@ -4,7 +4,10 @@ import com.aiagent.admin.api.dto.VectorSearchRequest;
 import com.aiagent.admin.api.dto.VectorSearchResult;
 import com.aiagent.admin.domain.entity.*;
 import com.aiagent.admin.domain.repository.*;
-import com.aiagent.admin.service.*;
+import com.aiagent.admin.service.DocumentService;
+import com.aiagent.admin.service.EmbeddingService;
+import com.aiagent.admin.service.EncryptionService;
+import com.aiagent.admin.service.ModelConfigService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -160,6 +163,25 @@ public class EvaluationAsyncService {
      */
     public void requestCancellation(String jobId) {
         cancellationFlags.put(jobId, true);
+    }
+
+    /**
+     * 在事务提交后异步启动评估任务
+     * <p>
+     * 此方法由 EvaluationServiceImpl.rerunJob 在事务提交后调用，
+     * 通过 Spring 代理确保 @Transactional 生效。
+     * </p>
+     *
+     * @param evaluationService 评估服务（通过代理注入）
+     * @param jobId 任务 ID
+     */
+    @Async("evaluationTaskExecutor")
+    public void triggerRerunAfterCommit(EvaluationServiceImpl evaluationService, String jobId) {
+        try {
+            evaluationService.runJob(jobId);
+        } catch (Exception e) {
+            log.error("Failed to trigger rerun for job {}", jobId, e);
+        }
     }
 
     /**

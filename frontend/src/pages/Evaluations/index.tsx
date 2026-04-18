@@ -78,6 +78,11 @@ const EvaluationPage: React.FC = () => {
     const [selectedKnowledgeBaseId, setSelectedKnowledgeBaseId] = useState<string | null>(null)
     const [selectedEmbeddingModelId, setSelectedEmbeddingModelId] = useState<string | null>(null)
 
+    // 重新评估确认弹窗状态
+    const [rerunModalVisible, setRerunModalVisible] = useState(false)
+    const [rerunLoading, setRerunLoading] = useState(false)
+    const [rerunTargetId, setRerunTargetId] = useState<string | null>(null)
+
     useEffect(() => {
         fetchEvaluations()
         fetchOptions()
@@ -103,7 +108,7 @@ const EvaluationPage: React.FC = () => {
 
         if (runningTasks.length > 0 && !pollingRef.current) {
             // 有运行中的任务且当前没有轮询，启动轮询
-            pollingRef.current = setInterval(refreshProgress, 500)
+            pollingRef.current = setInterval(refreshProgress, 1000)
         } else if (runningTasks.length === 0 && pollingRef.current) {
             // 没有运行中的任务且有轮询，停止轮询
             clearInterval(pollingRef.current)
@@ -248,20 +253,92 @@ const EvaluationPage: React.FC = () => {
         }
     }
 
-    const handleRerun = async (id: string) => {
+    // 显示重新评估确认弹窗
+    const handleRerun = (id: string) => {
+        setRerunTargetId(id)
+        setRerunModalVisible(true)
+    }
+
+    // 确认重新评估
+    const handleRerunConfirm = async () => {
+        if (!rerunTargetId) return
+
+        setRerunLoading(true)
+
         try {
-            await rerunEvaluation(id)
-            message.success('重新评估任务已启动')
+            // 调用重新评估接口
+            await rerunEvaluation(rerunTargetId)
+
             // 清空旧结果
             setResults([])
             setMetrics(null)
-            // 保持在列表页，不跳转到结果页
             setActiveTab('list')
-            // 重新获取列表，fetchEvaluations 会更新 evaluations，然后 useEffect 会同步 selectedEvaluation
-            fetchEvaluations()
+
+            // 轮询等待任务状态变为 RUNNING
+            const pollForRunningStatus = async (): Promise<void> => {
+                return new Promise((resolve, reject) => {
+                    const maxAttempts = 20 // 最多轮询 20 次（10 秒）
+                    let attempts = 0
+
+                    const poll = async () => {
+                        try {
+                            attempts++
+                            const res = await listEvaluations()
+
+                            if (res.success) {
+                                const updatedEvaluations = res.data.content || []
+                                setEvaluations(updatedEvaluations)
+
+                                // 查找当前任务
+                                const job = updatedEvaluations.find(e => e.id === rerunTargetId)
+
+                                if (job && job.status === 'RUNNING') {
+                                    // 任务已变为 RUNNING 状态
+                                    message.success('重新评估任务已启动')
+                                    resolve()
+                                    return
+                                }
+
+                                if (attempts >= maxAttempts) {
+                                    // 超时，但仍然认为成功（可能是 PENDING 状态）
+                                    message.success('重新评估任务已提交')
+                                    resolve()
+                                    return
+                                }
+
+                                // 继续轮询
+                                setTimeout(poll, 500)
+                            } else {
+                                reject(new Error('获取任务列表失败'))
+                            }
+                        } catch (error) {
+                            reject(error)
+                        }
+                    }
+
+                    // 开始轮询
+                    poll()
+                })
+            }
+
+            // 等待任务状态变为 RUNNING
+            await pollForRunningStatus()
+
+            // 关闭弹窗并重置状态
+            setRerunModalVisible(false)
+            setRerunLoading(false)
+            setRerunTargetId(null)
+
         } catch {
             message.error('重新评估失败')
+            setRerunLoading(false)
         }
+    }
+
+    // 取消重新评估
+    const handleRerunCancel = () => {
+        setRerunModalVisible(false)
+        setRerunTargetId(null)
     }
 
     const handleSubmit = async () => {
@@ -676,6 +753,21 @@ const EvaluationPage: React.FC = () => {
                         />
                     </Form.Item>
                 </Form>
+            </Modal>
+
+            {/* 重新评估确认弹窗 */}
+            <Modal
+                title="重新评估确认"
+                open={rerunModalVisible}
+                onOk={handleRerunConfirm}
+                onCancel={handleRerunCancel}
+                confirmLoading={rerunLoading}
+                okText="确认重新评估"
+                cancelText="取消"
+                width={400}
+            >
+                <p>确定要重新运行此评估任务吗？</p>
+                <p style={{color: '#999', fontSize: 12}}>重新评估将清除之前的结果，重新执行所有评估项。</p>
             </Modal>
         </div>
     )

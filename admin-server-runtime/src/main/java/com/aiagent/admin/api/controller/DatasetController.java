@@ -137,6 +137,15 @@ public class DatasetController {
         return ApiResponse.success();
     }
 
+    @DeleteMapping("/{id}/items/{itemId}")
+    @Operation(summary = "Delete a dataset item by dataset ID and item ID")
+    public ApiResponse<Void> deleteDatasetItemByDatasetId(
+            @Parameter(description = "Dataset ID") @PathVariable String id,
+            @Parameter(description = "Item ID") @PathVariable String itemId) {
+        datasetService.deleteDatasetItem(itemId);
+        return ApiResponse.success();
+    }
+
     @PostMapping("/import")
     @Operation(summary = "Import a dataset with items")
     public ApiResponse<DatasetResponse> importDataset(
