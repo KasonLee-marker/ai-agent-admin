@@ -186,6 +186,26 @@ public class EvaluationAsyncService {
 
     /**
      * 评估单个数据集项
+     * <p>
+     * 执行流程：
+     * <ol>
+     *   <li>创建评估结果实体</li>
+     *   <li>渲染提示词（支持 RAG 上下文注入）</li>
+     *   <li>调用 AI 模型获取响应</li>
+     *   <li>计算语义相似度（使用 Embedding API）</li>
+     *   <li>计算忠实度（检查响应是否基于检索内容）</li>
+     *   <li>AI 评分（0-100 分质量评估）</li>
+     *   <li>更新任务统计并保存结果</li>
+     * </ol>
+     * </p>
+     *
+     * @param job              评估任务实体
+     * @param item             数据集项
+     * @param promptTemplate   提示词模板（可选）
+     * @param modelConfig      模型配置
+     * @param embeddingModelId Embedding 模型 ID（用于相似度计算）
+     * @param knowledgeBaseId  知识库 ID（用于 RAG 检索）
+     * @param enableRag        是否启用 RAG
      */
     private void evaluateItem(EvaluationJob job, DatasetItem item,
                               PromptTemplate promptTemplate, ModelConfig modelConfig,

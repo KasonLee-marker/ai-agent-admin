@@ -8,6 +8,22 @@ import reactor.core.publisher.Flux;
 
 import java.util.List;
 
+/**
+ * 聊天服务接口
+ * <p>
+ * 提供聊天会话管理和消息处理的核心功能：
+ * <ul>
+ *   <li>会话创建、查询、更新、删除</li>
+ *   <li>消息发送（同步和流式）</li>
+ *   <li>AI 模型调用与响应处理</li>
+ *   <li>对话历史记录管理</li>
+ * </ul>
+ * </p>
+ *
+ * @see ChatRequest
+ * @see ChatResponse
+ * @see ChatSessionDTO
+ */
 public interface ChatService {
 
     /**

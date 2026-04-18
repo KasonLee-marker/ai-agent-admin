@@ -39,6 +39,20 @@ public class VectorController {
 
     private final DocumentService documentService;
 
+    /**
+     * 向量相似度搜索
+     * <p>
+     * 执行流程：
+     * <ol>
+     *   <li>将查询文本转换为向量</li>
+     *   <li>使用 PostgreSQL pgvector 进行余弦相似度搜索</li>
+     *   <li>返回相似度分数和文档片段内容</li>
+     * </ol>
+     * </p>
+     *
+     * @param request 向量搜索请求，包含查询文本、知识库ID、Embedding模型ID、返回数量等
+     * @return 搜索结果列表，包含文档片段内容和相似度分数
+     */
     @PostMapping("/search")
     @Operation(summary = "向量相似度搜索", description = "根据查询文本搜索相似的文档片段")
     public ResponseEntity<ApiResponse<List<VectorSearchResult>>> search(

@@ -183,6 +183,10 @@ public class EmbeddingServiceImpl implements EmbeddingService {
 
     /**
      * 使用指定的模型配置计算单个文本的 Embedding 向量
+     * <p>
+     * 不查找默认配置，直接使用传入的模型配置。
+     * 用于文档向量化时指定特定的 embedding 模型。
+     * </p>
      *
      * @param text        输入文本
      * @param modelConfig 模型配置实体
@@ -198,6 +202,10 @@ public class EmbeddingServiceImpl implements EmbeddingService {
 
     /**
      * 使用指定的模型配置计算两个文本的语义相似度
+     * <p>
+     * 分别计算两个文本的 Embedding 向量，然后计算余弦相似度。
+     * 使用指定的模型配置，而非默认模型。
+     * </p>
      *
      * @param text1       文本1
      * @param text2       文本2
@@ -213,6 +221,14 @@ public class EmbeddingServiceImpl implements EmbeddingService {
 
     /**
      * 获取 Embedding 向量维度
+     * <p>
+     * 根据模型名称推断向量维度：
+     * <ul>
+     *   <li>large 模型：3072 维</li>
+     *   <li>v1/v3 模型：1024 维</li>
+     *   <li>其他模型：1536 维（默认）</li>
+     * </ul>
+     * </p>
      *
      * @return 向量维度
      */

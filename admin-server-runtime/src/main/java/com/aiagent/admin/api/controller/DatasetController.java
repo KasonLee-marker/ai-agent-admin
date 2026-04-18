@@ -42,6 +42,12 @@ public class DatasetController {
 
     private final DatasetService datasetService;
 
+    /**
+     * 创建新数据集
+     *
+     * @param request 数据集创建请求，包含名称、描述、分类、标签等
+     * @return 创建成功的数据集信息
+     */
     @PostMapping
     @Operation(summary = "Create a new dataset")
     public ApiResponse<DatasetResponse> createDataset(
@@ -49,6 +55,12 @@ public class DatasetController {
         return ApiResponse.success(datasetService.createDataset(request));
     }
 
+    /**
+     * 根据ID获取数据集详情
+     *
+     * @param id 数据集ID
+     * @return 数据集详情信息
+     */
     @GetMapping("/{id}")
     @Operation(summary = "Get dataset by ID")
     public ApiResponse<DatasetResponse> getDataset(
@@ -56,6 +68,18 @@ public class DatasetController {
         return ApiResponse.success(datasetService.getDataset(id));
     }
 
+    /**
+     * 分页查询数据集列表
+     * <p>
+     * 支持按分类、关键词筛选，结果按更新时间倒序排列。
+     * </p>
+     *
+     * @param category 分类筛选（可选）
+     * @param keyword  搜索关键词（可选，匹配名称和描述）
+     * @param page     页码（从0开始）
+     * @param size     每页数量
+     * @return 分页的数据集列表
+     */
     @GetMapping
     @Operation(summary = "List datasets with pagination and filters")
     public ApiResponse<PageResponse<DatasetResponse>> listDatasets(
@@ -67,6 +91,13 @@ public class DatasetController {
         return ApiResponse.success(datasetService.listDatasets(category, keyword, pageable));
     }
 
+    /**
+     * 更新数据集信息
+     *
+     * @param id      数据集ID
+     * @param request 更新请求，包含新的名称、描述、分类等
+     * @return 更新后的数据集信息
+     */
     @PutMapping("/{id}")
     @Operation(summary = "Update a dataset")
     public ApiResponse<DatasetResponse> updateDataset(
@@ -75,6 +106,15 @@ public class DatasetController {
         return ApiResponse.success(datasetService.updateDataset(id, request));
     }
 
+    /**
+     * 删除数据集
+     * <p>
+     * 同时删除数据集下的所有数据项。
+     * </p>
+     *
+     * @param id 数据集ID
+     * @return 成功响应（无数据）
+     */
     @DeleteMapping("/{id}")
     @Operation(summary = "Delete a dataset")
     public ApiResponse<Void> deleteDataset(
@@ -83,6 +123,13 @@ public class DatasetController {
         return ApiResponse.success();
     }
 
+    /**
+     * 创建数据集项（测试数据）
+     *
+     * @param id      数据集ID
+     * @param request 数据项创建请求，包含输入、预期输出等
+     * @return 创建成功的数据项信息
+     */
     @PostMapping("/{id}/items")
     @Operation(summary = "Create a new dataset item")
     public ApiResponse<DatasetItemResponse> createDatasetItem(
@@ -92,6 +139,17 @@ public class DatasetController {
         return ApiResponse.success(datasetService.createDatasetItem(request));
     }
 
+    /**
+     * 分页查询数据集项列表
+     * <p>
+     * 结果按序号升序排列。
+     * </p>
+     *
+     * @param id   数据集ID
+     * @param page 页码（从0开始）
+     * @param size 每页数量
+     * @return 分页的数据项列表
+     */
     @GetMapping("/{id}/items")
     @Operation(summary = "List dataset items with pagination")
     public ApiResponse<PageResponse<DatasetItemResponse>> listDatasetItems(
@@ -102,6 +160,16 @@ public class DatasetController {
         return ApiResponse.success(datasetService.listDatasetItems(id, pageable));
     }
 
+    /**
+     * 查询指定版本的所有数据集项
+     * <p>
+     * 如果不指定版本，返回当前最新版本的数据项。
+     * </p>
+     *
+     * @param id      数据集ID
+     * @param version 版本号（可选）
+     * @return 数据项列表
+     */
     @GetMapping("/{id}/items/all")
     @Operation(summary = "List all dataset items by version")
     public ApiResponse<List<DatasetItemResponse>> listDatasetItemsByVersion(
@@ -114,6 +182,12 @@ public class DatasetController {
         return ApiResponse.success(datasetService.listDatasetItemsByVersion(id, version));
     }
 
+    /**
+     * 根据ID获取数据集项详情
+     *
+     * @param itemId 数据项ID
+     * @return 数据项详情信息
+     */
     @GetMapping("/items/{itemId}")
     @Operation(summary = "Get dataset item by ID")
     public ApiResponse<DatasetItemResponse> getDatasetItem(
@@ -121,6 +195,13 @@ public class DatasetController {
         return ApiResponse.success(datasetService.getDatasetItem(itemId));
     }
 
+    /**
+     * 更新数据集项
+     *
+     * @param itemId  数据项ID
+     * @param request 更新请求
+     * @return 更新后的数据项信息
+     */
     @PutMapping("/items/{itemId}")
     @Operation(summary = "Update a dataset item")
     public ApiResponse<DatasetItemResponse> updateDatasetItem(
@@ -129,6 +210,12 @@ public class DatasetController {
         return ApiResponse.success(datasetService.updateDatasetItem(itemId, request));
     }
 
+    /**
+     * 删除数据集项
+     *
+     * @param itemId 数据项ID
+     * @return 成功响应（无数据）
+     */
     @DeleteMapping("/items/{itemId}")
     @Operation(summary = "Delete a dataset item")
     public ApiResponse<Void> deleteDatasetItem(
@@ -137,6 +224,13 @@ public class DatasetController {
         return ApiResponse.success();
     }
 
+    /**
+     * 删除数据集项（通过数据集ID和项ID）
+     *
+     * @param id     数据集ID
+     * @param itemId 数据项ID
+     * @return 成功响应（无数据）
+     */
     @DeleteMapping("/{id}/items/{itemId}")
     @Operation(summary = "Delete a dataset item by dataset ID and item ID")
     public ApiResponse<Void> deleteDatasetItemByDatasetId(
@@ -146,6 +240,15 @@ public class DatasetController {
         return ApiResponse.success();
     }
 
+    /**
+     * 导入数据集（含数据项）
+     * <p>
+     * 解析导入请求中的数据，创建新数据集并添加数据项。
+     * </p>
+     *
+     * @param request 导入请求，包含数据集信息和数据项列表
+     * @return 创建成功的数据集信息
+     */
     @PostMapping("/import")
     @Operation(summary = "Import a dataset with items")
     public ApiResponse<DatasetResponse> importDataset(
@@ -153,6 +256,13 @@ public class DatasetController {
         return ApiResponse.success(datasetService.importDataset(request));
     }
 
+    /**
+     * 向现有数据集导入数据项
+     *
+     * @param id    数据集ID
+     * @param items 要导入的数据项列表
+     * @return 导入成功的数据项列表
+     */
     @PostMapping("/{id}/import")
     @Operation(summary = "Import items to an existing dataset")
     public ApiResponse<List<DatasetItemResponse>> importItemsToDataset(
@@ -161,6 +271,16 @@ public class DatasetController {
         return ApiResponse.success(datasetService.importItemsToDataset(id, items));
     }
 
+    /**
+     * 创建数据集新版本
+     * <p>
+     * 基于当前版本创建新版本，保留历史版本数据。
+     * </p>
+     *
+     * @param id      数据集ID
+     * @param request 版本创建请求，包含版本描述
+     * @return 新版本的数据集信息
+     */
     @PostMapping("/{id}/versions")
     @Operation(summary = "Create a new version of a dataset")
     public ApiResponse<DatasetResponse> createNewVersion(
@@ -169,6 +289,16 @@ public class DatasetController {
         return ApiResponse.success(datasetService.createNewVersion(id, request));
     }
 
+    /**
+     * 导出数据集为JSON文件
+     * <p>
+     * 导出包含数据集信息和所有数据项的JSON文件，
+     * 文件名格式为：数据集名称_v版本号.json。
+     * </p>
+     *
+     * @param id 数据集ID
+     * @return JSON文件下载响应
+     */
     @GetMapping("/{id}/export/json")
     @Operation(summary = "Export dataset as JSON")
     public ResponseEntity<byte[]> exportDatasetAsJson(
@@ -183,6 +313,16 @@ public class DatasetController {
                 .body(data);
     }
 
+    /**
+     * 导出数据集为CSV文件
+     * <p>
+     * 导出包含数据项的CSV文件，
+     * 文件名格式为：数据集名称_v版本号.csv。
+     * </p>
+     *
+     * @param id 数据集ID
+     * @return CSV文件下载响应
+     */
     @GetMapping("/{id}/export/csv")
     @Operation(summary = "Export dataset as CSV")
     public ResponseEntity<byte[]> exportDatasetAsCsv(

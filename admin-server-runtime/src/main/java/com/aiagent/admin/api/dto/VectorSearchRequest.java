@@ -6,27 +6,40 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
+/**
+ * 向量搜索请求 DTO
+ * <p>
+ * 用于执行向量相似度搜索，查询与指定文本最相似的文档分块。
+ * </p>
+ */
 @Data
 @Schema(description = "向量搜索请求")
 public class VectorSearchRequest {
 
+    /**
+     * 搜索查询文本（必填）
+     */
     @Schema(description = "搜索查询文本")
     @NotBlank(message = "查询文本不能为空")
     private String query;
 
+    /** 返回结果数量（默认 5） */
     @Schema(description = "返回结果数量", defaultValue = "5")
     @Min(value = 1, message = "topK最小为1")
     @Max(value = 100, message = "topK最大为100")
     private Integer topK = 5;
 
+    /** 相似度阈值（0-1，默认 0.7） */
     @Schema(description = "相似度阈值 (0-1)", defaultValue = "0.7")
     @Min(value = 0, message = "阈值最小为0")
     @Max(value = 1, message = "阈值最大为1")
     private Double threshold = 0.7;
 
+    /** 文档 ID 过滤（可选，仅检索指定文档） */
     @Schema(description = "文档ID过滤（可选）")
     private String documentId;
 
+    /** Embedding 模型 ID（可选，默认使用系统默认模型） */
     @Schema(description = "Embedding模型ID（可选，默认使用系统默认embedding模型）")
     private String embeddingModelId;
 

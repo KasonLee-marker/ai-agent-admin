@@ -14,12 +14,40 @@ package com.aiagent.admin.service.event;
  */
 public class DocumentUploadEvent {
 
+    /**
+     * 文档 ID
+     */
     private final String documentId;
+
+    /**
+     * 文件内容字节数组
+     */
     private final byte[] fileContent;
+
+    /**
+     * 文件 MIME 类型
+     */
     private final String contentType;
+
+    /**
+     * 原始文件名
+     */
     private final String originalFilename;
+
+    /**
+     * Embedding 模型 ID
+     */
     private final String embeddingModelId;
 
+    /**
+     * 构造文档上传事件
+     *
+     * @param documentId       文档 ID
+     * @param fileContent      文件内容字节数组
+     * @param contentType      文件 MIME 类型
+     * @param originalFilename 原始文件名
+     * @param embeddingModelId Embedding 模型 ID
+     */
     public DocumentUploadEvent(String documentId, byte[] fileContent, String contentType,
                                String originalFilename, String embeddingModelId) {
         this.documentId = documentId;
@@ -29,22 +57,47 @@ public class DocumentUploadEvent {
         this.embeddingModelId = embeddingModelId;
     }
 
+    /**
+     * 获取文档 ID
+     *
+     * @return 文档 ID
+     */
     public String getDocumentId() {
         return documentId;
     }
 
+    /**
+     * 获取文件内容字节数组
+     *
+     * @return 文件内容字节数组
+     */
     public byte[] getFileContent() {
         return fileContent;
     }
 
+    /**
+     * 获取文件 MIME 类型
+     *
+     * @return 文件 MIME 类型
+     */
     public String getContentType() {
         return contentType;
     }
 
+    /**
+     * 获取原始文件名
+     *
+     * @return 原始文件名
+     */
     public String getOriginalFilename() {
         return originalFilename;
     }
 
+    /**
+     * 获取 Embedding 模型 ID
+     *
+     * @return Embedding 模型 ID
+     */
     public String getEmbeddingModelId() {
         return embeddingModelId;
     }

@@ -45,6 +45,21 @@ public class RagController {
 
     private final RagService ragService;
 
+    /**
+     * RAG 对话接口
+     * <p>
+     * 执行流程：
+     * <ol>
+     *   <li>将用户问题转换为向量</li>
+     *   <li>在向量数据库中检索相似文档片段</li>
+     *   <li>将检索结果作为上下文构建提示词</li>
+     *   <li>调用 AI 模型生成回复</li>
+     * </ol>
+     * </p>
+     *
+     * @param request RAG 对话请求，包含问题、知识库ID、模型ID等
+     * @return RAG 对话响应，包含 AI 回答和检索到的文档片段
+     */
     @PostMapping("/chat")
     @Operation(summary = "RAG对话", description = "基于检索增强生成的对话接口")
     public ResponseEntity<ApiResponse<RagChatResponse>> chat(
@@ -54,6 +69,16 @@ public class RagController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
+    /**
+     * RAG 流式对话接口（SSE格式）
+     * <p>
+     * 返回 Server-Sent Events 格式的流式响应，
+     * 前端可实时接收并渲染 AI 生成的文本。
+     * </p>
+     *
+     * @param request RAG 对话请求，包含问题、知识库ID、模型ID等
+     * @return SSE 流式响应
+     */
     @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @Operation(summary = "RAG流式对话", description = "基于检索增强生成的流式对话接口（SSE格式）")
     public Flux<String> chatStream(@Valid @RequestBody RagChatRequest request) {

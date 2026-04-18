@@ -3,12 +3,22 @@ package com.aiagent.admin.api.dto;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+/**
+ * 评估任务更新请求 DTO
+ * <p>
+ * 用于更新评估任务的配置，如名称、描述、模型、数据集等。
+ * </p>
+ */
 @Data
 public class EvaluationJobUpdateRequest {
 
+    /**
+     * 新名称（可选，最大 200 字符）
+     */
     @Size(max = 200, message = "Name must be less than 200 characters")
     private String name;
 
+    /** 新描述（可选，最大 1000 字符） */
     @Size(max = 1000, message = "Description must be less than 1000 characters")
     private String description;
 

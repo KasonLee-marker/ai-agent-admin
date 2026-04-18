@@ -48,6 +48,17 @@ public class ModelController {
     private final HealthCheckService healthCheckService;
     private final EncryptionService encryptionService;
 
+    /**
+     * 分页查询模型配置列表
+     * <p>
+     * 支持按 Provider、激活状态、关键词筛选。
+     * </p>
+     *
+     * @param provider Provider筛选（可选，如 OPENAI、DASHSCOPE）
+     * @param isActive 激活状态筛选（可选）
+     * @param keyword  搜索关键词（可选，匹配模型名称）
+     * @return 模型配置列表
+     */
     @GetMapping
     @Operation(summary = "List all models with optional filters")
     public ApiResponse<List<ModelResponse>> listModels(
@@ -57,6 +68,12 @@ public class ModelController {
         return ApiResponse.success(modelConfigService.findByFilters(provider, isActive, keyword));
     }
 
+    /**
+     * 根据ID获取模型配置详情
+     *
+     * @param id 模型配置ID
+     * @return 模型配置详情信息
+     */
     @GetMapping("/{id}")
     @Operation(summary = "Get model by ID")
     public ApiResponse<ModelResponse> getModel(
@@ -66,6 +83,12 @@ public class ModelController {
                 .orElse(ApiResponse.error(404, "Model not found"));
     }
 
+    /**
+     * 创建新的模型配置
+     *
+     * @param request 创建请求，包含 Provider、模型名称、API Key 等
+     * @return 创建成功的模型配置信息
+     */
     @PostMapping
     @Operation(summary = "Create a new model configuration")
     public ApiResponse<ModelResponse> createModel(
@@ -73,6 +96,13 @@ public class ModelController {
         return ApiResponse.success(modelConfigService.create(request));
     }
 
+    /**
+     * 更新模型配置
+     *
+     * @param id      模型配置ID
+     * @param request 更新请求
+     * @return 更新后的模型配置信息
+     */
     @PutMapping("/{id}")
     @Operation(summary = "Update model configuration")
     public ApiResponse<ModelResponse> updateModel(
@@ -81,6 +111,12 @@ public class ModelController {
         return ApiResponse.success(modelConfigService.update(id, request));
     }
 
+    /**
+     * 删除模型配置
+     *
+     * @param id 模型配置ID
+     * @return 成功响应（无数据）
+     */
     @DeleteMapping("/{id}")
     @Operation(summary = "Delete model configuration")
     public ApiResponse<Void> deleteModel(
@@ -89,6 +125,15 @@ public class ModelController {
         return ApiResponse.success();
     }
 
+    /**
+     * 测试模型连通性（健康检查）
+     * <p>
+     * 使用配置的 API Key 和端点测试模型是否可访问。
+     * </p>
+     *
+     * @param id 模型配置ID
+     * @return 健康检查结果，包含连接状态和详情
+     */
     @PostMapping("/{id}/test")
     @Operation(summary = "Test model connectivity (health check)")
     public ApiResponse<HealthCheckResponse> testModel(
@@ -119,6 +164,15 @@ public class ModelController {
         }
     }
 
+    /**
+     * 设置模型为默认聊天模型
+     * <p>
+     * 用于对话功能的默认模型选择。
+     * </p>
+     *
+     * @param id 模型配置ID
+     * @return 成功响应（无数据）
+     */
     @PostMapping("/{id}/default")
     @Operation(summary = "Set model as default chat model")
     public ApiResponse<Void> setDefaultModel(
@@ -127,6 +181,15 @@ public class ModelController {
         return ApiResponse.success();
     }
 
+    /**
+     * 设置模型为默认 Embedding 模型
+     * <p>
+     * 用于向量计算和文档检索的默认模型选择。
+     * </p>
+     *
+     * @param id 模型配置ID
+     * @return 成功响应（无数据）
+     */
     @PostMapping("/{id}/default-embedding")
     @Operation(summary = "Set model as default embedding model")
     public ApiResponse<Void> setDefaultEmbeddingModel(
@@ -135,6 +198,11 @@ public class ModelController {
         return ApiResponse.success();
     }
 
+    /**
+     * 获取当前默认聊天模型
+     *
+     * @return 默认聊天模型配置信息
+     */
     @GetMapping("/default")
     @Operation(summary = "Get current default model")
     public ApiResponse<ModelResponse> getDefaultModel() {
@@ -143,6 +211,11 @@ public class ModelController {
                 .orElse(ApiResponse.error(404, "No default model configured"));
     }
 
+    /**
+     * 获取当前默认 Embedding 模型
+     *
+     * @return 默认 Embedding 模型配置信息
+     */
     @GetMapping("/default-embedding")
     @Operation(summary = "Get current default embedding model")
     public ApiResponse<ModelResponse> getDefaultEmbeddingModel() {
@@ -151,6 +224,14 @@ public class ModelController {
                 .orElse(ApiResponse.error(404, "No default embedding model configured"));
     }
 
+    /**
+     * 获取所有支持的 Provider 列表
+     * <p>
+     * 返回系统支持的 AI 模型提供商及其默认配置。
+     * </p>
+     *
+     * @return Provider 列表，包含名称、显示名称、默认端点、内置模型等
+     */
     @GetMapping("/providers")
     @Operation(summary = "List all supported providers")
     public ApiResponse<List<ProviderResponse>> listProviders() {
@@ -166,6 +247,15 @@ public class ModelController {
         return ApiResponse.success(providers);
     }
 
+    /**
+     * 获取指定 Provider 的内置模型列表
+     * <p>
+     * 返回 Provider 预配置的常用模型及其能力信息。
+     * </p>
+     *
+     * @param provider Provider 名称（如 OPENAI、DASHSCOPE）
+     * @return 内置模型列表
+     */
     @GetMapping("/providers/{provider}/builtin")
     @Operation(summary = "Get built-in models for a provider")
     public ApiResponse<List<ModelProvider.BuiltinModel>> getBuiltinModels(
@@ -178,6 +268,14 @@ public class ModelController {
         }
     }
 
+    /**
+     * 获取当前激活的模型
+     * <p>
+     * 用于运行时模型切换功能，返回当前正在使用的模型信息。
+     * </p>
+     *
+     * @return 当前激活的模型信息
+     */
     @GetMapping("/active")
     @Operation(summary = "Get currently active model (for runtime switching)")
     public ApiResponse<ActiveModelResponse> getActiveModel() {
@@ -190,6 +288,15 @@ public class ModelController {
                 .orElse(ApiResponse.error(404, "Active model not found"));
     }
 
+    /**
+     * 运行时切换模型
+     * <p>
+     * 无需重启服务即可切换当前使用的 AI 模型。
+     * </p>
+     *
+     * @param request 切换请求，包含目标模型ID
+     * @return 成功响应（无数据）
+     */
     @PostMapping("/switch")
     @Operation(summary = "Switch to a different model at runtime")
     public ApiResponse<Void> switchModel(
@@ -199,6 +306,10 @@ public class ModelController {
     }
 
     // Response DTOs
+
+    /**
+     * 健康检查响应 DTO
+     */
     @lombok.Data
     @lombok.AllArgsConstructor
     @lombok.NoArgsConstructor
@@ -209,5 +320,9 @@ public class ModelController {
         private String baseUrl;
         private String details;
     }
+
+    /**
+     * 激活模型响应 DTO
+     */
     public record ActiveModelResponse(String modelId, ModelResponse model) {}
 }

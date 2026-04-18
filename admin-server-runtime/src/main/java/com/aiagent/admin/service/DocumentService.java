@@ -7,6 +7,23 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
+/**
+ * 文档服务接口
+ * <p>
+ * 提供文档管理和处理的核心功能：
+ * <ul>
+ *   <li>文档上传和文本提取</li>
+ *   <li>多种分块策略（固定大小、段落、句子、递归、语义）</li>
+ *   <li>Embedding 向量计算和存储</li>
+ *   <li>向量相似度检索</li>
+ *   <li>BM25 关键词检索</li>
+ * </ul>
+ * </p>
+ *
+ * @see DocumentResponse
+ * @see DocumentChunkResponse
+ * @see VectorSearchResult
+ */
 public interface DocumentService {
 
     /**
@@ -52,36 +69,62 @@ public interface DocumentService {
 
     /**
      * 获取文档详情
+     *
+     * @param documentId 文档唯一标识
+     * @return 文档响应 DTO
      */
     DocumentResponse getDocument(String documentId);
 
     /**
      * 分页查询文档列表
+     *
+     * @param createdBy 创建者标识
+     * @param pageable  分页参数
+     * @return 文档分页列表
      */
     Page<DocumentResponse> listDocuments(String createdBy, Pageable pageable);
 
     /**
      * 删除文档
+     * <p>
+     * 同时删除文档的所有分块和向量数据。
+     * </p>
+     *
+     * @param documentId 文档唯一标识
      */
     void deleteDocument(String documentId);
 
     /**
      * 获取文档分块列表
+     *
+     * @param documentId 文档唯一标识
+     * @return 分块响应 DTO 列表
      */
     List<DocumentChunkResponse> getDocumentChunks(String documentId);
 
     /**
      * 获取文档处理状态
+     *
+     * @param documentId 文档唯一标识
+     * @return 文档响应 DTO（包含状态信息）
      */
     DocumentResponse getDocumentStatus(String documentId);
 
     /**
      * 向量相似度搜索
+     * <p>
+     * 计算查询文本的 Embedding，在向量表中检索最相似的文档分块。
+     * </p>
+     *
+     * @param request 向量搜索请求，包含查询文本、知识库ID等参数
+     * @return 相似度检索结果列表
      */
     List<VectorSearchResult> searchSimilar(VectorSearchRequest request);
 
     /**
      * 获取支持的文件类型列表
+     *
+     * @return 支持的 MIME 类型列表
      */
     List<String> getSupportedContentTypes();
 

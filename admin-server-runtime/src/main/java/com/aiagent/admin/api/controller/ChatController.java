@@ -41,6 +41,13 @@ public class ChatController {
 
     private final ChatService chatService;
 
+    /**
+     * 创建新的聊天会话
+     *
+     * @param request 创建会话请求，包含会话名称和可选的模型ID
+     * @param userId  用户ID（从请求属性获取，用于关联会话）
+     * @return 创建成功的会话信息
+     */
     @PostMapping("/sessions")
     @Operation(summary = "Create a new chat session")
     public ApiResponse<ChatSessionDTO> createSession(
@@ -50,6 +57,18 @@ public class ChatController {
         return ApiResponse.success(chatService.createSession(request, createdBy));
     }
 
+    /**
+     * 分页查询聊天会话列表
+     * <p>
+     * 支持按关键词搜索，结果按更新时间倒序排列。
+     * </p>
+     *
+     * @param keyword 搜索关键词（可选，匹配会话名称）
+     * @param page    页码（从0开始）
+     * @param size    每页数量
+     * @param userId  用户ID（用于筛选用户自己的会话）
+     * @return 分页的会话列表
+     */
     @GetMapping("/sessions")
     @Operation(summary = "List chat sessions with pagination")
     public ApiResponse<PageResponse<ChatSessionDTO>> listSessions(
@@ -68,6 +87,12 @@ public class ChatController {
         return ApiResponse.success(PageResponse.of(sessions, page, size, sessions.size()));
     }
 
+    /**
+     * 根据ID获取聊天会话详情
+     *
+     * @param id 会话ID
+     * @return 会话详情信息
+     */
     @GetMapping("/sessions/{id}")
     @Operation(summary = "Get chat session by ID")
     public ApiResponse<ChatSessionDTO> getSession(
@@ -75,6 +100,13 @@ public class ChatController {
         return ApiResponse.success(chatService.getSession(id));
     }
 
+    /**
+     * 更新聊天会话信息
+     *
+     * @param id      会话ID
+     * @param request 更新请求，包含新的会话名称或模型ID
+     * @return 更新后的会话信息
+     */
     @PutMapping("/sessions/{id}")
     @Operation(summary = "Update a chat session")
     public ApiResponse<ChatSessionDTO> updateSession(
@@ -83,6 +115,15 @@ public class ChatController {
         return ApiResponse.success(chatService.updateSession(id, request));
     }
 
+    /**
+     * 删除聊天会话
+     * <p>
+     * 同时删除会话下的所有消息。
+     * </p>
+     *
+     * @param id 会话ID
+     * @return 成功响应（无数据）
+     */
     @DeleteMapping("/sessions/{id}")
     @Operation(summary = "Delete a chat session")
     public ApiResponse<Void> deleteSession(
@@ -91,6 +132,15 @@ public class ChatController {
         return ApiResponse.success();
     }
 
+    /**
+     * 发送消息并获取AI响应（同步模式）
+     * <p>
+     * 调用指定的AI模型生成回复，并保存用户消息和助手消息。
+     * </p>
+     *
+     * @param request 消息请求，包含会话ID、消息内容、可选模型ID
+     * @return 助手响应消息
+     */
     @PostMapping("/messages")
     @Operation(summary = "Send a message and get AI response")
     public ApiResponse<ChatResponse> sendMessage(
@@ -98,6 +148,16 @@ public class ChatController {
         return ApiResponse.success(chatService.sendMessage(request));
     }
 
+    /**
+     * 发送消息并获取流式AI响应（SSE模式）
+     * <p>
+     * 返回 Server-Sent Events 格式的流式响应，
+     * 前端可实时接收并渲染AI生成的文本。
+     * </p>
+     *
+     * @param request 消息请求，包含会话ID、消息内容、可选模型ID
+     * @return SSE 流式响应
+     */
     @PostMapping(value = "/messages/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @Operation(summary = "Send a message and get streaming AI response")
     public Flux<String> sendMessageStream(
@@ -105,6 +165,12 @@ public class ChatController {
         return chatService.sendMessageStream(request);
     }
 
+    /**
+     * 获取会话的所有消息
+     *
+     * @param id 会话ID
+     * @return 消息列表响应，包含会话ID、消息列表和总数
+     */
     @GetMapping("/sessions/{id}/messages")
     @Operation(summary = "Get all messages in a session")
     public ApiResponse<ChatResponse.MessageListResponse> getSessionMessages(
@@ -118,6 +184,16 @@ public class ChatController {
         return ApiResponse.success(response);
     }
 
+    /**
+     * 获取会话的对话历史（仅用户和助手消息）
+     * <p>
+     * 过滤掉系统消息，只返回用户(USER)和助手(ASSISTANT)角色的消息，
+     * 用于构建对话上下文。
+     * </p>
+     *
+     * @param id 会话ID
+     * @return 对话历史消息列表
+     */
     @GetMapping("/sessions/{id}/history")
     @Operation(summary = "Get conversation history (USER and ASSISTANT messages only)")
     public ApiResponse<ChatResponse.MessageListResponse> getConversationHistory(
