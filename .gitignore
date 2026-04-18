@@ -92,3 +92,4 @@ work/
 /.playwright-mcp/
 rebel.xml
 /frontend/test-results/
+/tasks/
