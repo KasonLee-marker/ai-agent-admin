@@ -29,14 +29,23 @@ public interface BM25SearchService {
      * 使用 PostgreSQL ts_rank 函数计算文本相关性分数。
      * 搜索结果按相关性降序排列。
      * </p>
+     * <p>
+     * 注意：BM25 分数范围与向量相似度不同：
+     * <ul>
+     *   <li>向量相似度：0-1（余弦相似度）</li>
+     *   <li>BM25 分数：0.01-0.5（ts_rank）</li>
+     * </ul>
+     * 建议阈值设置：BM25 使用 0.01-0.1，向量使用 0.3-0.7
+     * </p>
      *
      * @param query           查询文本（关键词）
      * @param knowledgeBaseId 知识库 ID 过滤（可选，null 表示不限制）
      * @param documentId      文档 ID 过滤（可选，null 表示不限制）
      * @param topK            返回数量
+     * @param threshold       相关性阈值（可选，null 表示不限制）
      * @return 搜索结果列表，包含 chunkId、documentId、content、score
      */
-    List<VectorSearchResult> searchBM25(String query, String knowledgeBaseId, String documentId, int topK);
+    List<VectorSearchResult> searchBM25(String query, String knowledgeBaseId, String documentId, int topK, Double threshold);
 
     /**
      * 确保全文搜索索引存在

@@ -112,11 +112,17 @@ public class DocumentServiceImpl implements DocumentService {
                     ". Supported types: PDF, Word (.docx), TXT, Markdown, CSV");
         }
 
-        // 语义分块需要 Embedding 模型
+        // 语义分块时，自动使用知识库默认 embedding 模型（前端不再需要选择）
+        String effectiveEmbeddingModelId = null;
         if ("SEMANTIC".equals(chunkStrategy)) {
-            if (embeddingModelId == null || embeddingModelId.isEmpty()) {
-                // 尝试使用默认 Embedding 模型
-                embeddingModelId = modelConfigRepository.findByIsDefaultEmbeddingTrueAndIsActiveTrue()
+            // 优先使用知识库默认模型
+            if (knowledgeBaseId != null) {
+                effectiveEmbeddingModelId = knowledgeBaseService.getKnowledgeBase(knowledgeBaseId)
+                        .getDefaultEmbeddingModelId();
+            }
+            // 如果知识库没有默认模型，使用全局默认模型
+            if (effectiveEmbeddingModelId == null) {
+                effectiveEmbeddingModelId = modelConfigRepository.findByIsDefaultEmbeddingTrueAndIsActiveTrue()
                         .map(ModelConfig::getId)
                         .orElseThrow(() -> new IllegalArgumentException("Semantic chunking requires an embedding model. No default model configured."));
             }
@@ -156,7 +162,7 @@ public class DocumentServiceImpl implements DocumentService {
         // 发布事件，在事务提交后异步处理文档
         // TransactionalEventListener 确保只有事务成功提交后才执行异步任务
         eventPublisher.publishEvent(new DocumentUploadEvent(
-                document.getId(), fileContent, contentType, originalFilename, embeddingModelId));
+                document.getId(), fileContent, contentType, originalFilename, effectiveEmbeddingModelId));
 
         return documentMapper.toResponse(document);
     }
@@ -287,20 +293,18 @@ public class DocumentServiceImpl implements DocumentService {
     public List<VectorSearchResult> searchSimilar(VectorSearchRequest request) {
         String strategy = request.getStrategy() != null ? request.getStrategy() : "VECTOR";
         int topK = request.getTopK() != null ? request.getTopK() : 5;
+        Double threshold = request.getThreshold();
 
-        switch (strategy) {
-            case "BM25":
-                return bm25SearchService.searchBM25(
-                        request.getQuery(),
-                        request.getKnowledgeBaseId(),
-                        request.getDocumentId(),
-                        topK);
-            case "HYBRID":
-                return searchHybrid(request);
-            case "VECTOR":
-            default:
-                return searchVector(request);
-        }
+        return switch (strategy) {
+            case "BM25" -> bm25SearchService.searchBM25(
+                    request.getQuery(),
+                    request.getKnowledgeBaseId(),
+                    request.getDocumentId(),
+                    topK,
+                    threshold);
+            case "HYBRID" -> searchHybrid(request);
+            default -> searchVector(request);
+        };
     }
 
     /**
@@ -391,6 +395,7 @@ public class DocumentServiceImpl implements DocumentService {
      */
     private List<VectorSearchResult> searchHybrid(VectorSearchRequest request) {
         int topK = request.getTopK() != null ? request.getTopK() : 5;
+        Double threshold = request.getThreshold();
         int rrfK = 60; // RRF 常数
 
         // 1. 执行向量检索和 BM25 检索
@@ -399,7 +404,8 @@ public class DocumentServiceImpl implements DocumentService {
                 request.getQuery(),
                 request.getKnowledgeBaseId(),
                 request.getDocumentId(),
-                topK);
+                topK,
+                threshold);
 
         // 2. 使用 RRF 融合排名
         java.util.Map<String, Double> rrfScores = new java.util.HashMap<>();

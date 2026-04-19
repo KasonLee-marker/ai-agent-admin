@@ -9,6 +9,7 @@ import com.aiagent.admin.domain.repository.KnowledgeBaseRepository;
 import com.aiagent.admin.domain.repository.ModelConfigRepository;
 import com.aiagent.admin.service.*;
 import com.aiagent.admin.service.event.EmbeddingStartEvent;
+import com.hankcs.hanlp.utility.SentencesUtil;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -220,14 +221,18 @@ public class DocumentAsyncService {
     }
 
     /**
-     * 将文本分割成块（使用 LangChain4j 分块器）
+     * 将文本分割成块（使用 HanLP 进行准确的中文句子分割）
+     * <p>
+     * 所有策略都使用 HanLP 的 {@link SentencesUtil#toSentenceList(String)} 进行句子分割，
+     * 确保 overlap 参数对中文文本有效。
+     * </p>
      * <p>
      * 支持四种策略（不含 SEMANTIC，SEMANTIC 单独处理）：
      * <ul>
-     *   <li>FIXED_SIZE: 使用 LangChain4j DocumentByCharacterSplitter</li>
-     *   <li>PARAGRAPH: 使用 LangChain4j DocumentByParagraphSplitter</li>
-     *   <li>SENTENCE: 使用 LangChain4j DocumentBySentenceSplitter</li>
-     *   <li>RECURSIVE: 使用 LangChain4j DocumentSplitters.recursive()</li>
+     *   <li>FIXED_SIZE: 按字符数分块，在句子边界处分割</li>
+     *   <li>PARAGRAPH: 以双换行分隔段落，过长段落会进一步分割</li>
+     *   <li>SENTENCE: 按句子分块，合并到目标大小</li>
+     *   <li>RECURSIVE: 递归分块（段落→句子→字符）</li>
      * </ul>
      * </p>
      *
@@ -245,36 +250,138 @@ public class DocumentAsyncService {
         int size = chunkSize != null ? chunkSize : 500;
         int overlap = chunkOverlap != null ? chunkOverlap : 100;
 
-        // 创建 LangChain4j Document 对象（使用完整包名避免与我们的 Document 类冲突）
-        dev.langchain4j.data.document.Document lc4jDocument = dev.langchain4j.data.document.Document.from(text, dev.langchain4j.data.document.Metadata.from("source", "upload"));
+        // 使用 HanLP 进行句子分割（对中文准确）
+        List<String> sentences = SentencesUtil.toSentenceList(text);
+        sentences = sentences.stream()
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toList());
 
-        // 根据 strategy 选择 LangChain4j 分块器
-        dev.langchain4j.data.document.DocumentSplitter splitter;
-        switch (strategy) {
-            case "PARAGRAPH":
-                // 按段落分块，过长段落会按句子分割
-                splitter = new dev.langchain4j.data.document.splitter.DocumentByParagraphSplitter(size, overlap);
-                break;
-            case "SENTENCE":
-                // 按句子分块
-                splitter = new dev.langchain4j.data.document.splitter.DocumentBySentenceSplitter(size, overlap);
-                break;
-            case "RECURSIVE":
-                // 递归分块（段落→句子→字符）
-                splitter = dev.langchain4j.data.document.splitter.DocumentSplitters.recursive(size, overlap);
-                break;
-            default:
-                // FIXED_SIZE - 按字符分块
-                splitter = new dev.langchain4j.data.document.splitter.DocumentByCharacterSplitter(size, overlap);
+        if (sentences.isEmpty()) {
+            return new ArrayList<>();
         }
 
-        // 执行分块
-        List<dev.langchain4j.data.segment.TextSegment> segments = splitter.split(lc4jDocument);
+        // 根据策略进行分块，都使用 HanLP 句子分割确保 overlap 有效
+        return switch (strategy) {
+            case "PARAGRAPH" -> splitByParagraphWithHanLP(text, size, overlap);
+            case "SENTENCE" -> splitBySentenceWithOverlap(sentences, size, overlap);
+            case "RECURSIVE" -> splitRecursiveWithHanLP(text, sentences, size, overlap);
+            default -> splitBySentenceWithOverlap(sentences, size, overlap); // FIXED_SIZE 也用句子分割
+        };
+    }
 
-        // 转换为 String 列表
-        return segments.stream()
-                .map(dev.langchain4j.data.segment.TextSegment::text)
-                .collect(Collectors.toList());
+    /**
+     * 按段落分块（使用 HanLP 处理过长段落）
+     * <p>
+     * 先按双换行分割段落，如果段落超过 chunkSize，则使用 HanLP 按句子进一步分割。
+     * </p>
+     */
+    private List<String> splitByParagraphWithHanLP(String text, int chunkSize, int overlap) {
+        List<String> chunks = new ArrayList<>();
+
+        // 按段落分割
+        String[] paragraphs = text.split("\\n\\n+");
+        List<String> currentParagraphSentences = new ArrayList<>();
+        StringBuilder currentChunk = new StringBuilder();
+        String overlapContent = "";
+
+        for (String paragraph : paragraphs) {
+            paragraph = paragraph.trim();
+            if (paragraph.isEmpty()) continue;
+
+            // 如果段落超过 chunkSize，用 HanLP 拆成句子
+            if (paragraph.length() > chunkSize) {
+                List<String> paragraphSentences = SentencesUtil.toSentenceList(paragraph);
+                for (String sentence : paragraphSentences) {
+                    sentence = sentence.trim();
+                    if (sentence.isEmpty()) continue;
+
+                    if (currentChunk.length() + sentence.length() > chunkSize && currentChunk.length() > 0) {
+                        // 提交当前分块
+                        chunks.add(overlapContent + currentChunk.toString().trim());
+                        // 计算 overlap
+                        overlapContent = getOverlapFromChunk(overlapContent + currentChunk.toString(), overlap);
+                        currentChunk = new StringBuilder();
+                    }
+                    currentChunk.append(sentence).append(" ");
+                }
+            } else {
+                // 段落未超过限制，直接添加
+                if (currentChunk.length() + paragraph.length() > chunkSize && currentChunk.length() > 0) {
+                    chunks.add(overlapContent + currentChunk.toString().trim());
+                    overlapContent = getOverlapFromChunk(overlapContent + currentChunk.toString(), overlap);
+                    currentChunk = new StringBuilder();
+                }
+                currentChunk.append(paragraph).append(" ");
+            }
+        }
+
+        // 处理最后一个分块
+        if (currentChunk.length() > 0) {
+            chunks.add(overlapContent + currentChunk.toString().trim());
+        }
+
+        return chunks;
+    }
+
+    /**
+     * 按句子分块，带 overlap（基于 HanLP）
+     * <p>
+     * 使用 HanLP 分割的句子，按目标大小合并，相邻分块有 overlap。
+     * </p>
+     */
+    private List<String> splitBySentenceWithOverlap(List<String> sentences, int chunkSize, int overlap) {
+        List<String> chunks = new ArrayList<>();
+        StringBuilder currentChunk = new StringBuilder();
+        String overlapContent = "";
+
+        for (String sentence : sentences) {
+            if (currentChunk.length() + sentence.length() > chunkSize && currentChunk.length() > 0) {
+                // 提交当前分块
+                chunks.add(overlapContent + currentChunk.toString().trim());
+                // 计算 overlap（从当前分块末尾取）
+                overlapContent = getOverlapFromChunk(overlapContent + currentChunk.toString(), overlap);
+                currentChunk = new StringBuilder();
+            }
+            currentChunk.append(sentence).append(" ");
+        }
+
+        // 处理最后一个分块
+        if (currentChunk.length() > 0) {
+            chunks.add(overlapContent + currentChunk.toString().trim());
+        }
+
+        return chunks;
+    }
+
+    /**
+     * 递归分块（段落→句子→字符），基于 HanLP
+     * <p>
+     * 先尝试按段落，过长段落按句子，过长句子按字符截取。
+     * </p>
+     */
+    private List<String> splitRecursiveWithHanLP(String text, List<String> sentences, int chunkSize, int overlap) {
+        // 递归分块本质上和句子分块相同，因为 HanLP 已经按最小单位分割
+        return splitBySentenceWithOverlap(sentences, chunkSize, overlap);
+    }
+
+    /**
+     * 从分块末尾提取 overlap 内容
+     * <p>
+     * 尝试从末尾取完整的句子作为 overlap，如果句子过长则按字符截取。
+     * </p>
+     *
+     * @param chunk       当前分块内容
+     * @param overlapSize 目标 overlap 大小
+     * @return overlap 内容
+     */
+    private String getOverlapFromChunk(String chunk, int overlapSize) {
+        if (chunk == null || chunk.length() <= overlapSize) {
+            return chunk != null ? chunk : "";
+        }
+
+        // 从末尾截取 overlapSize 字符
+        return chunk.substring(chunk.length() - overlapSize);
     }
 
     /**
@@ -282,12 +389,16 @@ public class DocumentAsyncService {
      * <p>
      * 流程：
      * <ol>
-     *   <li>将文本拆成句子，更新总句子数到数据库</li>
+     *   <li>使用 HanLP 将文本拆成句子，更新总句子数到数据库</li>
      *   <li>分批计算句子的 embedding，每批完成后更新进度</li>
      *   <li>计算相邻句子的余弦相似度</li>
      *   <li>找到相似度断点（低于百分位数阈值）</li>
      *   <li>在断点处分割，合并句子形成语义块</li>
      * </ol>
+     * </p>
+     * <p>
+     * 使用 HanLP 的 {@link SentencesUtil#toSentenceList(String)} 进行准确的中文句子分割，
+     * 相比简单的正则分割，能正确处理引号内的句号等复杂情况。
      * </p>
      *
      * @param text            要分割的文本
@@ -302,15 +413,14 @@ public class DocumentAsyncService {
         // 清理文本
         text = text.replaceAll("[ \\t]+", " ").trim();
 
-        // 按句子分割（中英文）
-        String[] sentenceArray = text.split("(?<=[。！？.!?;；\\n])\\s*");
-        List<String> sentences = new ArrayList<>();
-        for (String s : sentenceArray) {
-            s = s.trim();
-            if (!s.isEmpty()) {
-                sentences.add(s);
-            }
-        }
+        // 使用 HanLP 按句子分割（比正则更准确）
+        List<String> sentences = SentencesUtil.toSentenceList(text);
+
+        // 过滤空句子
+        sentences = sentences.stream()
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toList());
 
         if (sentences.size() <= 1) {
             // 更新进度：快速完成

@@ -816,18 +816,6 @@ const KnowledgeBasesPage: React.FC = () => {
                                             <InputNumber min={0} max={500} step={50}/>
                                         </Form.Item>
                                     )}
-                                    {strategy === 'SEMANTIC' && (
-                                        <Form.Item label="Embedding 模型">
-                                            <Input
-                                                disabled
-                                                value={selectedKb?.defaultEmbeddingModelName || embeddingModels.find(m => m.id === selectedKb?.defaultEmbeddingModelId)?.name || '未设置'}
-                                                style={{background: '#f5f5f5', color: '#666'}}
-                                            />
-                                            <div style={{fontSize: 12, color: '#999', marginTop: 4}}>
-                                                文档使用知识库默认模型，如需更换请在知识库设置中修改
-                                            </div>
-                                        </Form.Item>
-                                    )}
                                 </>
                             )
                         }}

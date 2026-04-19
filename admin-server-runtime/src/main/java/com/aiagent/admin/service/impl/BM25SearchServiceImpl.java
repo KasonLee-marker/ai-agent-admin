@@ -61,32 +61,45 @@ public class BM25SearchServiceImpl implements BM25SearchService {
      * <p>
      * 根据查询语言选择搜索策略：
      * <ul>
-     *   <li>中文查询：使用 pg_trgm similarity 匹配</li>
+     *   <li>中文查询：使用 pg_jieba ts_rank 评分</li>
      *   <li>英文查询：使用 ts_rank BM25 评分</li>
      * </ul>
+     * </p>
+     * <p>
+     * 注意：BM25 分数范围与向量相似度不同：
+     * <ul>
+     *   <li>向量相似度：0-1（余弦相似度）</li>
+     *   <li>BM25 分数：0.01-0.5（ts_rank）</li>
+     * </ul>
+     * 建议阈值设置：BM25 使用 0.01-0.1，向量使用 0.3-0.7
      * </p>
      *
      * @param query           查询文本（关键词）
      * @param knowledgeBaseId 知识库 ID 过滤（可选）
      * @param documentId      文档 ID 过滤（可选）
      * @param topK            返回数量
+     * @param threshold       相关性阈值（可选，null 时使用默认值 0.01）
      * @return 搜索结果列表
      */
     @Override
-    public List<VectorSearchResult> searchBM25(String query, String knowledgeBaseId, String documentId, int topK) {
+    public List<VectorSearchResult> searchBM25(String query, String knowledgeBaseId, String documentId, int topK, Double threshold) {
         if (query == null || query.isBlank()) {
             log.warn("Empty query");
             return List.of();
         }
+
+        // 使用传入的阈值，如果为 null 则使用默认值
+        double effectiveThreshold = threshold != null ? threshold : CHINESE_RANK_THRESHOLD;
+        log.debug("BM25 search with threshold: {} (effective: {})", threshold, effectiveThreshold);
 
         // 检测是否包含中文
         boolean containsChinese = query.matches(".*[\\u4e00-\\u9fa5].*");
 
         List<VectorSearchResult> results;
         if (containsChinese) {
-            // 中文查询：使用 pg_trgm similarity
-            results = searchChinese(query, knowledgeBaseId, documentId, topK);
-            log.debug("Chinese search (pg_trgm) found {} results for query: {}", results.size(), query);
+            // 中文查询：使用 pg_jieba ts_rank
+            results = searchChinese(query, knowledgeBaseId, documentId, topK, effectiveThreshold);
+            log.debug("Chinese search (jieba) found {} results for query: {}", results.size(), query);
         } else {
             // 英文查询：使用 ts_rank BM25
             String tsQuery = preprocessQuery(query);
@@ -94,8 +107,8 @@ public class BM25SearchServiceImpl implements BM25SearchService {
                 log.warn("Empty query after preprocessing: {}", query);
                 return List.of();
             }
-            Map<String, Object> params = buildBM25Params(tsQuery, knowledgeBaseId, documentId, topK);
-            String sql = buildBM25Sql(documentId, knowledgeBaseId);
+            Map<String, Object> params = buildBM25Params(tsQuery, knowledgeBaseId, documentId, topK, effectiveThreshold);
+            String sql = buildBM25Sql(documentId, knowledgeBaseId, effectiveThreshold);
             results = namedTemplate.query(sql, params, RESULT_ROW_MAPPER);
             log.debug("English search (BM25) found {} results for query: {}", results.size(), query);
         }
@@ -114,14 +127,18 @@ public class BM25SearchServiceImpl implements BM25SearchService {
      * pg_jieba 将中文文本分词为词元，使用 tsvector/tsquery 进行全文搜索，
      * ts_rank 计算相关性分数。
      * </p>
+     * <p>
+     * 注意：ts_rank 分数通常在 0.01-0.5 之间，建议阈值使用 0.01-0.1。
+     * </p>
      *
      * @param query           查询文本
      * @param knowledgeBaseId 知识库 ID 过滤
      * @param documentId      文档 ID 过滤
      * @param topK            返回数量
+     * @param threshold       相关性阈值
      * @return 搜索结果列表
      */
-    private List<VectorSearchResult> searchChinese(String query, String knowledgeBaseId, String documentId, int topK) {
+    private List<VectorSearchResult> searchChinese(String query, String knowledgeBaseId, String documentId, int topK, double threshold) {
         // 预处理查询文本为 tsquery 格式（OR 查询）
         String tsQuery = preprocessChineseQuery(query);
         if (tsQuery.isEmpty()) {
@@ -131,7 +148,7 @@ public class BM25SearchServiceImpl implements BM25SearchService {
 
         Map<String, Object> params = new HashMap<>();
         params.put("tsQuery", tsQuery);
-        params.put("threshold", CHINESE_RANK_THRESHOLD);
+        params.put("threshold", threshold);
         params.put("topK", topK);
 
         boolean hasDocumentId = documentId != null && !documentId.isEmpty();
@@ -143,7 +160,9 @@ public class BM25SearchServiceImpl implements BM25SearchService {
                     SELECT dc.id as chunk_id, dc.document_id, dc.content,
                            ts_rank(dc.content_tsv_jieba, to_tsquery('jiebamp', :tsQuery)) as score
                     FROM document_chunks dc
-                    WHERE dc.document_id = :documentId AND dc.content_tsv_jieba @@ to_tsquery('jiebamp', :tsQuery)
+                    WHERE dc.document_id = :documentId
+                      AND dc.content_tsv_jieba @@ to_tsquery('jiebamp', :tsQuery)
+                      AND ts_rank(dc.content_tsv_jieba, to_tsquery('jiebamp', :tsQuery)) > :threshold
                     ORDER BY score DESC
                     LIMIT :topK
                     """;
@@ -154,7 +173,9 @@ public class BM25SearchServiceImpl implements BM25SearchService {
                            ts_rank(dc.content_tsv_jieba, to_tsquery('jiebamp', :tsQuery)) as score
                     FROM document_chunks dc
                     JOIN documents d ON dc.document_id = d.id
-                    WHERE d.knowledge_base_id = :knowledgeBaseId AND dc.content_tsv_jieba @@ to_tsquery('jiebamp', :tsQuery)
+                    WHERE d.knowledge_base_id = :knowledgeBaseId
+                      AND dc.content_tsv_jieba @@ to_tsquery('jiebamp', :tsQuery)
+                      AND ts_rank(dc.content_tsv_jieba, to_tsquery('jiebamp', :tsQuery)) > :threshold
                     ORDER BY score DESC
                     LIMIT :topK
                     """;
@@ -165,6 +186,7 @@ public class BM25SearchServiceImpl implements BM25SearchService {
                            ts_rank(dc.content_tsv_jieba, to_tsquery('jiebamp', :tsQuery)) as score
                     FROM document_chunks dc
                     WHERE dc.content_tsv_jieba @@ to_tsquery('jiebamp', :tsQuery)
+                      AND ts_rank(dc.content_tsv_jieba, to_tsquery('jiebamp', :tsQuery)) > :threshold
                     ORDER BY score DESC
                     LIMIT :topK
                     """;
@@ -208,10 +230,11 @@ public class BM25SearchServiceImpl implements BM25SearchService {
     /**
      * 构建 BM25 搜索参数（英文）
      */
-    private Map<String, Object> buildBM25Params(String tsQuery, String knowledgeBaseId, String documentId, int topK) {
+    private Map<String, Object> buildBM25Params(String tsQuery, String knowledgeBaseId, String documentId, int topK, double threshold) {
         Map<String, Object> params = new HashMap<>();
         params.put("tsQuery", tsQuery);
         params.put("topK", topK);
+        params.put("threshold", threshold);
         if (documentId != null && !documentId.isEmpty()) {
             params.put("documentId", documentId);
         }
@@ -223,8 +246,11 @@ public class BM25SearchServiceImpl implements BM25SearchService {
 
     /**
      * 构建 BM25 搜索 SQL（英文）
+     * <p>
+     * 包含阈值过滤：只返回 score > threshold 的结果。
+     * </p>
      */
-    private String buildBM25Sql(String documentId, String knowledgeBaseId) {
+    private String buildBM25Sql(String documentId, String knowledgeBaseId, double threshold) {
         boolean hasDocumentId = documentId != null && !documentId.isEmpty();
         boolean hasKnowledgeBaseId = knowledgeBaseId != null && !knowledgeBaseId.isEmpty();
 
@@ -233,7 +259,9 @@ public class BM25SearchServiceImpl implements BM25SearchService {
                     SELECT dc.id as chunk_id, dc.document_id, dc.content,
                            ts_rank(dc.content_tsv, to_tsquery('simple', :tsQuery)) as score
                     FROM document_chunks dc
-                    WHERE dc.document_id = :documentId AND dc.content_tsv @@ to_tsquery('simple', :tsQuery)
+                    WHERE dc.document_id = :documentId
+                      AND dc.content_tsv @@ to_tsquery('simple', :tsQuery)
+                      AND ts_rank(dc.content_tsv, to_tsquery('simple', :tsQuery)) > :threshold
                     ORDER BY score DESC
                     LIMIT :topK
                     """;
@@ -243,7 +271,9 @@ public class BM25SearchServiceImpl implements BM25SearchService {
                            ts_rank(dc.content_tsv, to_tsquery('simple', :tsQuery)) as score
                     FROM document_chunks dc
                     JOIN documents d ON dc.document_id = d.id
-                    WHERE d.knowledge_base_id = :knowledgeBaseId AND dc.content_tsv @@ to_tsquery('simple', :tsQuery)
+                    WHERE d.knowledge_base_id = :knowledgeBaseId
+                      AND dc.content_tsv @@ to_tsquery('simple', :tsQuery)
+                      AND ts_rank(dc.content_tsv, to_tsquery('simple', :tsQuery)) > :threshold
                     ORDER BY score DESC
                     LIMIT :topK
                     """;
@@ -253,6 +283,7 @@ public class BM25SearchServiceImpl implements BM25SearchService {
                            ts_rank(dc.content_tsv, to_tsquery('simple', :tsQuery)) as score
                     FROM document_chunks dc
                     WHERE dc.content_tsv @@ to_tsquery('simple', :tsQuery)
+                      AND ts_rank(dc.content_tsv, to_tsquery('simple', :tsQuery)) > :threshold
                     ORDER BY score DESC
                     LIMIT :topK
                     """;

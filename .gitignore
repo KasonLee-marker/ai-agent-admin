@@ -94,3 +94,4 @@ rebel.xml
 /frontend/test-results/
 /tasks/
 /release/
+/admin-server-runtime/src/test/java/com/aiagent/admin/splitter/OverlapAnalysisTest.java

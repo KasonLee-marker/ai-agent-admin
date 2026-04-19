@@ -70,8 +70,49 @@ const ChatPage: React.FC = () => {
     // RAG 配置状态
     const [enableRag, setEnableRag] = useState(false)
     const [ragTopK, setRagTopK] = useState(5)
-    const [ragThreshold, setRagThreshold] = useState(0.5)
+    const [ragThreshold, setRagThreshold] = useState(0.3)
     const [ragStrategy, setRagStrategy] = useState('VECTOR')
+
+    // 根据检索策略返回阈值范围和默认值
+    const getThresholdConfig = (strategy: string) => {
+        switch (strategy) {
+            case 'BM25':
+                return {
+                    min: 0,
+                    max: 0.5,
+                    step: 0.01,
+                    default: 0.05,
+                    marks: {0: '0', 0.1: '0.1', 0.3: '0.3', 0.5: '0.5'},
+                    tip: 'BM25 分数范围: 0.01-0.5，建议阈值: 0.01-0.1'
+                }
+            case 'HYBRID':
+                return {
+                    min: 0,
+                    max: 0.05,
+                    step: 0.005,
+                    default: 0.01,
+                    marks: {0: '0', 0.02: '0.02', 0.04: '0.04', 0.05: '0.05'},
+                    tip: '混合检索使用 RRF 融合分数，范围: 0-0.05，建议阈值: 0.005-0.02'
+                }
+            case 'VECTOR':
+            default:
+                return {
+                    min: 0,
+                    max: 1,
+                    step: 0.1,
+                    default: 0.3,
+                    marks: {0: '0', 0.3: '0.3', 0.5: '0.5', 0.7: '0.7', 1: '1'},
+                    tip: '向量相似度范围: 0-1，建议阈值: 0.3-0.7'
+                }
+        }
+    }
+
+    // 当策略改变时，自动调整阈值到合适的默认值
+    const handleStrategyChange = (strategy: string) => {
+        setRagStrategy(strategy)
+        const config = getThresholdConfig(strategy)
+        setRagThreshold(config.default)
+    }
 
     // 流式输出状态
     const [isStreaming, setIsStreaming] = useState(false)
@@ -212,8 +253,16 @@ const ChatPage: React.FC = () => {
         // 设置 RAG 配置状态
         setEnableRag(session.enableRag || false)
         setRagTopK(session.ragTopK || 5)
-        setRagThreshold(session.ragThreshold || 0.5)
         setRagStrategy(session.ragStrategy || 'VECTOR')
+        // 根据策略调整阈值范围，确保阈值在有效范围内
+        const strategy = session.ragStrategy || 'VECTOR'
+        const config = getThresholdConfig(strategy)
+        let threshold = session.ragThreshold || config.default
+        // 如果阈值超出范围，调整为默认值
+        if (threshold > config.max || threshold < config.min) {
+            threshold = config.default
+        }
+        setRagThreshold(threshold)
         editSessionForm.setFieldsValue({
             knowledgeBaseId: session.knowledgeBaseId,
             ragEmbeddingModelId: session.ragEmbeddingModelId
@@ -334,28 +383,38 @@ const ChatPage: React.FC = () => {
         )
     }
 
-    const renderSource = (source: VectorSearchResult, index: number) => (
-        <Collapse
-            key={source.chunkId}
-            size="small"
-            items={[{
-                key: '1',
-                label: (
-                    <Space>
-                        <Tag color="blue">{index + 1}</Tag>
-                        <FileTextOutlined/>
-                        <span>{source.documentName}</span>
-                        <Tag>相似度: {source.score.toFixed(3)}</Tag>
-                    </Space>
-                ),
-                children: (
-                    <div style={{whiteSpace: 'pre-wrap', fontSize: 13}}>
-                        {source.content}
-                    </div>
-                )
-            }]}
-        />
-    )
+    const renderSource = (source: VectorSearchResult, index: number, strategy?: string) => {
+        // 根据检索策略显示不同的分数标签
+        let scoreLabel = '相似度'
+        if (strategy === 'BM25') {
+            scoreLabel = 'BM25分数'
+        } else if (strategy === 'HYBRID') {
+            scoreLabel = 'RRF分数'
+        }
+
+        return (
+            <Collapse
+                key={source.chunkId}
+                size="small"
+                items={[{
+                    key: '1',
+                    label: (
+                        <Space>
+                            <Tag color="blue">{index + 1}</Tag>
+                            <FileTextOutlined/>
+                            <span>{source.documentName}</span>
+                            <Tag>{scoreLabel}: {source.score.toFixed(3)}</Tag>
+                        </Space>
+                    ),
+                    children: (
+                        <div style={{whiteSpace: 'pre-wrap', fontSize: 13}}>
+                            {source.content}
+                        </div>
+                    )
+                }]}
+            />
+        )
+    }
 
     const renderMessage = (msg: ChatMessage) => {
         const isUser = msg.role === 'USER'
@@ -434,7 +493,7 @@ const ChatPage: React.FC = () => {
                                 参考来源 ({msg.sources!.length}个):
                             </div>
                             <div style={{maxHeight: 300, overflow: 'auto'}}>
-                                {msg.sources!.map((s, i) => renderSource(s, i))}
+                                {msg.sources!.map((s, i) => renderSource(s, i, currentSession?.ragStrategy))}
                             </div>
                         </>
                     )}
@@ -656,6 +715,19 @@ const ChatPage: React.FC = () => {
                                 </Select>
                             </Form.Item>
 
+                            <Form.Item name="ragStrategy" label="检索策略"
+                                       rules={[{required: true, message: '请选择检索策略'}]}>
+                                <Select
+                                    value={ragStrategy}
+                                    onChange={handleStrategyChange}
+                                    options={[
+                                        {value: 'VECTOR', label: '向量检索 (语义相似度)'},
+                                        {value: 'BM25', label: 'BM25 关键词 (精确匹配)'},
+                                        {value: 'HYBRID', label: '混合检索 (RRF融合)'}
+                                    ]}
+                                />
+                            </Form.Item>
+
                             <Form.Item
                                 name="ragEmbeddingModelId"
                                 label={
@@ -687,30 +759,26 @@ const ChatPage: React.FC = () => {
                                 />
                             </Form.Item>
 
-                            <Form.Item label="相似度阈值">
+                            <Form.Item label={
+                                <Space>
+                                    相似度阈值
+                                    <InfoCircleOutlined title={getThresholdConfig(ragStrategy).tip}/>
+                                </Space>
+                            }>
                                 <Slider
-                                    min={0}
-                                    max={1}
-                                    step={0.1}
+                                    min={getThresholdConfig(ragStrategy).min}
+                                    max={getThresholdConfig(ragStrategy).max}
+                                    step={getThresholdConfig(ragStrategy).step}
                                     value={ragThreshold}
                                     onChange={(v) => {
                                         setRagThreshold(v)
                                         sessionForm.setFieldsValue({ragThreshold: v})
                                     }}
-                                    marks={{0: '0', 0.5: '0.5', 1: '1'}}
+                                    marks={getThresholdConfig(ragStrategy).marks}
                                 />
-                            </Form.Item>
-
-                            <Form.Item name="ragStrategy" label="检索策略">
-                                <Select
-                                    value={ragStrategy}
-                                    onChange={(v) => setRagStrategy(v)}
-                                    options={[
-                                        {value: 'VECTOR', label: '向量检索'},
-                                        {value: 'BM25', label: 'BM25 关键词'},
-                                        {value: 'HYBRID', label: '混合检索'}
-                                    ]}
-                                />
+                                <div style={{fontSize: 12, color: '#666', marginTop: 4}}>
+                                    当前值: {ragThreshold.toFixed(3)}
+                                </div>
                             </Form.Item>
                         </>
                     )}
@@ -806,6 +874,19 @@ const ChatPage: React.FC = () => {
                                 </Select>
                             </Form.Item>
 
+                            <Form.Item name="ragStrategy" label="检索策略"
+                                       rules={[{required: true, message: '请选择检索策略'}]}>
+                                <Select
+                                    value={ragStrategy}
+                                    onChange={handleStrategyChange}
+                                    options={[
+                                        {value: 'VECTOR', label: '向量检索 (语义相似度)'},
+                                        {value: 'BM25', label: 'BM25 关键词 (精确匹配)'},
+                                        {value: 'HYBRID', label: '混合检索 (RRF融合)'}
+                                    ]}
+                                />
+                            </Form.Item>
+
                             <Form.Item
                                 name="ragEmbeddingModelId"
                                 label={
@@ -834,27 +915,23 @@ const ChatPage: React.FC = () => {
                                 />
                             </Form.Item>
 
-                            <Form.Item label="相似度阈值">
+                            <Form.Item label={
+                                <Space>
+                                    相似度阈值
+                                    <InfoCircleOutlined title={getThresholdConfig(ragStrategy).tip}/>
+                                </Space>
+                            }>
                                 <Slider
-                                    min={0}
-                                    max={1}
-                                    step={0.1}
+                                    min={getThresholdConfig(ragStrategy).min}
+                                    max={getThresholdConfig(ragStrategy).max}
+                                    step={getThresholdConfig(ragStrategy).step}
                                     value={ragThreshold}
                                     onChange={(v) => setRagThreshold(v)}
-                                    marks={{0: '0', 0.5: '0.5', 1: '1'}}
+                                    marks={getThresholdConfig(ragStrategy).marks}
                                 />
-                            </Form.Item>
-
-                            <Form.Item label="检索策略">
-                                <Select
-                                    value={ragStrategy}
-                                    onChange={(v) => setRagStrategy(v)}
-                                    options={[
-                                        {value: 'VECTOR', label: '向量检索'},
-                                        {value: 'BM25', label: 'BM25 关键词'},
-                                        {value: 'HYBRID', label: '混合检索'}
-                                    ]}
-                                />
+                                <div style={{fontSize: 12, color: '#666', marginTop: 4}}>
+                                    当前值: {ragThreshold.toFixed(3)}
+                                </div>
                             </Form.Item>
                         </>
                     )}

@@ -101,6 +101,9 @@ public class Document {
 
     /**
      * 分块策略（FIXED_SIZE/PARAGRAPH/SENTENCE/RECURSIVE/SEMANTIC）
+     * <p>
+     * 所有策略都使用 HanLP 进行句子分割，确保 overlap 对中文有效。
+     * </p>
      */
     @Column(name = "chunk_strategy", length = 20)
     @Builder.Default

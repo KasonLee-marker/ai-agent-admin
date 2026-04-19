@@ -240,8 +240,7 @@ const DocumentPage: React.FC = () => {
                 name: values.name,
                 chunkStrategy: values.chunkStrategy,
                 chunkSize: values.chunkSize,
-                chunkOverlap: values.chunkOverlap,
-                embeddingModelId: values.semanticEmbeddingModelId // 语义分块时传递
+                chunkOverlap: values.chunkOverlap
             })
             if (res.success) {
                 message.success(`${uploadFile.name} 上传成功，正在处理...`)
@@ -590,12 +589,12 @@ const DocumentPage: React.FC = () => {
                             <span>分块策略</span>
                             <Tooltip title={
                                 <div>
-                                    <p><strong>固定大小</strong>：按指定字符数分块，在句子边界处分割</p>
+                                    <p><strong>固定大小</strong>：按指定字符数分块，使用 HanLP 处理 overlap</p>
                                     <p><strong>按段落</strong>：以双换行分隔段落，过长段落会进一步分割</p>
-                                    <p><strong>按句子</strong>：以中英文句号、问号分隔，合并到目标大小</p>
-                                    <p><strong>递归分块</strong>：段落→句子→固定大小，保证语义完整性</p>
-                                    <p><strong>语义分块</strong>：调用 Embedding API 计算句子相似度，在语义断点处分割（需选择
-                                        Embedding 模型）</p>
+                                    <p><strong>按句子</strong>：使用 HanLP 进行准确的中文句子分割</p>
+                                    <p><strong>递归分块</strong>：段落→句子→固定大小，使用 HanLP 处理 overlap</p>
+                                    <p><strong>语义分块</strong>：调用 Embedding API 计算句子相似度，在语义断点处分割（自动使用知识库默认模型）
+                                    </p>
                                 </div>
                             }>
                                 <QuestionCircleOutlined style={{color: '#1890ff'}}/>
@@ -611,7 +610,7 @@ const DocumentPage: React.FC = () => {
                         </Radio.Group>
                     </Form.Item>
 
-                    {/* 分块大小和重叠：仅 FIXED_SIZE、SENTENCE、RECURSIVE 需要 */}
+                    {/* 分块大小和重叠：FIXED_SIZE、SENTENCE、RECURSIVE 需要 */}
                     <Form.Item shouldUpdate={(prev, curr) => prev.chunkStrategy !== curr.chunkStrategy}>
                         {({getFieldValue}) => {
                             const strategy = getFieldValue('chunkStrategy')
@@ -638,25 +637,11 @@ const DocumentPage: React.FC = () => {
                                         </Card>
                                     )}
                                     {strategy === 'SEMANTIC' && (
-                                        <>
-                                            <Form.Item label="Embedding 模型">
-                                                <Select
-                                                    style={{width: '100%'}}
-                                                    value={getFieldValue('semanticEmbeddingModelId') || selectedEmbedModelId}
-                                                    onChange={(val) => uploadForm.setFieldValue('semanticEmbeddingModelId', val)}
-                                                    options={embeddingModels.map(m => ({
-                                                        value: m.id,
-                                                        label: m.isDefaultEmbedding ? `${m.name} (默认)` : m.name
-                                                    }))}
-                                                    placeholder="选择 Embedding 模型"
-                                                />
-                                            </Form.Item>
-                                            <Card size="small" style={{marginBottom: 16, background: '#f5f5f5'}}>
-                                                <span style={{color: '#666'}}>
-                                                    💡 语义分块会调用 Embedding API 计算句子相似度，在语义断点处自动分割，无需指定固定大小
-                                                </span>
-                                            </Card>
-                                        </>
+                                        <Card size="small" style={{marginBottom: 16, background: '#f5f5f5'}}>
+                                            <span style={{color: '#666'}}>
+                                                💡 语义分块会调用 Embedding API 计算句子相似度，在语义断点处自动分割，自动使用知识库默认 Embedding 模型
+                                            </span>
+                                        </Card>
                                     )}
                                 </>
                             )

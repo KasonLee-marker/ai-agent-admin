@@ -68,7 +68,14 @@
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j</artifactId>
-            <version>0.36.2</version>
+            <version>1.13.0</version>
+        </dependency>
+
+        <!-- HanLP - 中文句子分割 -->
+        <dependency>
+            <groupId>com.hankcs</groupId>
+            <artifactId>hanlp</artifactId>
+            <version>portable-1.8.6</version>
         </dependency>
 
         <!-- OkHttp for detailed HTTP logging -->

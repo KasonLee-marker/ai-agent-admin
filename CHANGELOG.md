@@ -48,6 +48,70 @@ docker run -d --name agentx-postgres -p 5432:5432 postgres-pgvector-jieba:pg15
 
 **解决方案**：使用 pg_jieba 分词 + ts_rank 评分：
 
+### BM25 阈值过滤修复
+
+**问题**：BM25 搜索完全忽略用户设置的阈值，返回所有结果。
+
+**原因**：
+
+- `BM25SearchService.searchBM25()` 方法没有 threshold 参数
+- SQL 查询中没有 score 过滤条件
+- DocumentServiceImpl 调用 BM25 时未传递 threshold
+
+**解决方案**：
+
+1. 更新接口签名：
+
+```java
+List<VectorSearchResult> searchBM25(String query, String knowledgeBaseId, 
+    String documentId, int topK, Double threshold);
+```
+
+2. SQL 添加阈值过滤：
+
+```sql
+WHERE content_tsv_jieba @@ to_tsquery('jiebamp', :tsQuery)
+  AND ts_rank(content_tsv_jieba, to_tsquery('jiebamp', :tsQuery)) > :threshold
+```
+
+3. DocumentServiceImpl 传递 threshold 参数。
+
+**分数范围差异（重要）**：
+
+| 检索方式          | 分数范围     | 建议阈值       |
+|---------------|----------|------------|
+| 向量检索（余弦相似度）   | 0-1      | 0.3-0.7    |
+| BM25（ts_rank） | 0.01-0.5 | 0.01-0.1   |
+| 混合检索（RRF）     | 0-0.05   | 0.005-0.02 |
+
+### 前端 RAG 配置优化
+
+**改动**：
+
+1. **检索策略位置调整**：移到知识库选择之后，必填验证
+2. **阈值范围动态调整**：根据检索策略显示不同的阈值范围
+    - 向量检索：0-1，默认 0.3
+    - BM25：0-0.5，默认 0.05
+    - 混合检索：0-0.05，默认 0.01
+3. **分数标签优化**：来源显示根据策略显示不同标签
+    - 向量检索显示"相似度"
+    - BM25 显示"BM25分数"
+    - 混合检索显示"RRF分数"
+
+**RRF 分数说明**：
+
+混合检索使用 RRF (Reciprocal Rank Fusion) 算法融合两种检索结果：
+
+```
+RRF_score = Σ 1/(k + rank_i)，k=60
+```
+
+- 双检索排名第一的结果分数 ≈ 0.033
+- 排名靠后的结果分数 ≈ 0.008
+  | BM25（ts_rank） | 0.01-0.5 | 0.01-0.1 |
+
+用户设置的 0.5 阈值对 BM25 过高（BM25 最高分才约 0.5），会导致几乎无结果返回。
+
 ```java
 // BM25SearchServiceImpl.java
 // 中文查询：使用 jiebamp parser（最大概率模式）
