@@ -206,6 +206,26 @@ ai-agent-admin/
 - 向量检索（相似度搜索）
 - RAG 对话（检索增强生成）
 
+#### 文档分块策略 ✅ v1.0.1 新增
+
+基于 HanLP 中文句子分割，支持多种分块策略：
+
+| 策略 | 说明 | HanLP应用 |
+|------|------|----------|
+| FIXED_SIZE | 按字符数分块 | HanLP分句 → 合并到目标大小 |
+| PARAGRAPH | 按段落分块 | HanLP处理过长段落 |
+| SENTENCE | 按句子分块 | HanLP直接分句 |
+| RECURSIVE | 递归分块（段落→句子→字符） | HanLP分句作为基础 |
+| SEMANTIC | 语义分块 | HanLP分句 → Embedding相似度 → 断点分割 |
+
+**overlap 实现**：相邻分块自动包含重叠内容，确保语义连贯。
+
+**技术栈**：
+- LangChain4j 1.13.0 - 分块框架
+- HanLP portable-1.8.6 - 中文句子分割
+
+详细文档: [nlp-library-research.md](nlp-library-research.md)
+
 #### Embedding服务 ✅ 新增
 
 - **EmbeddingService**: 提供文本向量计算能力
@@ -234,9 +254,11 @@ ai-agent-admin/
 |------|------|------|
 | 后端框架 | Spring Boot | 3.2.12 |
 | AI 框架 | Spring AI | 0.8.1 |
+| 文档分块 | LangChain4j + HanLP | 1.13.0 + portable-1.8.6 |
 | Java 版本 | OpenJDK | 17 |
 | 主数据库 | H2 (dev) / PostgreSQL (prod) | - |
 | 向量数据库 | PostgreSQL + pgvector | 15+ |
+| 中文分词 | pg_jieba | - |
 | ORM 框架 | Spring Data JPA | - |
 | API 文档 | SpringDoc OpenAPI | 2.3.0 |
 | 对象映射 | MapStruct | 1.5.5 |

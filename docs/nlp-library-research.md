@@ -1,5 +1,9 @@
 # 中文 NLP 库调研报告
 
+> **状态：已实施** - 项目已集成 HanLP portable-1.8.6，用于文档分块的中文句子分割。
+> 
+> **集成时间**：2026-04-19（v1.0.1）
+
 ## 调研目的
 
 为知识库语义分割功能选择合适的中文 NLP 库。
@@ -177,10 +181,14 @@ public List<String> semanticSplit(String text, double threshold) {
 
 ## 结论
 
-| 场景        | 推荐方案                  |
-|-----------|-----------------------|
-| 简单 RAG 分块 | 自定义规则（当前实现）           |
-| 需要准确句子分割  | HanLP portable        |
-| 需要语义分割    | HanLP + Embedding 相似度 |
+| 场景        | 推荐方案                  | 实施状态 |
+|-----------|-----------------------|------|
+| 简单 RAG 分块 | 自定义规则（当前实现）           | ❌ 已废弃 |
+| 需要准确句子分割  | HanLP portable        | ✅ 已实施 |
+| 需要语义分割    | HanLP + Embedding 相似度 | ✅ 已实施 |
 
-**建议**：先用 HanLP portable 替代自定义规则，后续再实现语义分割。
+**实施情况**：
+- **v1.0.1** 已集成 HanLP portable-1.8.6
+- 所有分块策略（FIXED_SIZE、PARAGRAPH、SENTENCE、RECURSIVE、SEMANTIC）均使用 HanLP 进行中文句子分割
+- 使用 `SentencesUtil.toSentenceList(text)` API，准确识别中文句子边界
+- 解决了 LangChain4j overlapFrom 方法对中文标点无法识别的问题

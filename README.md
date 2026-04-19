@@ -11,14 +11,16 @@
 - 📊 **数据集管理** - 导入导出、版本控制、数据项管理
 - 📈 **评估系统** - 批量实验、RAG 评估、结果分析、多指标评分
 - 🔍 **文档检索/RAG** - 文档上传、向量化、相似度检索、语义切分
+- 📄 **文档分块** - HanLP 中文分句、多种分块策略、智能 overlap
 
 ## 技术栈
 
 | 层级      | 技术                              | 版本                          |
 |---------|---------------------------------|-----------------------------|
 | 后端      | Spring Boot + Spring AI         | 3.2.12 + 0.8.1              |
+| 文档分块    | LangChain4j + HanLP             | 1.13.0 + portable-1.8.6     |
 | 前端      | React + TypeScript + Ant Design | 18.x + 5.3 + 5.x            |
-| 主数据库    | PostgreSQL + pgvector           | 15+                         |
+| 主数据库    | PostgreSQL + pgvector + pg_jieba | 15+                         |
 | 开发数据库   | H2                              | -                           |
 | AI 模型   | Spring AI 支持的多供应商               | OpenAI、DashScope、DeepSeek 等 |
 | 构建工具    | Maven                           | 3.9+                        |
@@ -239,6 +241,15 @@ docker exec -i agentx-postgres psql -U agentx -d aiagent < docs/database/schema.
 ## License
 
 Apache License 2.0
+
+## 版本历史
+
+| 版本 | 日期 | 主要更新 |
+|-----|------|---------|
+| v1.0.1 | 2026-04-19 | HanLP 中文句子分割集成，修复中文文档分块 overlap |
+| v1.0.0 | 2026-04-19 | 对话调试与 RAG 合并，pg_jieba 中文分词，BM25 搜索 |
+
+详见 [CHANGELOG.md](./CHANGELOG.md)
 
 ## 相关链接
 
