@@ -53,22 +53,6 @@ public class PromptServiceImpl implements PromptService {
      */
     private static final Pattern VARIABLE_PATTERN = Pattern.compile("\\{\\{([^}]+)\\}\\}");
 
-    /**
-     * 创建新的提示词模板
-     * <p>
-     * 创建流程：
-     * <ol>
-     *   <li>检查名称唯一性</li>
-     *   <li>创建模板实体并保存</li>
-     *   <li>自动提取模板变量</li>
-     *   <li>创建初始版本记录（版本号 1）</li>
-     * </ol>
-     * </p>
-     *
-     * @param request 创建模板请求，包含名称、内容、描述、分类、标签等
-     * @return 创建成功的模板响应 DTO
-     * @throws IllegalArgumentException 模板名称已存在时抛出
-     */
     @Override
     @Transactional
     public PromptTemplateResponse createPrompt(PromptTemplateCreateRequest request) {
@@ -94,25 +78,6 @@ public class PromptServiceImpl implements PromptService {
         return promptMapper.toResponse(saved);
     }
 
-    /**
-     * 更新提示词模板
-     * <p>
-     * 更新流程：
-     * <ol>
-     *   <li>验证模板存在</li>
-     *   <li>检查新名称唯一性（如果名称变更）</li>
-     *   <li>自动创建新版本记录（版本号递增）</li>
-     *   <li>更新模板内容和元数据</li>
-     *   <li>重新提取模板变量</li>
-     * </ol>
-     * </p>
-     *
-     * @param id      模板唯一标识
-     * @param request 更新请求，包含新内容、新名称等
-     * @return 更新后的模板响应 DTO
-     * @throws EntityNotFoundException   模板不存在时抛出
-     * @throws IllegalArgumentException  新名称已被占用时抛出
-     */
     @Override
     @Transactional
     public PromptTemplateResponse updatePrompt(String id, PromptTemplateUpdateRequest request) {
@@ -145,15 +110,6 @@ public class PromptServiceImpl implements PromptService {
         return promptMapper.toResponse(updated);
     }
 
-    /**
-     * 删除提示词模板及其所有版本
-     * <p>
-     * 同时删除模板实体和所有历史版本记录。
-     * </p>
-     *
-     * @param id 模板唯一标识
-     * @throws EntityNotFoundException 模板不存在时抛出
-     */
     @Override
     @Transactional
     public void deletePrompt(String id) {
@@ -164,13 +120,6 @@ public class PromptServiceImpl implements PromptService {
         promptTemplateRepository.deleteById(id);
     }
 
-    /**
-     * 根据ID获取提示词模板
-     *
-     * @param id 模板唯一标识
-     * @return 模板响应 DTO
-     * @throws EntityNotFoundException 模板不存在时抛出
-     */
     @Override
     @Transactional(readOnly = true)
     public PromptTemplateResponse getPrompt(String id) {
@@ -179,19 +128,6 @@ public class PromptServiceImpl implements PromptService {
         return promptMapper.toResponse(entity);
     }
 
-    /**
-     * 分页查询提示词模板列表
-     * <p>
-     * 支持按分类、标签、关键词筛选。
-     * 按更新时间倒序排列。
-     * </p>
-     *
-     * @param category 分类过滤条件（可选）
-     * @param tag      标签过滤条件（可选）
-     * @param keyword  搜索关键词（可选）
-     * @param pageable 分页参数
-     * @return 分页的模板响应 DTO
-     */
     @Override
     @Transactional(readOnly = true)
     public PageResponse<PromptTemplateResponse> listPrompts(String category, String tag, String keyword, Pageable pageable) {
@@ -200,16 +136,6 @@ public class PromptServiceImpl implements PromptService {
         return PageResponse.from(responsePage);
     }
 
-    /**
-     * 获取模板的版本历史列表
-     * <p>
-     * 按版本号倒序排列，返回完整的版本演变历史。
-     * </p>
-     *
-     * @param promptId 模板唯一标识
-     * @return 版本响应 DTO 列表
-     * @throws EntityNotFoundException 模板不存在时抛出
-     */
     @Override
     @Transactional(readOnly = true)
     public List<PromptVersionResponse> getPromptVersions(String promptId) {
@@ -220,26 +146,6 @@ public class PromptServiceImpl implements PromptService {
         return promptMapper.toVersionResponseList(versions);
     }
 
-    /**
-     * 回滚模板到指定版本
-     * <p>
-     * 回滚流程：
-     * <ol>
-     *   <li>验证模板和目标版本存在</li>
-     *   <li>创建新版本记录（内容复制自目标版本）</li>
-     *   <li>更新模板当前内容为目标版本内容</li>
-     *   <li>重新提取模板变量</li>
-     * </ol>
-     * </p>
-     * <p>
-     * 回滚操作本身会创建一个新版本，版本号继续递增。
-     * </p>
-     *
-     * @param promptId 模板唯一标识
-     * @param request  回滚请求，包含目标版本号和可选的变更日志
-     * @return 回滚后的模板响应 DTO
-     * @throws EntityNotFoundException 模板或目标版本不存在时抛出
-     */
     @Override
     @Transactional
     public PromptTemplateResponse rollbackPrompt(String promptId, RollbackRequest request) {
@@ -270,16 +176,6 @@ public class PromptServiceImpl implements PromptService {
         return promptMapper.toResponse(updated);
     }
 
-    /**
-     * 从模板内容中提取变量名列表
-     * <p>
-     * 使用正则表达式匹配 {{variableName}} 格式的模板变量。
-     * 自动去除重复变量和空白字符。
-     * </p>
-     *
-     * @param content 模板内容
-     * @return 变量名列表（去重后）
-     */
     @Override
     public List<String> extractVariables(String content) {
         List<String> variables = new ArrayList<>();

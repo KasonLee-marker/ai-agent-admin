@@ -42,30 +42,34 @@ cd ai-agent-admin
 
 ### 2. 初始化数据库
 
-#### 2.1 启动 PostgreSQL + pgvector
+#### 2.1 启动 PostgreSQL + pgvector + pg_jieba
 
 ```bash
-# 启动 PostgreSQL + pgvector（已内置向量插件）
+# 构建带中文分词的镜像
+cd docker/postgres-zhparser
+docker build -t postgres-pgvector-jieba:pg15 .
+
+# 启动容器（含 pgvector + pg_jieba 中文分词）
 docker run -d \
-  --name agent-postgres \
+  --name agentx-postgres \
   -e POSTGRES_USER=adminuser \
   -e POSTGRES_DB=admindb \
+  -e POSTGRES_PASSWORD=adminpass123 \
   -p 5432:5432 \
-  pgvector/pgvector:pg15
+  postgres-pgvector-jieba:pg15
 ```
 
-> **注意**: 使用 `pgvector/pgvector` 镜像已内置 pgvector 插件。如使用标准 PostgreSQL 镜像，需手动安装插件：
-> ```bash
-> # 在 PostgreSQL 容器中执行
-> apt-get update && apt-get install -y postgresql-15-pgvector
-> # 然后在数据库中启用
-> CREATE EXTENSION IF NOT EXISTS vector;
-> ```
+> **包含扩展**：
+> - pgvector - 向量存储，用于 Embedding 检索
+> - pg_jieba - 中文分词，用于 BM25 中文全文搜索
+> - pg_trgm - 三元组匹配，用于模糊搜索后备
+>
+> 详见 [docker/postgres-zhparser/README.md](./docker/postgres-zhparser/README.md)
 
 #### 2.2 初始化数据库表结构
 
 ```bash
-docker exec -i agent-postgres psql -U adminuser -d admindb < docs/database/schema.sql
+docker exec -i agentx-postgres psql -U adminuser -d admindb < docs/database/schema.sql
 ```
 
 详见 [docs/database/README.md](./docs/database/README.md)

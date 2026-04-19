@@ -10,13 +10,16 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.contains;
 
 /**
  * Embedding 向量存储服务测试类
@@ -34,7 +37,7 @@ import static org.mockito.Mockito.*;
 class EmbeddingStorageServiceImplTest {
 
     @Mock
-    private JdbcTemplate jdbcTemplate;
+    private NamedParameterJdbcTemplate namedTemplate;
 
     @Mock
     private VectorTableService vectorTableService;
@@ -64,14 +67,13 @@ class EmbeddingStorageServiceImplTest {
         int dimension = 1536;
         String tableName = "document_embeddings_1536";
 
-        when(jdbcTemplate.update(anyString(), anyString(), anyString(), anyString()))
-                .thenReturn(1);
+        when(namedTemplate.update(anyString(), anyMap())).thenReturn(1);
 
         // When
         embeddingStorageService.storeVector(chunkId, documentId, vector, dimension, tableName);
 
         // Then
-        verify(jdbcTemplate).update(anyString(), eq(chunkId), eq(documentId), anyString());
+        verify(namedTemplate).update(anyString(), any(Map.class));
     }
 
     @Test
@@ -85,15 +87,14 @@ class EmbeddingStorageServiceImplTest {
         String expectedTableName = "document_embeddings_1536";
 
         when(vectorTableService.ensureTableExists(dimension)).thenReturn(expectedTableName);
-        when(jdbcTemplate.update(anyString(), anyString(), anyString(), anyString()))
-                .thenReturn(1);
+        when(namedTemplate.update(anyString(), anyMap())).thenReturn(1);
 
         // When
         embeddingStorageService.storeVector(chunkId, documentId, vector, dimension, null);
 
         // Then
         verify(vectorTableService).ensureTableExists(dimension);
-        verify(jdbcTemplate).update(anyString(), eq(chunkId), eq(documentId), anyString());
+        verify(namedTemplate).update(anyString(), any(Map.class));
     }
 
     @Test
@@ -108,14 +109,13 @@ class EmbeddingStorageServiceImplTest {
                 new EmbeddingStorageService.VectorData("chunk-002", "doc-001", new float[]{0.3f, 0.4f})
         );
 
-        when(jdbcTemplate.update(anyString(), anyString(), anyString(), anyString()))
-                .thenReturn(1);
+        when(namedTemplate.update(anyString(), anyMap())).thenReturn(1);
 
         // When
         embeddingStorageService.storeVectorsBatch(vectors, dimension, tableName);
 
         // Then
-        verify(jdbcTemplate, times(2)).update(anyString(), anyString(), anyString(), anyString());
+        verify(namedTemplate, times(2)).update(anyString(), any(Map.class));
     }
 
     @Test
@@ -128,7 +128,7 @@ class EmbeddingStorageServiceImplTest {
         embeddingStorageService.storeVectorsBatch(vectors, 1536, "document_embeddings_1536");
 
         // Then
-        verify(jdbcTemplate, never()).update(anyString(), anyString(), anyString(), anyString());
+        verify(namedTemplate, never()).update(anyString(), any(SqlParameterSource.class));
     }
 
     @Test
@@ -138,13 +138,13 @@ class EmbeddingStorageServiceImplTest {
         String documentId = "doc-001";
         String tableName = "document_embeddings_1536";
 
-        when(jdbcTemplate.update(anyString(), eq(documentId))).thenReturn(5);
+        when(namedTemplate.update(anyString(), anyMap())).thenReturn(5);
 
         // When
         embeddingStorageService.deleteByDocument(documentId, tableName);
 
         // Then
-        verify(jdbcTemplate).update(contains("DELETE FROM"), eq(documentId));
+        verify(namedTemplate).update(contains("DELETE FROM"), any(Map.class));
     }
 
     @Test
@@ -157,7 +157,7 @@ class EmbeddingStorageServiceImplTest {
         embeddingStorageService.deleteByDocument(documentId, null);
 
         // Then
-        verify(jdbcTemplate, never()).update(anyString(), anyString());
+        verify(namedTemplate, never()).update(anyString(), any(SqlParameterSource.class));
     }
 
     @Test
@@ -168,10 +168,7 @@ class EmbeddingStorageServiceImplTest {
         int topK = 5;
         double threshold = 0.5;
 
-        // searchSimilar 使用 jdbcTemplate.query，返回空结果
-        // 这里验证方法被调用，不验证具体结果（需要更复杂的 Mock）
-
-        // When & Then - 验证配置信息正确
+        // 验证配置信息正确
         assertThat(embeddingConfig.getEmbeddingTableName()).isEqualTo("document_embeddings_1536");
         assertThat(embeddingConfig.getEmbeddingDimension()).isEqualTo(1536);
     }

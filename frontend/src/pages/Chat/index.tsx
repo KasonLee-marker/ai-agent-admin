@@ -639,10 +639,12 @@ const ChatPage: React.FC = () => {
                                 <Select
                                     placeholder="选择知识库"
                                     onChange={(value: string) => {
-                                        // 自动选择知识库的默认 Embedding 模型
+                                        // 自动继承知识库的默认 Embedding 模型，不可修改
                                         const kb = knowledgeBases.find(k => k.id === value)
                                         if (kb?.defaultEmbeddingModelId) {
                                             sessionForm.setFieldsValue({ragEmbeddingModelId: kb.defaultEmbeddingModelId})
+                                        } else {
+                                            sessionForm.setFieldsValue({ragEmbeddingModelId: undefined})
                                         }
                                     }}
                                 >
@@ -654,12 +656,19 @@ const ChatPage: React.FC = () => {
                                 </Select>
                             </Form.Item>
 
-                            <Form.Item name="ragEmbeddingModelId" label="Embedding 模型">
-                                <Select placeholder="选择 Embedding 模型" allowClear>
+                            <Form.Item
+                                name="ragEmbeddingModelId"
+                                label={
+                                    <Space>
+                                        Embedding 模型
+                                        <InfoCircleOutlined title="继承知识库的 Embedding 模型，不可修改"/>
+                                    </Space>
+                                }
+                            >
+                                <Select placeholder="请先选择知识库" disabled>
                                     {embeddingModels.map(m => (
                                         <Select.Option key={m.id} value={m.id}>
                                             {m.name}
-                                            {m.isDefaultEmbedding && ' [默认]'}
                                         </Select.Option>
                                     ))}
                                 </Select>
@@ -780,9 +789,12 @@ const ChatPage: React.FC = () => {
                                 <Select
                                     placeholder="选择知识库"
                                     onChange={(value: string) => {
+                                        // 自动继承知识库的默认 Embedding 模型，不可修改
                                         const kb = knowledgeBases.find(k => k.id === value)
                                         if (kb?.defaultEmbeddingModelId) {
                                             editSessionForm.setFieldsValue({ragEmbeddingModelId: kb.defaultEmbeddingModelId})
+                                        } else {
+                                            editSessionForm.setFieldsValue({ragEmbeddingModelId: undefined})
                                         }
                                     }}
                                 >
@@ -794,12 +806,19 @@ const ChatPage: React.FC = () => {
                                 </Select>
                             </Form.Item>
 
-                            <Form.Item name="ragEmbeddingModelId" label="Embedding 模型">
-                                <Select placeholder="选择 Embedding 模型" allowClear>
+                            <Form.Item
+                                name="ragEmbeddingModelId"
+                                label={
+                                    <Space>
+                                        Embedding 模型
+                                        <InfoCircleOutlined title="继承知识库的 Embedding 模型，不可修改"/>
+                                    </Space>
+                                }
+                            >
+                                <Select placeholder="请先选择知识库" disabled>
                                     {embeddingModels.map(m => (
                                         <Select.Option key={m.id} value={m.id}>
                                             {m.name}
-                                            {m.isDefaultEmbedding && ' [默认]'}
                                         </Select.Option>
                                     ))}
                                 </Select>

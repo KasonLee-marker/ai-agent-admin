@@ -399,7 +399,8 @@ const KnowledgeBasesPage: React.FC = () => {
         } catch {
             // ignore
         }
-        setReindexModelId(null)
+        // 默认选中当前知识库的 embedding 模型
+        setReindexModelId(selectedKb.defaultEmbeddingModelId || null)
         setReindexModalVisible(true)
     }
 
@@ -896,23 +897,28 @@ const KnowledgeBasesPage: React.FC = () => {
                     <span>当前模型: {selectedKb?.defaultEmbeddingModelName || embeddingModels.find(m => m.isDefaultEmbedding)?.name || '-'}</span>
                 </div>
                 <Form layout="vertical">
-                    <Form.Item label="选择新的 Embedding 模型">
+                    <Form.Item label="选择 Embedding 模型">
                         <Select
                             style={{width: '100%'}}
                             value={reindexModelId}
                             onChange={setReindexModelId}
                             options={embeddingModels.map(m => ({
                                 value: m.id,
-                                label: m.isDefaultEmbedding ? `${m.name} (系统默认)` : m.name,
-                                disabled: m.id === selectedKb?.defaultEmbeddingModelId
+                                label: m.isDefaultEmbedding ? `${m.name} (系统默认)` : m.name
                             }))}
-                            placeholder="选择新模型"
+                            placeholder="选择模型"
                         />
                     </Form.Item>
+                    <div style={{color: '#666', fontSize: 12, marginTop: 8}}>
+                        选择当前模型将重新计算向量；选择其他模型将切换知识库的默认模型。
+                    </div>
                 </Form>
-                <div style={{color: '#666', fontSize: 12}}>
-                    重索引期间，知识库的文档检索可能会受到影响。完成后将自动切换到新模型。
-                </div>
+                <Alert
+                    message="重索引期间，知识库的文档检索可能会受到影响"
+                    type="info"
+                    showIcon
+                    style={{marginTop: 16}}
+                />
             </Modal>
         </div>
     )

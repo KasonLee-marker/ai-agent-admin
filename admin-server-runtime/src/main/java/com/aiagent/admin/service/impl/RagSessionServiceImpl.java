@@ -51,15 +51,6 @@ public class RagSessionServiceImpl implements RagSessionService {
     private final IdGenerator idGenerator;
     private final ObjectMapper objectMapper;
 
-    /**
-     * 创建新的 RAG 会话
-     *
-     * @param knowledgeBaseId  知识库 ID（可选）
-     * @param modelId          对话模型 ID（可选）
-     * @param embeddingModelId Embedding 模型 ID（可选）
-     * @param createdBy        创建者标识
-     * @return 创建的会话 DTO
-     */
     @Override
     @Transactional
     public RagSessionDTO createSession(String knowledgeBaseId, String modelId, String embeddingModelId, String createdBy) {
@@ -78,12 +69,6 @@ public class RagSessionServiceImpl implements RagSessionService {
         return toSessionDTO(saved);
     }
 
-    /**
-     * 获取会话详情
-     *
-     * @param sessionId 会话 ID
-     * @return 会话 DTO
-     */
     @Override
     @Transactional(readOnly = true)
     public RagSessionDTO getSession(String sessionId) {
@@ -92,13 +77,6 @@ public class RagSessionServiceImpl implements RagSessionService {
         return toSessionDTO(session);
     }
 
-    /**
-     * 查询用户的 RAG 会话列表
-     *
-     * @param createdBy 创建者标识
-     * @param pageable  分页参数
-     * @return 会话列表
-     */
     @Override
     @Transactional(readOnly = true)
     public List<RagSessionDTO> listSessions(String createdBy, Pageable pageable) {
@@ -108,11 +86,6 @@ public class RagSessionServiceImpl implements RagSessionService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * 删除会话及其消息
-     *
-     * @param sessionId 会话 ID
-     */
     @Override
     @Transactional
     public void deleteSession(String sessionId) {
@@ -124,13 +97,6 @@ public class RagSessionServiceImpl implements RagSessionService {
         log.info("Deleted RAG session: {}", sessionId);
     }
 
-    /**
-     * 保存用户消息
-     *
-     * @param sessionId 会话 ID
-     * @param content   用户问题内容
-     * @return 消息 DTO
-     */
     @Override
     @Transactional
     public RagMessageDTO saveUserMessage(String sessionId, String content) {
@@ -162,16 +128,6 @@ public class RagSessionServiceImpl implements RagSessionService {
         return toMessageDTO(saved);
     }
 
-    /**
-     * 保存助手消息
-     *
-     * @param sessionId 会话 ID
-     * @param content   AI 回答内容
-     * @param sources   检索来源列表
-     * @param modelName 模型名称
-     * @param latencyMs 响应延迟（毫秒）
-     * @return 消息 DTO
-     */
     @Override
     @Transactional
     public RagMessageDTO saveAssistantMessage(String sessionId, String content, List<VectorSearchResult> sources,
@@ -211,13 +167,6 @@ public class RagSessionServiceImpl implements RagSessionService {
         return toMessageDTO(saved);
     }
 
-    /**
-     * 获取会话的对话历史
-     *
-     * @param sessionId 会话 ID
-     * @param limit     最大消息数量（可选，null 表示全部）
-     * @return 消息列表
-     */
     @Override
     @Transactional(readOnly = true)
     public List<RagMessageDTO> getHistory(String sessionId, Integer limit) {
@@ -236,12 +185,6 @@ public class RagSessionServiceImpl implements RagSessionService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * 获取会话的所有消息
-     *
-     * @param sessionId 会话 ID
-     * @return 消息列表
-     */
     @Override
     @Transactional(readOnly = true)
     public List<RagMessageDTO> getSessionMessages(String sessionId) {
@@ -251,12 +194,6 @@ public class RagSessionServiceImpl implements RagSessionService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * 更新会话标题
-     *
-     * @param sessionId 会话 ID
-     * @param title     新标题
-     */
     @Override
     @Transactional
     public void updateSessionTitle(String sessionId, String title) {

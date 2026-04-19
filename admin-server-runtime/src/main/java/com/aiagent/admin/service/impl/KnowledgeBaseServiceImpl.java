@@ -49,23 +49,6 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     private final ModelConfigRepository modelConfigRepository;
     private final ReIndexService reIndexService;
 
-    /**
-     * 创建知识库
-     * <p>
-     * 执行流程：
-     * <ol>
-     *   <li>生成唯一 ID</li>
-     *   <li>验证默认 Embedding 模型存在且为 Embedding 类型</li>
-     *   <li>创建知识库实体</li>
-     *   <li>保存并返回响应</li>
-     * </ol>
-     * </p>
-     *
-     * @param request   知识库请求
-     * @param createdBy 创建人
-     * @return 创建的知识库响应
-     * @throws IllegalArgumentException 如果指定的模型不是 Embedding 类型
-     */
     @Override
     @Transactional
     public KnowledgeBaseResponse createKnowledgeBase(KnowledgeBaseRequest request, String createdBy) {
@@ -99,22 +82,6 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         return toResponse(knowledgeBase);
     }
 
-    /**
-     * 更新知识库
-     * <p>
-     * 如果更改了默认 Embedding 模型，将触发全库重索引：
-     * <ol>
-     *   <li>验证新 Embedding 模型存在且为 Embedding 类型</li>
-     *   <li>检测模型是否与原模型不同</li>
-     *   <li>如果不同且知识库有文档，启动重索引任务</li>
-     * </ol>
-     * </p>
-     *
-     * @param id      知识库 ID
-     * @param request 知识库请求
-     * @return 更新后的知识库响应
-     * @throws IllegalArgumentException 如果指定的模型不是 Embedding 类型
-     */
     @Override
     @Transactional
     public KnowledgeBaseResponse updateKnowledgeBase(String id, KnowledgeBaseRequest request) {
@@ -158,12 +125,6 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         return toResponse(knowledgeBase);
     }
 
-    /**
-     * 获取知识库详情
-     *
-     * @param id 知识库 ID
-     * @return 知识库响应
-     */
     @Override
     public KnowledgeBaseResponse getKnowledgeBase(String id) {
         KnowledgeBase knowledgeBase = knowledgeBaseRepository.findById(id)
@@ -171,24 +132,12 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         return toResponse(knowledgeBase);
     }
 
-    /**
-     * 分页获取知识库列表
-     *
-     * @param createdBy 创建人
-     * @param pageable  分页参数
-     * @return 知识库分页列表
-     */
     @Override
     public Page<KnowledgeBaseResponse> listKnowledgeBases(String createdBy, Pageable pageable) {
         return knowledgeBaseRepository.findByCreatedBy(createdBy, pageable)
                 .map(this::toResponse);
     }
 
-    /**
-     * 获取所有知识库列表（不分页）
-     *
-     * @return 知识库列表
-     */
     @Override
     public List<KnowledgeBaseResponse> listAllKnowledgeBases() {
         return knowledgeBaseRepository.findAllByOrderByCreatedAtDesc()
@@ -197,14 +146,6 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * 删除知识库
-     * <p>
-     * 如果知识库下有文档，将抛出异常阻止删除。
-     * </p>
-     *
-     * @param id 知识库 ID
-     */
     @Override
     @Transactional
     public void deleteKnowledgeBase(String id) {
@@ -221,14 +162,6 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         log.info("Deleted knowledge base: {}", knowledgeBase.getName());
     }
 
-    /**
-     * 更新知识库统计数据
-     * <p>
-     * 重新计算知识库的文档数量和分块数量。
-     * </p>
-     *
-     * @param knowledgeBaseId 知识库 ID
-     */
     @Override
     @Transactional
     public void updateStatistics(String knowledgeBaseId) {

@@ -35,22 +35,6 @@ public class ReIndexServiceImpl implements ReIndexService {
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    /**
-     * 启动知识库重索引（异步执行）
-     * <p>
-     * 执行流程：
-     * <ol>
-     *   <li>验证知识库存在且无正在进行的重索引</li>
-     *   <li>验证新 Embedding 模型已健康检查（有 dimension 和 table）</li>
-     *   <li>初始化进度状态</li>
-     *   <li>异步执行重索引任务</li>
-     * </ol>
-     * </p>
-     *
-     * @param knowledgeBaseId     知识库 ID
-     * @param newEmbeddingModelId 新 Embedding 模型 ID
-     * @return 重索引进度响应
-     */
     @Override
     @Transactional
     public ReindexProgressResponse startReindex(String knowledgeBaseId, String newEmbeddingModelId) {
@@ -88,12 +72,6 @@ public class ReIndexServiceImpl implements ReIndexService {
         return buildProgressResponse(kb, newEmbeddingModelId);
     }
 
-    /**
-     * 获取重索引进度
-     *
-     * @param knowledgeBaseId 知识库 ID
-     * @return 重索引进度响应
-     */
     @Override
     public ReindexProgressResponse getReindexProgress(String knowledgeBaseId) {
         KnowledgeBase kb = knowledgeBaseRepository.findById(knowledgeBaseId)
@@ -102,11 +80,6 @@ public class ReIndexServiceImpl implements ReIndexService {
         return buildProgressResponse(kb, null);
     }
 
-    /**
-     * 取消正在进行的重索引
-     *
-     * @param knowledgeBaseId 知识库 ID
-     */
     @Override
     @Transactional
     public void cancelReindex(String knowledgeBaseId) {

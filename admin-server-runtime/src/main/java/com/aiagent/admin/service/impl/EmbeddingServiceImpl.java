@@ -61,20 +61,6 @@ public class EmbeddingServiceImpl implements EmbeddingService {
      */
     private static final String TEST_TEXT = "test";
 
-    /**
-     * 计算单个文本的 Embedding 向量
-     * <p>
-     * 执行流程：
-     * <ol>
-     *   <li>获取 embedding 模型配置</li>
-     *   <li>调用 Embedding API（区分 OpenAI 和 DashScope）</li>
-     *   <li>解析返回的向量数据</li>
-     * </ol>
-     * </p>
-     *
-     * @param text 输入文本
-     * @return Embedding 向量
-     */
     @Override
     public float[] embed(String text) {
         if (text == null || text.isEmpty()) {
@@ -85,15 +71,6 @@ public class EmbeddingServiceImpl implements EmbeddingService {
         return callEmbeddingApi(text, embeddingConfig);
     }
 
-    /**
-     * 批量计算文本的 Embedding 向量
-     * <p>
-     * 使用批量 API 提高效率。一次请求最多支持 2048 个文本。
-     * </p>
-     *
-     * @param texts 输入文本列表
-     * @return Embedding 向量列表
-     */
     @Override
     public List<float[]> embedBatch(List<String> texts) {
         if (texts == null || texts.isEmpty()) {
@@ -112,17 +89,6 @@ public class EmbeddingServiceImpl implements EmbeddingService {
         }
     }
 
-    /**
-     * 使用指定的模型配置批量计算文本的 Embedding 向量
-     * <p>
-     * 不查找默认配置，直接使用传入的模型配置。
-     * 用于文档向量化时指定特定的 embedding 模型。
-     * </p>
-     *
-     * @param texts        输入文本列表
-     * @param modelConfig  模型配置实体
-     * @return Embedding 向量列表
-     */
     @Override
     public List<float[]> embedBatchWithModel(List<String> texts, ModelConfig modelConfig) {
         if (texts == null || texts.isEmpty()) {
@@ -137,13 +103,6 @@ public class EmbeddingServiceImpl implements EmbeddingService {
         }
     }
 
-    /**
-     * 计算两个向量的余弦相似度
-     *
-     * @param vector1 向量1
-     * @param vector2 向量2
-     * @return 相似度值（0-1）
-     */
     @Override
     public float cosineSimilarity(float[] vector1, float[] vector2) {
         if (vector1 == null || vector2 == null || vector1.length != vector2.length) {
@@ -167,13 +126,6 @@ public class EmbeddingServiceImpl implements EmbeddingService {
         return dotProduct / (float) (Math.sqrt(norm1) * Math.sqrt(norm2));
     }
 
-    /**
-     * 计算两个文本的语义相似度
-     *
-     * @param text1 文本1
-     * @param text2 文本2
-     * @return 相似度值（0-1）
-     */
     @Override
     public float semanticSimilarity(String text1, String text2) {
         float[] embedding1 = embed(text1);
@@ -181,17 +133,6 @@ public class EmbeddingServiceImpl implements EmbeddingService {
         return cosineSimilarity(embedding1, embedding2);
     }
 
-    /**
-     * 使用指定的模型配置计算单个文本的 Embedding 向量
-     * <p>
-     * 不查找默认配置，直接使用传入的模型配置。
-     * 用于文档向量化时指定特定的 embedding 模型。
-     * </p>
-     *
-     * @param text        输入文本
-     * @param modelConfig 模型配置实体
-     * @return Embedding 向量
-     */
     @Override
     public float[] embedWithModel(String text, ModelConfig modelConfig) {
         if (text == null || text.isEmpty()) {
@@ -200,18 +141,6 @@ public class EmbeddingServiceImpl implements EmbeddingService {
         return callEmbeddingApi(text, modelConfig);
     }
 
-    /**
-     * 使用指定的模型配置计算两个文本的语义相似度
-     * <p>
-     * 分别计算两个文本的 Embedding 向量，然后计算余弦相似度。
-     * 使用指定的模型配置，而非默认模型。
-     * </p>
-     *
-     * @param text1       文本1
-     * @param text2       文本2
-     * @param modelConfig 模型配置实体
-     * @return 相似度值（0-1）
-     */
     @Override
     public float semanticSimilarityWithModel(String text1, String text2, ModelConfig modelConfig) {
         float[] embedding1 = embedWithModel(text1, modelConfig);
@@ -219,19 +148,6 @@ public class EmbeddingServiceImpl implements EmbeddingService {
         return cosineSimilarity(embedding1, embedding2);
     }
 
-    /**
-     * 获取 Embedding 向量维度
-     * <p>
-     * 根据模型名称推断向量维度：
-     * <ul>
-     *   <li>large 模型：3072 维</li>
-     *   <li>v1/v3 模型：1024 维</li>
-     *   <li>其他模型：1536 维（默认）</li>
-     * </ul>
-     * </p>
-     *
-     * @return 向量维度
-     */
     @Override
     public int getEmbeddingDimension() {
         ModelConfig config = getEmbeddingModelConfig();

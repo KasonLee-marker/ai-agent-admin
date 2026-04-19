@@ -63,7 +63,6 @@ public class EncryptionService {
             return plainText;
         }
         String encrypted = encryptor.encrypt(plainText);
-        log.debug("Encrypted text, result length: {}", encrypted.length());
         return "ENC(" + encrypted + ")";
     }
 
@@ -77,10 +76,7 @@ public class EncryptionService {
         }
         try {
             String cipherText = encryptedText.substring(4, encryptedText.length() - 1);
-            log.debug("Decrypting cipher text (length: {})", cipherText.length());
-            String decrypted = encryptor.decrypt(cipherText);
-            log.debug("Decryption successful, result length: {}", decrypted.length());
-            return decrypted;
+            return encryptor.decrypt(cipherText);
         } catch (Exception e) {
             log.error("Decryption failed for text starting with '{}...': {}",
                     encryptedText.substring(0, Math.min(20, encryptedText.length())),

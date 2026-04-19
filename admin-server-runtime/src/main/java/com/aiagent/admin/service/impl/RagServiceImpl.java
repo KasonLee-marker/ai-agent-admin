@@ -78,15 +78,6 @@ public class RagServiceImpl implements RagService {
             请基于以上参考信息回答用户问题。
             """;
 
-    /**
-     * 仅执行检索，返回文档来源（不调用 LLM）
-     * <p>
-     * 用于 ChatService 融合 RAG 功能时，先检索文档再自行调用模型。
-     * </p>
-     *
-     * @param request RAG 对话请求，包含问题、知识库ID、检索参数等
-     * @return 检索结果列表
-     */
     @Override
     public List<VectorSearchResult> retrieve(RagChatRequest request) {
         VectorSearchRequest searchRequest = new VectorSearchRequest();
@@ -103,24 +94,6 @@ public class RagServiceImpl implements RagService {
         return documentService.searchSimilar(searchRequest);
     }
 
-    /**
-     * 执行 RAG 对话（支持多轮）
-     * <p>
-     * 执行流程：
-     * <ol>
-     *   <li>获取或创建会话（如果有 sessionId）</li>
-     *   <li>检索相关文档片段</li>
-     *   <li>构建包含历史消息的上下文</li>
-     *   <li>生成系统提示词</li>
-     *   <li>获取模型配置</li>
-     *   <li>调用 LLM 生成回复</li>
-     *   <li>保存消息并返回响应</li>
-     * </ol>
-     * </p>
-     *
-     * @param request RAG 对话请求，包含问题、可选 sessionId、topK 等
-     * @return RAG 对话响应，包含回答、来源文档、延迟、sessionId 等
-     */
     @Override
     public RagChatResponse chat(RagChatRequest request) {
         long startTime = System.currentTimeMillis();
@@ -267,23 +240,6 @@ public class RagServiceImpl implements RagService {
         return new OpenAiChatClient(api, optionsBuilder.build());
     }
 
-    /**
-     * 执行 RAG 流式对话（SSE 格式，支持多轮）
-     * <p>
-     * 执行流程：
-     * <ol>
-     *   <li>使用 Mono.fromCallable 在 boundedElastic 线程池准备流式上下文</li>
-     *   <li>检索相关文档</li>
-     *   <li>构建包含历史消息的系统提示词</li>
-     *   <li>调用 chatClient.stream() 获取响应 Flux</li>
-     *   <li>逐块返回内容</li>
-     *   <li>完成后异步保存助手消息</li>
-     * </ol>
-     * </p>
-     *
-     * @param request RAG 对话请求，包含问题、可选 sessionId、embeddingModelId 等
-     * @return SSE 流式响应 Flux，每个元素为响应内容片段
-     */
     @Override
     public Flux<String> chatStream(RagChatRequest request) {
         // 使用 Mono.fromCallable 包装阻塞操作，在 boundedElastic 线程池执行

@@ -95,25 +95,6 @@ public class DocumentServiceImpl implements DocumentService {
             ".csv", "text/csv"
     );
 
-    /**
-     * 上传文档并异步处理（提取文本、分块）
-     * <p>
-     * 创建文档记录后异步执行文本提取和分块。
-     * 文档初始状态为 PROCESSING，分块完成后更新为 CHUNKED。
-     * 对于 SEMANTIC 策略，初始状态为 SEMANTIC_PROCESSING。
-     * Embedding 需要用户单独触发（除 SEMANTIC 策略外）。
-     * </p>
-     *
-     * @param file             上传的文件
-     * @param name             文档名称（可选，默认使用文件名）
-     * @param chunkStrategy    分块策略（FIXED_SIZE/PARAGRAPH/SENTENCE/RECURSIVE/SEMANTIC）
-     * @param chunkSize        分块大小（字符数）
-     * @param chunkOverlap     分块重叠（字符数）
-     * @param embeddingModelId Embedding模型ID（语义分块时必填）
-     * @param createdBy        创建者标识
-     * @return 文档响应 DTO（状态为 PROCESSING 或 SEMANTIC_PROCESSING）
-     * @throws IllegalArgumentException 文件类型不支持时抛出
-     */
     @Override
     @Transactional
     public DocumentResponse uploadDocument(MultipartFile file, String name, String knowledgeBaseId,
@@ -180,17 +161,6 @@ public class DocumentServiceImpl implements DocumentService {
         return documentMapper.toResponse(document);
     }
 
-    /**
-     * 开始对已分块的文档进行 Embedding 计算
-     * <p>
-     * 只有状态为 CHUNKED 的文档才能开始 Embedding。
-     * 异步执行，状态变为 EMBEDDING，完成后变为 COMPLETED。
-     * </p>
-     *
-     * @param documentId       文档唯一标识
-     * @param embeddingModelId Embedding 模型配置 ID（可选，默认使用系统默认 embedding 模型）
-     * @return 文档响应 DTO
-     */
     @Override
     @Transactional
     public DocumentResponse startEmbedding(String documentId, String embeddingModelId) {
@@ -263,12 +233,6 @@ public class DocumentServiceImpl implements DocumentService {
         return null;
     }
 
-    /**
-     * 根据ID获取文档详情
-     *
-     * @param documentId 文档唯一标识
-     * @return 文档响应 DTO
-     */
     @Override
     @Transactional(readOnly = true)
     public DocumentResponse getDocument(String documentId) {
@@ -277,13 +241,6 @@ public class DocumentServiceImpl implements DocumentService {
         return documentMapper.toResponse(document);
     }
 
-    /**
-     * 分页查询用户的文档列表
-     *
-     * @param createdBy 创建者标识
-     * @param pageable  分页参数
-     * @return 文档响应分页列表
-     */
     @Override
     @Transactional(readOnly = true)
     public Page<DocumentResponse> listDocuments(String createdBy, Pageable pageable) {
@@ -291,11 +248,6 @@ public class DocumentServiceImpl implements DocumentService {
         return documents.map(documentMapper::toResponse);
     }
 
-    /**
-     * 删除文档及其所有分块
-     *
-     * @param documentId 文档唯一标识
-     */
     @Override
     @Transactional
     public void deleteDocument(String documentId) {
@@ -316,12 +268,6 @@ public class DocumentServiceImpl implements DocumentService {
         log.info("Document deleted: {}", documentId);
     }
 
-    /**
-     * 获取文档的所有分块列表
-     *
-     * @param documentId 文档唯一标识
-     * @return 分块响应列表
-     */
     @Override
     @Transactional(readOnly = true)
     public List<DocumentChunkResponse> getDocumentChunks(String documentId) {
@@ -331,32 +277,12 @@ public class DocumentServiceImpl implements DocumentService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * 获取文档处理状态
-     *
-     * @param documentId 文档唯一标识
-     * @return 文档响应 DTO
-     */
     @Override
     @Transactional(readOnly = true)
     public DocumentResponse getDocumentStatus(String documentId) {
         return getDocument(documentId);
     }
 
-    /**
-     * 执行相似度搜索（支持多种策略）
-     * <p>
-     * 根据请求中的 strategy 参数选择检索方式：
-     * <ul>
-     *   <li>VECTOR: 向量检索（语义相似度）</li>
-     *   <li>BM25: 关键词检索（精确匹配）</li>
-     *   <li>HYBRID: 混合检索（RRF 融合向量 + BM25）</li>
-     * </ul>
-     * </p>
-     *
-     * @param request 向量搜索请求
-     * @return 搜索结果列表
-     */
     @Override
     public List<VectorSearchResult> searchSimilar(VectorSearchRequest request) {
         String strategy = request.getStrategy() != null ? request.getStrategy() : "VECTOR";
@@ -512,21 +438,11 @@ public class DocumentServiceImpl implements DocumentService {
         return fusedResults;
     }
 
-    /**
-     * 获取系统支持的文件类型列表
-     *
-     * @return 支持的文件类型列表
-     */
     @Override
     public List<String> getSupportedContentTypes() {
         return new ArrayList<>(SUPPORTED_CONTENT_TYPES);
     }
 
-    /**
-     * 获取支持的文件类型详细信息（用于前端展示）
-     *
-     * @return 支持的文件类型详细信息列表
-     */
     @Override
     public List<SupportedTypeResponse> getSupportedTypesInfo() {
         return List.of(
@@ -568,16 +484,6 @@ public class DocumentServiceImpl implements DocumentService {
         return contentType != null && SUPPORTED_CONTENT_TYPES.contains(contentType);
     }
 
-    /**
-     * 获取语义切分进度
-     * <p>
-     * 返回文档的语义切分处理进度，包含已处理句子数、总句子数和百分比。
-     * 仅对 SEMANTIC 策略的文档有意义，其他策略返回空进度。
-     * </p>
-     *
-     * @param documentId 文档唯一标识
-     * @return 语义切分进度响应 DTO
-     */
     @Override
     @Transactional(readOnly = true)
     public SemanticProgressResponse getSemanticProgress(String documentId) {

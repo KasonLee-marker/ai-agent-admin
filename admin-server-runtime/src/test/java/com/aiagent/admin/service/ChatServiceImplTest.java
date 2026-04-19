@@ -1,16 +1,10 @@
 package com.aiagent.admin.service;
 
 import com.aiagent.admin.api.dto.*;
-import com.aiagent.admin.domain.entity.ChatMessage;
-import com.aiagent.admin.domain.entity.ChatSession;
-import com.aiagent.admin.domain.entity.ModelConfig;
-import com.aiagent.admin.domain.entity.PromptTemplate;
+import com.aiagent.admin.domain.entity.*;
 import com.aiagent.admin.domain.enums.MessageRole;
 import com.aiagent.admin.domain.enums.ModelProvider;
-import com.aiagent.admin.domain.repository.ChatMessageRepository;
-import com.aiagent.admin.domain.repository.ChatSessionRepository;
-import com.aiagent.admin.domain.repository.ModelConfigRepository;
-import com.aiagent.admin.domain.repository.PromptTemplateRepository;
+import com.aiagent.admin.domain.repository.*;
 import com.aiagent.admin.service.impl.ChatServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityNotFoundException;
@@ -58,6 +52,9 @@ class ChatServiceImplTest {
 
     @Mock
     private RagService ragService;
+
+    @Mock
+    private KnowledgeBaseRepository knowledgeBaseRepository;
 
     // 使用真实的 ObjectMapper，不使用 Mock
     private ObjectMapper realObjectMapper = new ObjectMapper();
@@ -193,7 +190,15 @@ class ChatServiceImplTest {
         request.setRagTopK(5);
         request.setRagThreshold(0.5);
         request.setRagStrategy("VECTOR");
-        request.setRagEmbeddingModelId("emb-123");
+        request.setRagEmbeddingModelId("emb-123");  // 用户传入的值会被忽略
+
+        // Mock KnowledgeBase 返回，包含默认 embedding 模型
+        KnowledgeBase kb = KnowledgeBase.builder()
+                .id("kb-123")
+                .name("Test KB")
+                .defaultEmbeddingModelId("kb-emb-model")  // 知识库的默认模型
+                .build();
+        when(knowledgeBaseRepository.findById("kb-123")).thenReturn(Optional.of(kb));
 
         when(idGenerator.generateId()).thenReturn("rag-session-id");
         when(chatSessionRepository.save(any(ChatSession.class))).thenAnswer(invocation -> {
@@ -213,7 +218,7 @@ class ChatServiceImplTest {
         assertEquals(5, result.getRagTopK());
         assertEquals(0.5, result.getRagThreshold());
         assertEquals("VECTOR", result.getRagStrategy());
-        assertEquals("emb-123", result.getRagEmbeddingModelId());
+        assertEquals("kb-emb-model", result.getRagEmbeddingModelId());  // 使用知识库的模型
         verify(chatSessionRepository).save(any(ChatSession.class));
     }
 
@@ -755,7 +760,15 @@ class ChatServiceImplTest {
         request.setRagTopK(10);
         request.setRagThreshold(0.7);
         request.setRagStrategy("HYBRID");
-        request.setRagEmbeddingModelId("emb-full");
+        request.setRagEmbeddingModelId("emb-full");  // 用户传入的值会被忽略
+
+        // Mock KnowledgeBase 返回
+        KnowledgeBase kb = KnowledgeBase.builder()
+                .id("kb-full")
+                .name("Full KB")
+                .defaultEmbeddingModelId("kb-emb-full")
+                .build();
+        when(knowledgeBaseRepository.findById("kb-full")).thenReturn(Optional.of(kb));
 
         when(idGenerator.generateId()).thenReturn("full-rag-session-id");
         when(chatSessionRepository.save(any(ChatSession.class))).thenAnswer(invocation -> {
@@ -773,7 +786,7 @@ class ChatServiceImplTest {
         assertEquals(10, result.getRagTopK());
         assertEquals(0.7, result.getRagThreshold());
         assertEquals("HYBRID", result.getRagStrategy());
-        assertEquals("emb-full", result.getRagEmbeddingModelId());
+        assertEquals("kb-emb-full", result.getRagEmbeddingModelId());  // 使用知识库的模型
     }
 
     @Test
@@ -785,7 +798,15 @@ class ChatServiceImplTest {
         request.setKnowledgeBaseId("kb-partial");
         // 只设置部分字段
         request.setRagTopK(3);
-        // threshold, strategy, embeddingModelId 不设置
+        // threshold, strategy 不设置
+
+        // Mock KnowledgeBase 返回（包含默认 embedding 模型）
+        KnowledgeBase kb = KnowledgeBase.builder()
+                .id("kb-partial")
+                .name("Partial KB")
+                .defaultEmbeddingModelId("kb-emb-partial")
+                .build();
+        when(knowledgeBaseRepository.findById("kb-partial")).thenReturn(Optional.of(kb));
 
         when(idGenerator.generateId()).thenReturn("partial-rag-session-id");
         when(chatSessionRepository.save(any(ChatSession.class))).thenAnswer(invocation -> {
@@ -803,7 +824,7 @@ class ChatServiceImplTest {
         assertEquals(3, result.getRagTopK());
         assertNull(result.getRagThreshold());
         assertNull(result.getRagStrategy());
-        assertNull(result.getRagEmbeddingModelId());
+        assertEquals("kb-emb-partial", result.getRagEmbeddingModelId());  // 使用知识库的模型
     }
 
     @Test
@@ -951,6 +972,14 @@ class ChatServiceImplTest {
         request.setPromptId("prompt-123");
         request.setEnableRag(true);
         request.setKnowledgeBaseId("kb-123");
+
+        // Mock KnowledgeBase 返回
+        KnowledgeBase kb = KnowledgeBase.builder()
+                .id("kb-123")
+                .name("Test KB")
+                .defaultEmbeddingModelId("kb-emb-model")
+                .build();
+        when(knowledgeBaseRepository.findById("kb-123")).thenReturn(Optional.of(kb));
 
         when(promptTemplateRepository.findById("prompt-123")).thenReturn(Optional.of(template));
         when(idGenerator.generateId()).thenReturn("session-prompt");

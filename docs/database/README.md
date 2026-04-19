@@ -2,7 +2,7 @@
 
 ## 环境信息
 
-- **数据库**: PostgreSQL 15 + pgvector
+- **数据库**: PostgreSQL 15 + pgvector + pg_jieba
 - **容器名**: agentx-postgres
 - **端口**: 5432
 - **数据库名**: admindb
@@ -11,17 +11,29 @@
 
 ## 快速开始
 
-### 1. 启动 PostgreSQL 容器
+### 1. 启动 PostgreSQL 容器（含中文分词）
 
 ```bash
+# 构建带中文分词的镜像
+cd docker/postgres-zhparser
+docker build -t postgres-pgvector-jieba:pg15 .
+
+# 启动容器
 docker run -d \
   --name agentx-postgres \
   -e POSTGRES_USER=adminuser \
   -e POSTGRES_PASSWORD=adminpass123 \
   -e POSTGRES_DB=admindb \
   -p 5432:5432 \
-  pgvector/pgvector:pg15
+  postgres-pgvector-jieba:pg15
 ```
+
+> **包含扩展**：
+> - **pgvector** - 向量存储，用于 Embedding 检索
+> - **pg_jieba** - 中文分词，用于 BM25 中文全文搜索
+> - **pg_trgm** - 三元组匹配，用于模糊搜索后备
+>
+> 详见 [docker/postgres-zhparser/README.md](../../docker/postgres-zhparser/README.md)
 
 ### 2. 初始化数据库
 
@@ -94,12 +106,55 @@ LIMIT 5;
 使用 PostgreSQL 内置的全文搜索功能：
 
 ```sql
--- 搜索文档分块
+-- 英文搜索（使用 simple 配置）
 SELECT id, content, document_id
 FROM document_chunks
-WHERE content_tsv @@ to_tsquery('simple', '搜索关键词')
-ORDER BY ts_rank(content_tsv, to_tsquery('simple', '搜索关键词')) DESC
+WHERE content_tsv @@ to_tsquery('simple', 'search | keyword')
+ORDER BY ts_rank(content_tsv, to_tsquery('simple', 'search | keyword')) DESC
 LIMIT 10;
+
+-- 中文搜索（使用 jiebamp 配置）
+SELECT id, content, document_id
+FROM document_chunks
+WHERE content_tsv_jieba @@ to_tsquery('jiebamp', '配送 | 运费')
+ORDER BY ts_rank(content_tsv_jieba, to_tsquery('jiebamp', '配送 | 运费')) DESC
+LIMIT 10;
+```
+
+### 3. 中文分词 (pg_jieba)
+
+pg_jieba 提供多种中文分词模式：
+
+| Parser     | 说明         | 适用场景       |
+|------------|------------|------------|
+| `jiebamp`  | 最大概率模式（推荐） | 搜索索引，不依赖字典 |
+| `jiebahmm` | HMM 模式     | 新词发现场景     |
+| `jieba`    | 混合模式       | 需正确配置字典文件  |
+| `jiebaqry` | 查询模式       | 搜索查询解析     |
+
+**示例**：
+
+```sql
+-- 分词测试
+SELECT to_tsvector('jiebamp', '人工智能技术正在快速发展');
+-- 结果: '人工智能':1 '技术':2
+
+-- 查询解析
+SELECT to_tsquery('jiebamp', '包邮吗');
+-- 结果: '包' <-> '邮'
+```
+
+**BM25 中文搜索列**：
+
+```sql
+-- document_chunks 表中的中文全文搜索列
+content_tsv_jieba tsvector  -- jiebamp 分词结果
+
+-- 相关索引
+idx_document_chunks_tsv_jieba  -- GIN 索引
+
+-- 自动更新触发器
+trg_update_content_tsv_jieba  -- INSERT/UPDATE 时自动分词
 ```
 
 ### 3. 约束检查
@@ -193,14 +248,15 @@ WHERE status = 'DELETED';
 
 ### 主要索引
 
-| 索引名 | 表 | 字段 | 类型 | 用途 |
-|--------|------|------|------|------|
-| idx_dataset_id | dataset_items | dataset_id | B-Tree | 数据集项查询 |
-| idx_dataset_version | dataset_items | dataset_id, version | B-Tree | 版本过滤 |
-| idx_job_status | evaluation_jobs | status | B-Tree | 任务状态过滤 |
-| idx_result_job_id | evaluation_results | job_id | B-Tree | 结果查询 |
-| idx_document_chunks_tsv | document_chunks | content_tsv | GIN | 全文搜索 |
-| idx_document_embeddings_1024_embedding | document_embeddings_1024 | embedding | IVFFlat | 向量相似度搜索 |
+| 索引名                                    | 表                        | 字段                  | 类型      | 用途      |
+|----------------------------------------|--------------------------|---------------------|---------|---------|
+| idx_dataset_id                         | dataset_items            | dataset_id          | B-Tree  | 数据集项查询  |
+| idx_dataset_version                    | dataset_items            | dataset_id, version | B-Tree  | 版本过滤    |
+| idx_job_status                         | evaluation_jobs          | status              | B-Tree  | 任务状态过滤  |
+| idx_result_job_id                      | evaluation_results       | job_id              | B-Tree  | 结果查询    |
+| idx_document_chunks_tsv                | document_chunks          | content_tsv         | GIN     | 英文全文搜索  |
+| idx_document_chunks_tsv_jieba          | document_chunks          | content_tsv_jieba   | GIN     | 中文全文搜索  |
+| idx_document_embeddings_1024_embedding | document_embeddings_1024 | embedding           | IVFFlat | 向量相似度搜索 |
 
 ### 向量索引参数
 
@@ -252,6 +308,25 @@ WHERE extname = 'vector';
 
 -- 如果没有安装
 CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+### 中文分词扩展问题
+
+```sql
+-- 检查 pg_jieba 扩展
+SELECT *
+FROM pg_extension
+WHERE extname = 'pg_jieba';
+
+-- 检查 shared_preload_libraries 配置
+SHOW shared_preload_libraries;
+
+-- 如果 pg_jieba 未加载
+ALTER SYSTEM SET shared_preload_libraries = 'pg_jieba';
+-- 然后重启容器
+
+-- 测试分词
+SELECT to_tsvector('jiebamp', '测试文本');
 ```
 
 ## 开发建议

@@ -56,17 +56,6 @@ public class EvaluationServiceImpl implements EvaluationService {
     private final EvaluationMapper evaluationMapper;
     private final EvaluationAsyncService evaluationAsyncService;
 
-    /**
-     * 创建新的评估任务
-     * <p>
-     * 验证请求参数后创建评估任务实体。
-     * 需要指定提示词模板、模型配置和数据集。
-     * </p>
-     *
-     * @param request 创建任务请求
-     * @return 创建成功的任务响应 DTO
-     * @throws IllegalArgumentException 必要参数缺失时抛出
-     */
     @Override
     @Transactional
     public EvaluationJobResponse createJob(EvaluationJobCreateRequest request) {
@@ -77,18 +66,6 @@ public class EvaluationServiceImpl implements EvaluationService {
         return toJobResponseWithNames(saved);
     }
 
-    /**
-     * 更新评估任务配置
-     * <p>
-     * 不允许更新正在运行中的任务。
-     * </p>
-     *
-     * @param id      任务唯一标识
-     * @param request 更新请求
-     * @return 更新后的任务响应 DTO
-     * @throws EntityNotFoundException   任务不存在时抛出
-     * @throws IllegalStateException      任务正在运行时抛出
-     */
     @Override
     @Transactional
     public EvaluationJobResponse updateJob(String id, EvaluationJobUpdateRequest request) {
@@ -104,17 +81,6 @@ public class EvaluationServiceImpl implements EvaluationService {
         return toJobResponseWithNames(updated);
     }
 
-    /**
-     * 删除评估任务及其所有结果
-     * <p>
-     * 不允许删除正在运行中的任务。
-     * 同时删除任务实体和所有评估结果记录。
-     * </p>
-     *
-     * @param id 任务唯一标识
-     * @throws EntityNotFoundException  任务不存在时抛出
-     * @throws IllegalStateException     任务正在运行时抛出
-     */
     @Override
     @Transactional
     public void deleteJob(String id) {
@@ -129,13 +95,6 @@ public class EvaluationServiceImpl implements EvaluationService {
         evaluationJobRepository.delete(job);
     }
 
-    /**
-     * 根据ID获取评估任务详情
-     *
-     * @param id 任务唯一标识
-     * @return 任务响应 DTO（包含关联实体名称）
-     * @throws EntityNotFoundException 任务不存在时抛出
-     */
     @Override
     @Transactional(readOnly = true)
     public EvaluationJobResponse getJob(String id) {
@@ -144,17 +103,6 @@ public class EvaluationServiceImpl implements EvaluationService {
         return toJobResponseWithNames(entity);
     }
 
-    /**
-     * 分页查询评估任务列表
-     * <p>
-     * 支持按状态、关键词筛选，按创建时间倒序排列。
-     * </p>
-     *
-     * @param status   状态过滤条件（可选）
-     * @param keyword  搜索关键词（可选）
-     * @param pageable 分页参数
-     * @return 分页的任务响应 DTO
-     */
     @Override
     @Transactional(readOnly = true)
     public PageResponse<EvaluationJobResponse> listJobs(String status, String keyword, Pageable pageable) {
@@ -177,23 +125,6 @@ public class EvaluationServiceImpl implements EvaluationService {
         return PageResponse.from(responsePage);
     }
 
-    /**
-     * 异步执行评估任务
-     * <p>
-     * 委托给 EvaluationAsyncService 执行，避免 @Async 自调用不生效的问题。
-     * 执行流程：
-     * <ol>
-     *   <li>验证任务、提示词模板、模型配置、数据集存在</li>
-     *   <li>预加载所需数据并更新状态为 PENDING（异步执行前）</li>
-     *   <li>委托 EvaluationAsyncService 异步执行评估</li>
-     * </ol>
-     * </p>
-     *
-     * @param id 任务唯一标识
-     * @return 异步执行结果（立即返回，异步执行在后端进行）
-     * @throws EntityNotFoundException   任务或关联实体不存在时抛出
-     * @throws IllegalStateException      任务已在运行时抛出
-     */
     @Override
     @Transactional
     public EvaluationJobResponse runJob(String id) {
@@ -290,16 +221,6 @@ public class EvaluationServiceImpl implements EvaluationService {
         return toJobResponseWithNames(job);
     }
 
-    /**
-     * 取消正在运行的评估任务
-     * <p>
-     * 委托给 EvaluationAsyncService 设置取消标记，任务循环会在下一次迭代时检查并停止。
-     * </p>
-     *
-     * @param id 任务唯一标识
-     * @throws EntityNotFoundException  任务不存在时抛出
-     * @throws IllegalStateException     任务不在运行状态时抛出
-     */
     @Override
     public void cancelJob(String id) {
         EvaluationJob job = evaluationJobRepository.findById(id)
@@ -312,16 +233,6 @@ public class EvaluationServiceImpl implements EvaluationService {
         evaluationAsyncService.requestCancellation(id);
     }
 
-    /**
-     * 分页查询评估任务的评估结果
-     * <p>
-     * 按创建时间升序排列，返回任务的评估结果列表。
-     * </p>
-     *
-     * @param jobId    任务唯一标识
-     * @param pageable 分页参数
-     * @return 分页的评估结果响应 DTO
-     */
     @Override
     @Transactional(readOnly = true)
     public PageResponse<EvaluationResultResponse> listResults(String jobId, Pageable pageable) {
@@ -330,13 +241,6 @@ public class EvaluationServiceImpl implements EvaluationService {
         return PageResponse.from(responsePage);
     }
 
-    /**
-     * 根据ID获取单个评估结果
-     *
-     * @param resultId 结果唯一标识
-     * @return 评估结果响应 DTO
-     * @throws EntityNotFoundException 结果不存在时抛出
-     */
     @Override
     @Transactional(readOnly = true)
     public EvaluationResultResponse getResult(String resultId) {
@@ -345,17 +249,6 @@ public class EvaluationServiceImpl implements EvaluationService {
         return evaluationMapper.toResultResponse(result);
     }
 
-    /**
-     * 获取评估任务的指标统计
-     * <p>
-     * 返回任务的汇总指标：成功率、平均延迟、Token 使用等。
-     * 同时计算平均 AI 得分、语义相似度、检索得分、忠实度等质量指标。
-     * </p>
-     *
-     * @param jobId 任务唯一标识
-     * @return 指标响应 DTO
-     * @throws EntityNotFoundException 任务不存在时抛出
-     */
     @Override
     @Transactional(readOnly = true)
     public EvaluationMetricsResponse getMetrics(String jobId) {
@@ -372,16 +265,6 @@ public class EvaluationServiceImpl implements EvaluationService {
         return metrics;
     }
 
-    /**
-     * 对比两个评估任务的指标
-     * <p>
-     * 返回两个任务的详细指标对比数据，用于分析模型或提示词的差异。
-     * </p>
-     *
-     * @param request 对比请求，包含两个任务的 ID
-     * @return 对比响应 DTO
-     * @throws EntityNotFoundException 任一任务不存在时抛出
-     */
     @Override
     @Transactional(readOnly = true)
     public EvaluationCompareResponse compareJobs(EvaluationCompareRequest request) {
@@ -469,18 +352,6 @@ public class EvaluationServiceImpl implements EvaluationService {
         return response;
     }
 
-    /**
-     * 重新运行评估任务
-     * <p>
-     * 删除之前的评估结果，重置任务状态和计数器，然后委托给 runJob 异步执行。
-     * 注意：先保存 PENDING 状态，然后在事务提交后再启动异步任务，避免状态不一致。
-     * </p>
-     *
-     * @param id 任务唯一标识
-     * @return 异步执行结果（立即返回）
-     * @throws EntityNotFoundException 任务不存在时抛出
-     * @throws IllegalStateException   任务正在运行时抛出
-     */
     @Override
     @Transactional
     public EvaluationJobResponse rerunJob(String id) {

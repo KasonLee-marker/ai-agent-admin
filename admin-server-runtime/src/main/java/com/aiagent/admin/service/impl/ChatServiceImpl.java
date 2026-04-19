@@ -1,15 +1,9 @@
 package com.aiagent.admin.service.impl;
 
 import com.aiagent.admin.api.dto.*;
-import com.aiagent.admin.domain.entity.ChatMessage;
-import com.aiagent.admin.domain.entity.ChatSession;
-import com.aiagent.admin.domain.entity.ModelConfig;
-import com.aiagent.admin.domain.entity.PromptTemplate;
+import com.aiagent.admin.domain.entity.*;
 import com.aiagent.admin.domain.enums.MessageRole;
-import com.aiagent.admin.domain.repository.ChatMessageRepository;
-import com.aiagent.admin.domain.repository.ChatSessionRepository;
-import com.aiagent.admin.domain.repository.ModelConfigRepository;
-import com.aiagent.admin.domain.repository.PromptTemplateRepository;
+import com.aiagent.admin.domain.repository.*;
 import com.aiagent.admin.service.ChatService;
 import com.aiagent.admin.service.EncryptionService;
 import com.aiagent.admin.service.IdGenerator;
@@ -67,6 +61,7 @@ public class ChatServiceImpl implements ChatService {
     private final ChatSessionRepository chatSessionRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final ModelConfigRepository modelConfigRepository;
+    private final KnowledgeBaseRepository knowledgeBaseRepository;
     private final PromptTemplateRepository promptTemplateRepository;
     private final EncryptionService encryptionService;
     private final IdGenerator idGenerator;
@@ -74,17 +69,7 @@ public class ChatServiceImpl implements ChatService {
     private final ObjectMapper objectMapper;
     private String userContent;
 
-    /**
-     * 创建新的聊天会话
-     * <p>
-     * 初始化会话时设置标题、关联模型和提示词模板，以及系统消息。
-     * 会话创建后消息计数为 0，状态为活跃。
-     * </p>
-     *
-     * @param request   创建会话请求，包含标题、模型ID、提示词ID等
-     * @param createdBy 会话创建者标识
-     * @return 创建成功的会话 DTO
-     */
+
     @Override
     @Transactional
     public ChatSessionDTO createSession(ChatRequest.CreateSessionRequest request, String createdBy) {
@@ -96,6 +81,17 @@ public class ChatServiceImpl implements ChatService {
             // 如果用户没有手动指定 systemMessage，则使用模板内容
             if (systemMessage == null || systemMessage.isEmpty()) {
                 systemMessage = template.getContent();
+            }
+        }
+
+        // RAG 配置：Embedding 模型必须继承知识库的默认模型
+        String ragEmbeddingModelId = null;
+        if (Boolean.TRUE.equals(request.getEnableRag()) && request.getKnowledgeBaseId() != null) {
+            KnowledgeBase kb = knowledgeBaseRepository.findById(request.getKnowledgeBaseId())
+                    .orElseThrow(() -> new EntityNotFoundException("Knowledge base not found: " + request.getKnowledgeBaseId()));
+            ragEmbeddingModelId = kb.getDefaultEmbeddingModelId();
+            if (ragEmbeddingModelId == null) {
+                throw new IllegalStateException("知识库未配置默认 Embedding 模型，请先在知识库设置中绑定模型");
             }
         }
 
@@ -114,25 +110,14 @@ public class ChatServiceImpl implements ChatService {
                 .ragTopK(request.getRagTopK())
                 .ragThreshold(request.getRagThreshold())
                 .ragStrategy(request.getRagStrategy())
-                .ragEmbeddingModelId(request.getRagEmbeddingModelId())
+                .ragEmbeddingModelId(ragEmbeddingModelId)  // 使用知识库的模型
                 .build();
 
         ChatSession saved = chatSessionRepository.save(session);
         return toSessionDTO(saved);
     }
 
-    /**
-     * 更新会话信息
-     * <p>
-     * 支持更新标题、模型ID、提示词ID、系统消息和 RAG 配置。
-     * 如果指定了新的 promptId 且未手动指定 systemMessage，则从模板加载内容。
-     * </p>
-     *
-     * @param sessionId 会话唯一标识
-     * @param request   更新请求，包含可更新的字段
-     * @return 更新后的会话 DTO
-     * @throws EntityNotFoundException 会话不存在时抛出
-     */
+
     @Override
     @Transactional
     public ChatSessionDTO updateSession(String sessionId, ChatRequest.UpdateSessionRequest request) {
@@ -175,9 +160,18 @@ public class ChatServiceImpl implements ChatService {
         if (request.getEnableRag() != null) {
             session.setEnableRag(request.getEnableRag());
         }
+
+        // 知识库变更时，自动更新 Embedding 模型为知识库的默认模型
         if (request.getKnowledgeBaseId() != null) {
             session.setKnowledgeBaseId(request.getKnowledgeBaseId());
+            // 如果启用 RAG，自动继承知识库的 Embedding 模型
+            if (Boolean.TRUE.equals(session.getEnableRag()) && !request.getKnowledgeBaseId().isEmpty()) {
+                KnowledgeBase kb = knowledgeBaseRepository.findById(request.getKnowledgeBaseId())
+                        .orElseThrow(() -> new EntityNotFoundException("Knowledge base not found: " + request.getKnowledgeBaseId()));
+                session.setRagEmbeddingModelId(kb.getDefaultEmbeddingModelId());
+            }
         }
+
         if (request.getRagTopK() != null) {
             session.setRagTopK(request.getRagTopK());
         }
@@ -187,22 +181,14 @@ public class ChatServiceImpl implements ChatService {
         if (request.getRagStrategy() != null) {
             session.setRagStrategy(request.getRagStrategy());
         }
-        if (request.getRagEmbeddingModelId() != null) {
-            session.setRagEmbeddingModelId(request.getRagEmbeddingModelId());
-        }
+        // 忽略用户传入的 ragEmbeddingModelId，保持使用知识库的模型
 
         session.setUpdatedAt(LocalDateTime.now());
         ChatSession saved = chatSessionRepository.save(session);
         return toSessionDTO(saved);
     }
 
-    /**
-     * 根据会话 ID 获取会话详情
-     *
-     * @param sessionId 会话唯一标识
-     * @return 会话 DTO
-     * @throws EntityNotFoundException 会话不存在时抛出
-     */
+
     @Override
     @Transactional(readOnly = true)
     public ChatSessionDTO getSession(String sessionId) {
@@ -211,16 +197,7 @@ public class ChatServiceImpl implements ChatService {
         return toSessionDTO(session);
     }
 
-    /**
-     * 分页查询用户的聊天会话列表
-     * <p>
-     * 按更新时间倒序排列，返回最近的会话优先。
-     * </p>
-     *
-     * @param createdBy 会话创建者标识
-     * @param pageable  分页参数
-     * @return 会话 DTO 列表
-     */
+
     @Override
     @Transactional(readOnly = true)
     public List<ChatSessionDTO> listSessions(String createdBy, Pageable pageable) {
@@ -230,17 +207,7 @@ public class ChatServiceImpl implements ChatService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * 根据关键词搜索用户的聊天会话
-     * <p>
-     * 支持在会话标题和消息内容中搜索匹配关键词。
-     * </p>
-     *
-     * @param createdBy 会话创建者标识
-     * @param keyword   搜索关键词
-     * @param pageable  分页参数
-     * @return 匹配的会话 DTO 列表
-     */
+
     @Override
     @Transactional(readOnly = true)
     public List<ChatSessionDTO> listSessionsByKeyword(String createdBy, String keyword, Pageable pageable) {
@@ -250,15 +217,7 @@ public class ChatServiceImpl implements ChatService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * 删除聊天会话及其所有消息
-     * <p>
-     * 同时删除会话记录和关联的所有消息记录。
-     * </p>
-     *
-     * @param sessionId 会话唯一标识
-     * @throws EntityNotFoundException 会话不存在时抛出
-     */
+
     @Override
     @Transactional
     public void deleteSession(String sessionId) {
@@ -269,22 +228,7 @@ public class ChatServiceImpl implements ChatService {
         chatSessionRepository.deleteById(sessionId);
     }
 
-    /**
-     * 发送消息并获取 AI 响应（同步模式）
-     * <p>
-     * 执行流程：
-     * <ol>
-     *   <li>获取会话和模型配置</li>
-     *   <li>保存用户消息</li>
-     *   <li>构建包含系统消息、历史消息和当前消息的 Prompt</li>
-     *   <li>调用 AI 模型获取响应</li>
-     *   <li>保存助手消息并更新会话统计</li>
-     * </ol>
-     * </p>
-     *
-     * @param request 消息请求，包含会话ID、消息内容、可选模型ID
-     * @return 助手响应消息 DTO
-     */
+
     @Override
     @Transactional
     public ChatResponse sendMessage(ChatRequest request) {
@@ -569,15 +513,6 @@ public class ChatServiceImpl implements ChatService {
         return new OpenAiChatClient(api, optionsBuilder.build());
     }
 
-    /**
-     * 获取会话的所有消息列表
-     * <p>
-     * 按消息创建时间升序排列，返回完整的对话历史。
-     * </p>
-     *
-     * @param sessionId 会话唯一标识
-     * @return 消息 DTO 列表
-     */
     @Override
     @Transactional(readOnly = true)
     public List<ChatResponse> getSessionMessages(String sessionId) {
@@ -587,16 +522,6 @@ public class ChatServiceImpl implements ChatService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * 获取会话的对话历史（用于构建 AI Prompt）
-     * <p>
-     * 返回用于构建多轮对话 Prompt 的历史消息。
-     * 与 getSessionMessages 类似，但可能应用不同的过滤逻辑。
-     * </p>
-     *
-     * @param sessionId 会话唯一标识
-     * @return 消息 DTO 列表
-     */
     @Override
     @Transactional(readOnly = true)
     public List<ChatResponse> getConversationHistory(String sessionId) {
@@ -667,25 +592,6 @@ public class ChatServiceImpl implements ChatService {
                 .build();
     }
 
-    /**
-     * 发送消息并获取流式响应（SSE 格式）
-     * <p>
-     * 执行流程：
-     * <ol>
-     *   <li>使用 Mono.fromCallable 在 boundedElastic 线程池准备流式上下文</li>
-     *   <li>调用 chatClient.stream() 获取响应 Flux</li>
-     *   <li>逐块返回内容，累积完整响应</li>
-     *   <li>完成后异步保存助手消息</li>
-     * </ol>
-     * </p>
-     * <p>
-     * 返回的 Flux 适合 SSE（Server-Sent Events）格式输出，
-     * 每次响应包含一个内容片段。
-     * </p>
-     *
-     * @param request 消息请求，包含会话ID、消息内容、可选模型ID
-     * @return SSE 流式响应 Flux，每个元素为响应内容片段
-     */
     @Override
     public Flux<String> sendMessageStream(ChatRequest request) {
         // 使用 Mono.fromCallable 包装阻塞操作，在 boundedElastic 线程池执行

@@ -1,5 +1,129 @@
 # AI Agent Admin - 变更日志
 
+## 2026-04-19 pg_jieba 中文分词与 BM25 搜索优化
+
+### 功能概述
+
+为 PostgreSQL 数据库安装 pg_jieba 中文分词扩展，优化 BM25 中文全文搜索效果。
+
+### Docker 镜像重构
+
+**新镜像**: `postgres-pgvector-jieba:pg15`
+
+基于 `pgvector/pgvector:pg15`，集成：
+
+- pgvector - 向量存储扩展
+- pg_jieba - 中文分词扩展（结巴分词）
+- pg_trgm - 三元组模糊匹配扩展
+
+**构建文件** (`docker/postgres-zhparser/`):
+
+```
+Dockerfile          - 镜像构建脚本
+init.sql            - 初始化脚本（创建扩展、配置）
+pg_jieba.zip        - pg_jieba 源码（Gitee镜像）
+cppjieba.zip        - cppjieba 分词库（Gitee镜像）
+limonp.zip          - limonp 工具库（GitHub）
+```
+
+**关键配置**:
+
+```sql
+-- init.sql
+ALTER SYSTEM SET shared_preload_libraries = 'pg_jieba';
+CREATE EXTENSION IF NOT EXISTS pg_jieba;
+```
+
+**构建命令**:
+
+```bash
+cd docker/postgres-zhparser
+docker build -t postgres-pgvector-jieba:pg15 .
+docker run -d --name agentx-postgres -p 5432:5432 postgres-pgvector-jieba:pg15
+```
+
+### BM25 中文搜索改进
+
+**问题**：原实现使用 pg_trgm similarity 匹配中文，效果差且不相关。
+
+**解决方案**：使用 pg_jieba 分词 + ts_rank 评分：
+
+```java
+// BM25SearchServiceImpl.java
+// 中文查询：使用 jiebamp parser（最大概率模式）
+String sql = """
+    SELECT dc.id, dc.content,
+           ts_rank(dc.content_tsv_jieba, to_tsquery('jiebamp', :tsQuery)) as score
+    FROM document_chunks dc
+    WHERE dc.content_tsv_jieba @@ to_tsquery('jiebamp', :tsQuery)
+    ORDER BY score DESC
+    """;
+```
+
+**jiebamp vs jieba**:
+
+- `jieba` - 混合模式，依赖字典文件，需正确配置路径
+- `jiebamp` - 最大概率模式，使用 HMM 模型，不依赖字典
+
+**数据结构变更**:
+
+```sql
+-- 新增中文 tsvector 列
+ALTER TABLE document_chunks ADD COLUMN content_tsv_jieba tsvector;
+
+-- 创建 GIN 索引
+CREATE INDEX idx_document_chunks_tsv_jieba ON document_chunks USING GIN(content_tsv_jieba);
+
+-- 创建触发器（自动更新）
+CREATE TRIGGER trg_update_content_tsv_jieba
+BEFORE INSERT OR UPDATE ON document_chunks
+FOR EACH ROW EXECUTE FUNCTION update_content_tsv_jieba();
+```
+
+### 其他代码改动
+
+**知识库重索引默认模型** (`KnowledgeBases/index.tsx`):
+
+```typescript
+// 打开重索引对话框时，默认选中当前知识库的 Embedding 模型
+setReindexModelId(selectedKb.defaultEmbeddingModelId || null)
+```
+
+**对话 Embedding 模型继承** (`ChatServiceImpl.java`):
+
+```java
+// 创建对话时，RAG Embedding 模型自动继承知识库默认模型
+if (Boolean.TRUE.equals(request.getEnableRag()) && request.getKnowledgeBaseId() != null) {
+    KnowledgeBase kb = knowledgeBaseRepository.findById(request.getKnowledgeBaseId())
+        .orElseThrow(...);
+    ragEmbeddingModelId = kb.getDefaultEmbeddingModelId();
+}
+```
+
+**前端改动** (`Chat/index.tsx`):
+
+- Embedding 模型选择改为 disabled（不可修改，继承知识库）
+- 添加提示信息说明继承规则
+
+### 测试验证
+
+**数据库测试**:
+
+```sql
+-- 中文分词测试
+SELECT to_tsvector('jiebamp', '包邮吗');
+-- 结果: '包':1 '邮':2
+
+-- 搜索测试
+SELECT ts_rank(content_tsv_jieba, to_tsquery('jiebamp', '配送')) 
+FROM document_chunks WHERE content_tsv_jieba @@ to_tsquery('jiebamp', '配送');
+-- 返回相关结果
+```
+
+**后端测试**: 233 个测试全部通过
+
+---
+
 ## 2026-04-19 Chat与RAG功能合并 (v1.0.0)
 
 ### 功能概述
