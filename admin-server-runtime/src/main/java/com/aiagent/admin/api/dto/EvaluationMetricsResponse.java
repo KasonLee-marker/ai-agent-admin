@@ -51,4 +51,19 @@ public class EvaluationMetricsResponse {
 
     /** 平均输出 Token 数 */
     private Double averageOutputTokens;
+
+    /**
+     * 平均 AI 得分（0-100）
+     */
+    private Double averageScore;
+
+    /**
+     * 平均语义相似度（0-1）
+     */
+    private Double averageSemanticSimilarity;
+
+    /**
+     * 平均忠实度（0-1）
+     */
+    private Double averageFaithfulness;
 }

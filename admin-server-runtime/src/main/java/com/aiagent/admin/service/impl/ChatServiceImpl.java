@@ -1,8 +1,6 @@
 package com.aiagent.admin.service.impl;
 
-import com.aiagent.admin.api.dto.ChatRequest;
-import com.aiagent.admin.api.dto.ChatResponse;
-import com.aiagent.admin.api.dto.ChatSessionDTO;
+import com.aiagent.admin.api.dto.*;
 import com.aiagent.admin.domain.entity.ChatMessage;
 import com.aiagent.admin.domain.entity.ChatSession;
 import com.aiagent.admin.domain.entity.ModelConfig;
@@ -15,6 +13,9 @@ import com.aiagent.admin.domain.repository.PromptTemplateRepository;
 import com.aiagent.admin.service.ChatService;
 import com.aiagent.admin.service.EncryptionService;
 import com.aiagent.admin.service.IdGenerator;
+import com.aiagent.admin.service.RagService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -69,6 +70,8 @@ public class ChatServiceImpl implements ChatService {
     private final PromptTemplateRepository promptTemplateRepository;
     private final EncryptionService encryptionService;
     private final IdGenerator idGenerator;
+    private final RagService ragService;
+    private final ObjectMapper objectMapper;
     private String userContent;
 
     /**
@@ -105,6 +108,13 @@ public class ChatServiceImpl implements ChatService {
                 .messageCount(0)
                 .isActive(true)
                 .createdBy(createdBy)
+                // RAG 配置
+                .enableRag(request.getEnableRag())
+                .knowledgeBaseId(request.getKnowledgeBaseId())
+                .ragTopK(request.getRagTopK())
+                .ragThreshold(request.getRagThreshold())
+                .ragStrategy(request.getRagStrategy())
+                .ragEmbeddingModelId(request.getRagEmbeddingModelId())
                 .build();
 
         ChatSession saved = chatSessionRepository.save(session);
@@ -114,7 +124,7 @@ public class ChatServiceImpl implements ChatService {
     /**
      * 更新会话信息
      * <p>
-     * 支持更新标题、模型ID、提示词ID和系统消息。
+     * 支持更新标题、模型ID、提示词ID、系统消息和 RAG 配置。
      * 如果指定了新的 promptId 且未手动指定 systemMessage，则从模板加载内容。
      * </p>
      *
@@ -159,6 +169,26 @@ public class ChatServiceImpl implements ChatService {
         } else if (request.getSystemMessage() != null) {
             // 单独更新系统消息
             session.setSystemMessage(request.getSystemMessage());
+        }
+
+        // 更新 RAG 配置
+        if (request.getEnableRag() != null) {
+            session.setEnableRag(request.getEnableRag());
+        }
+        if (request.getKnowledgeBaseId() != null) {
+            session.setKnowledgeBaseId(request.getKnowledgeBaseId());
+        }
+        if (request.getRagTopK() != null) {
+            session.setRagTopK(request.getRagTopK());
+        }
+        if (request.getRagThreshold() != null) {
+            session.setRagThreshold(request.getRagThreshold());
+        }
+        if (request.getRagStrategy() != null) {
+            session.setRagStrategy(request.getRagStrategy());
+        }
+        if (request.getRagEmbeddingModelId() != null) {
+            session.setRagEmbeddingModelId(request.getRagEmbeddingModelId());
         }
 
         session.setUpdatedAt(LocalDateTime.now());
@@ -268,9 +298,15 @@ public class ChatServiceImpl implements ChatService {
         // 保存用户消息
         saveUserMessage(session, request.getContent());
 
+        // RAG 检索（如果启用）
+        List<VectorSearchResult> sources = null;
+        if (Boolean.TRUE.equals(session.getEnableRag())) {
+            sources = retrieveDocuments(session, request.getContent());
+        }
+
         ChatMessage assistantMessage;
         try {
-            String aiResponse = callAiModel(session, request.getContent(), modelConfig);
+            String aiResponse = callAiModel(session, request.getContent(), modelConfig, sources);
             long latency = System.currentTimeMillis() - startTime;
 
             assistantMessage = ChatMessage.builder()
@@ -281,6 +317,7 @@ public class ChatServiceImpl implements ChatService {
                     .modelName(modelConfig.getModelName())
                     .latencyMs(latency)
                     .isError(false)
+                    .sources(sources != null ? serializeSources(sources) : null)
                     .build();
         } catch (Exception e) {
             log.error("Error calling AI model: {}", e.getMessage(), e);
@@ -315,18 +352,57 @@ public class ChatServiceImpl implements ChatService {
     }
 
     /**
+     * 检索相关文档（RAG）
+     *
+     * @param session     聊天会话，包含 RAG 配置
+     * @param userContent 用户问题
+     * @return 检索结果列表
+     */
+    private List<VectorSearchResult> retrieveDocuments(ChatSession session, String userContent) {
+        RagChatRequest ragRequest = new RagChatRequest();
+        ragRequest.setQuestion(userContent);
+        ragRequest.setKnowledgeBaseId(session.getKnowledgeBaseId());
+        ragRequest.setTopK(session.getRagTopK() != null ? session.getRagTopK() : 5);
+        ragRequest.setThreshold(session.getRagThreshold() != null ? session.getRagThreshold() : 0.5);
+        ragRequest.setStrategy(session.getRagStrategy());
+        ragRequest.setEmbeddingModelId(session.getRagEmbeddingModelId());
+
+        return ragService.retrieve(ragRequest);
+    }
+
+    /**
+     * 序列化检索来源为 JSON
+     *
+     * @param sources 检索结果列表
+     * @return JSON 字符串
+     */
+    private String serializeSources(List<VectorSearchResult> sources) {
+        try {
+            return objectMapper.writeValueAsString(sources);
+        } catch (JsonProcessingException e) {
+            log.error("Failed to serialize sources: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
      * 构建消息列表(包含系统消息、历史消息和当前用户消息)
+     * <p>
+     * 如果提供了 RAG 检索来源，会将上下文注入到系统消息中。
+     * </p>
      *
      * @param session     聊天会话，包含系统消息模板
      * @param userContent 当前用户输入内容
+     * @param sources     RAG 检索来源（可选）
      * @return 构建好的消息列表，用于发送给 AI 模型
      */
-    private List<org.springframework.ai.chat.messages.Message> buildMessageList(ChatSession session, String userContent) {
+    private List<org.springframework.ai.chat.messages.Message> buildMessageList(ChatSession session, String userContent, List<VectorSearchResult> sources) {
         List<org.springframework.ai.chat.messages.Message> messages = new ArrayList<>();
 
-        // 系统消息
-        if (session.getSystemMessage() != null && !session.getSystemMessage().isEmpty()) {
-            messages.add(new SystemMessage(session.getSystemMessage()));
+        // 系统消息（可能包含 RAG 上下文）
+        String systemMessage = buildSystemMessage(session, sources);
+        if (systemMessage != null && !systemMessage.isEmpty()) {
+            messages.add(new SystemMessage(systemMessage));
         }
 
         List<ChatMessage> history = chatMessageRepository.findConversationHistory(session.getId());
@@ -340,6 +416,42 @@ public class ChatServiceImpl implements ChatService {
 
         messages.add(new UserMessage(userContent));
         return messages;
+    }
+
+    /**
+     * 构建系统消息（包含 RAG 上下文）
+     *
+     * @param session 聊天会话
+     * @param sources RAG 检索来源（可选）
+     * @return 系统消息
+     */
+    private String buildSystemMessage(ChatSession session, List<VectorSearchResult> sources) {
+        String baseMessage = session.getSystemMessage();
+
+        // 如果有 RAG 来源，注入上下文
+        if (sources != null && !sources.isEmpty()) {
+            String context = sources.stream()
+                    .map(VectorSearchResult::getContent)
+                    .collect(Collectors.joining("\n\n---\n\n"));
+
+            String ragPrompt = """
+                    你是一个智能助手，请根据以下参考信息回答用户的问题。
+                    如果参考信息中没有相关内容，请诚实地说"根据现有信息无法回答该问题"。
+                    
+                    参考信息：
+                    %s
+                    
+                    请基于以上参考信息回答用户问题。
+                    """.formatted(context);
+
+            // 如果有自定义系统消息，追加 RAG 上下文提示
+            if (baseMessage != null && !baseMessage.isEmpty()) {
+                return baseMessage + "\n\n" + ragPrompt;
+            }
+            return ragPrompt;
+        }
+
+        return baseMessage;
     }
 
     /**
@@ -386,21 +498,23 @@ public class ChatServiceImpl implements ChatService {
      * <p>
      * 使用 Spring AI OpenAiChatClient 进行模型调用。
      * 支持通过配置的 baseUrl 和 apiKey 连接到 OpenAI 兼容的 API。
+     * 如果提供了 sources，会注入 RAG 上下文。
      * </p>
      *
      * @param session     聊天会话，用于获取历史上下文
      * @param userContent 用户输入内容
      * @param modelConfig 模型配置，包含 API endpoint、模型名称、温度等参数
+     * @param sources     RAG 检索来源（可选）
      * @return AI 模型的响应文本
      * @throws RuntimeException 模型调用失败时抛出
      */
-    private String callAiModel(ChatSession session, String userContent, ModelConfig modelConfig) {
-        List<Message> messages = buildMessageList(session, userContent);
+    private String callAiModel(ChatSession session, String userContent, ModelConfig modelConfig, List<VectorSearchResult> sources) {
+        List<Message> messages = buildMessageList(session, userContent, sources);
         Prompt prompt = new Prompt(messages);
 
         try {
-            log.info("Calling AI model: name={}, modelName={}, baseUrl={}",
-                    modelConfig.getName(), modelConfig.getModelName(), modelConfig.getBaseUrl());
+            log.info("Calling AI model: name={}, modelName={}, baseUrl={}, ragEnabled={}",
+                    modelConfig.getName(), modelConfig.getModelName(), modelConfig.getBaseUrl(), sources != null);
 
             OpenAiChatClient chatClient = buildChatClient(modelConfig);
             org.springframework.ai.chat.ChatResponse response = chatClient.call(prompt);
@@ -507,6 +621,13 @@ public class ChatServiceImpl implements ChatService {
                 .systemMessage(session.getSystemMessage())
                 .messageCount(session.getMessageCount())
                 .isActive(session.getIsActive())
+                // RAG 配置
+                .enableRag(session.getEnableRag())
+                .knowledgeBaseId(session.getKnowledgeBaseId())
+                .ragTopK(session.getRagTopK())
+                .ragThreshold(session.getRagThreshold())
+                .ragStrategy(session.getRagStrategy())
+                .ragEmbeddingModelId(session.getRagEmbeddingModelId())
                 .createdAt(session.getCreatedAt())
                 .updatedAt(session.getUpdatedAt())
                 .createdBy(session.getCreatedBy())
@@ -520,6 +641,17 @@ public class ChatServiceImpl implements ChatService {
      * @return 消息 DTO
      */
     private ChatResponse toMessageDTO(ChatMessage message) {
+        // 解析 sources JSON
+        List<VectorSearchResult> sources = null;
+        if (message.getSources() != null && !message.getSources().isEmpty()) {
+            try {
+                sources = objectMapper.readValue(message.getSources(),
+                        objectMapper.getTypeFactory().constructCollectionType(List.class, VectorSearchResult.class));
+            } catch (JsonProcessingException e) {
+                log.error("Failed to parse sources JSON: {}", e.getMessage());
+            }
+        }
+
         return ChatResponse.builder()
                 .id(message.getId())
                 .sessionId(message.getSessionId())
@@ -530,6 +662,7 @@ public class ChatServiceImpl implements ChatService {
                 .latencyMs(message.getLatencyMs())
                 .isError(message.getIsError())
                 .errorMessage(message.getErrorMessage())
+                .sources(sources)
                 .createdAt(message.getCreatedAt())
                 .build();
     }
@@ -572,14 +705,14 @@ public class ChatServiceImpl implements ChatService {
                             .doOnComplete(() -> {
                                 // 在 boundedElastic 线程池执行阻塞的保存操作
                                 Mono.fromRunnable(() -> saveAssistantMessage(
-                                                context.session(), context.modelConfig(), fullResponse.toString()))
+                                                context.session(), context.modelConfig(), fullResponse.toString(), context.sources()))
                                         .subscribeOn(Schedulers.boundedElastic())
                                         .subscribe();
                             })
                             .doOnError(e -> {
                                 log.error("Stream error: {}", e.getMessage());
                                 Mono.fromRunnable(() -> saveAssistantMessage(
-                                                context.session(), context.modelConfig(), ""))
+                                                context.session(), context.modelConfig(), "", context.sources()))
                                         .subscribeOn(Schedulers.boundedElastic())
                                         .subscribe();
                             });
@@ -588,6 +721,9 @@ public class ChatServiceImpl implements ChatService {
 
     /**
      * 准备流式上下文(阻塞操作,需在单独线程池执行)
+     * <p>
+     * 如果会话启用了 RAG，会先检索文档并注入上下文。
+     * </p>
      */
     private StreamContext prepareStreamContext(ChatRequest request) {
         // 使用公共方法获取 session 和 modelConfig
@@ -598,22 +734,29 @@ public class ChatServiceImpl implements ChatService {
         // 保存用户消息
         saveUserMessage(session, request.getContent());
 
-        // 构建消息列表
-        List<org.springframework.ai.chat.messages.Message> messages = buildMessageList(session, request.getContent());
+        // RAG 检索（如果启用）
+        List<VectorSearchResult> sources = null;
+        if (Boolean.TRUE.equals(session.getEnableRag())) {
+            sources = retrieveDocuments(session, request.getContent());
+        }
+
+        // 构建消息列表（包含 RAG 上下文）
+        List<org.springframework.ai.chat.messages.Message> messages = buildMessageList(session, request.getContent(), sources);
         Prompt prompt = new Prompt(messages);
         OpenAiChatClient chatClient = buildChatClient(modelConfig);
 
-        return new StreamContext(session, modelConfig, prompt, chatClient);
+        return new StreamContext(session, modelConfig, prompt, chatClient, sources);
     }
 
     /**
-     * 流式上下文，包含 session、modelConfig、prompt 和 chatClient
+     * 流式上下文，包含 session、modelConfig、prompt、chatClient 和 RAG sources
      */
     private record StreamContext(
             ChatSession session,
             ModelConfig modelConfig,
             Prompt prompt,
-            OpenAiChatClient chatClient
+            OpenAiChatClient chatClient,
+            List<VectorSearchResult> sources
     ) {
     }
 
@@ -622,13 +765,15 @@ public class ChatServiceImpl implements ChatService {
      * <p>
      * 更新会话的消息计数和最后更新时间。
      * 如果响应内容为空，标记为错误消息。
+     * 如果有 RAG 检索来源，会存储到消息中。
      * </p>
      *
      * @param session    聊天会话实体
      * @param modelConfig 模型配置实体
      * @param content    助手响应内容
+     * @param sources    RAG 检索来源（可选）
      */
-    private void saveAssistantMessage(ChatSession session, ModelConfig modelConfig, String content) {
+    private void saveAssistantMessage(ChatSession session, ModelConfig modelConfig, String content, List<VectorSearchResult> sources) {
         ChatMessage assistantMessage = ChatMessage.builder()
                 .id(idGenerator.generateId())
                 .sessionId(session.getId())
@@ -637,6 +782,7 @@ public class ChatServiceImpl implements ChatService {
                 .modelName(modelConfig.getModelName())
                 .isError(content.isEmpty())
                 .errorMessage(content.isEmpty() ? "Stream failed" : null)
+                .sources(sources != null ? serializeSources(sources) : null)
                 .build();
         chatMessageRepository.save(assistantMessage);
 

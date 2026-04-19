@@ -232,10 +232,6 @@ public class EvaluationAsyncService {
                 retrievedDocs = retrieveDocuments(knowledgeBaseId, embeddingModelId, item.getInput(), 5);
                 result.setRetrievedDocIds(serializeDocIds(retrievedDocs));
 
-                if (item.getExpectedDocIds() != null && !item.getExpectedDocIds().isEmpty()) {
-                    result.setRetrievalScore(calculateRetrievalMetrics(item.getExpectedDocIds(), retrievedDocs));
-                }
-
                 renderedPrompt = buildRagPrompt(baseTemplate, item.getInput(), retrievedDocs);
             } else {
                 renderedPrompt = renderPrompt(baseTemplate, item.getInput());
@@ -354,25 +350,6 @@ public class EvaluationAsyncService {
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
             return mapper.writeValueAsString(ids);
         } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private Float calculateRetrievalMetrics(String expectedDocIds, List<VectorSearchResult> retrievedDocs) {
-        try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            List<String> expected = mapper.readValue(expectedDocIds, List.class);
-            List<String> retrieved = retrievedDocs.stream().map(VectorSearchResult::getChunkId).toList();
-
-            int hitCount = 0;
-            for (String expectedId : expected) {
-                if (retrieved.contains(expectedId)) {
-                    hitCount++;
-                }
-            }
-            return expected.isEmpty() ? 0f : (float) hitCount / expected.size();
-        } catch (Exception e) {
-            log.warn("Failed to parse expected doc IDs: {}", expectedDocIds);
             return null;
         }
     }

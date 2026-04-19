@@ -10,7 +10,6 @@ import ChatPage from '@/pages/Chat'
 import DatasetPage from '@/pages/Datasets'
 import EvaluationPage from '@/pages/Evaluations'
 import DocumentPage from '@/pages/Documents'
-import RagPage from '@/pages/Rag'
 import KnowledgeBasesPage from '@/pages/KnowledgeBases'
 import {useAuthStore} from '@/stores/authStore'
 
@@ -41,7 +40,6 @@ const App: React.FC = () => {
                     <Route path="evaluations" element={<EvaluationPage/>}/>
                     <Route path="documents" element={<DocumentPage/>}/>
                     <Route path="knowledge-bases" element={<KnowledgeBasesPage/>}/>
-                    <Route path="rag" element={<RagPage/>}/>
                 </Route>
                 <Route path="*" element={<Navigate to="/" replace/>}/>
             </Routes>

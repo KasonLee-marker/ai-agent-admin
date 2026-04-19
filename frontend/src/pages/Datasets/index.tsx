@@ -14,7 +14,14 @@ import {
     Tooltip,
     Upload
 } from 'antd'
-import {DeleteOutlined, DownloadOutlined, EditOutlined, EyeOutlined, PlusOutlined, UploadOutlined} from '@ant-design/icons'
+import {
+    DeleteOutlined,
+    DownloadOutlined,
+    EditOutlined,
+    EyeOutlined,
+    PlusOutlined,
+    UploadOutlined
+} from '@ant-design/icons'
 import type {ColumnsType} from 'antd/es/table'
 import {
     createDataset,
@@ -154,9 +161,7 @@ const DatasetPage: React.FC = () => {
         setEditingItem(record)
         itemForm.setFieldsValue({
             input: record.input,
-            output: record.output,
-            expectedDocIds: record.expectedDocIds,
-            context: record.context
+            output: record.output
         })
         setItemModalVisible(true)
     }
@@ -462,14 +467,6 @@ const DatasetPage: React.FC = () => {
                     </Form.Item>
                     <Form.Item name="output" label="期望输出（可选）">
                         <Input.TextArea rows={4}/>
-                    </Form.Item>
-                    <Form.Item name="expectedDocIds" label="期望文档ID（RAG评估）"
-                               help='JSON数组格式，如：["docId1", "docId2"]'>
-                        <Input placeholder='["docId1", "docId2"]'/>
-                    </Form.Item>
-                    <Form.Item name="context" label="参考上下文（RAG评估）"
-                               help="用于评估答案是否忠实于检索内容">
-                        <Input.TextArea rows={3}/>
                     </Form.Item>
                 </Form>
             </Modal>

@@ -97,6 +97,48 @@ public class ChatSession {
     private LocalDateTime updatedAt;
 
     /**
+     * 是否启用 RAG 检索增强
+     * <p>
+     * 启用后，对话时会先从知识库检索相关文档，再生成回答。
+     * </p>
+     */
+    @Column(name = "enable_rag")
+    private Boolean enableRag;
+
+    /**
+     * 关联知识库 ID（用于 RAG 检索）
+     * <p>
+     * 如果设置了知识库，检索时默认只在该知识库范围内搜索。
+     * </p>
+     */
+    @Column(name = "knowledge_base_id", length = 64)
+    private String knowledgeBaseId;
+
+    /**
+     * RAG 检索数量（topK）
+     */
+    @Column(name = "rag_top_k")
+    private Integer ragTopK;
+
+    /**
+     * RAG 相似度阈值
+     */
+    @Column(name = "rag_threshold")
+    private Double ragThreshold;
+
+    /**
+     * RAG 检索策略（VECTOR/BM25/HYBRID）
+     */
+    @Column(name = "rag_strategy", length = 20)
+    private String ragStrategy;
+
+    /**
+     * RAG Embedding 模型 ID
+     */
+    @Column(name = "rag_embedding_model_id", length = 64)
+    private String ragEmbeddingModelId;
+
+    /**
      * 创建人
      */
     @Column(length = 100)

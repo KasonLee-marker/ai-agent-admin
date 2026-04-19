@@ -38,8 +38,6 @@ export interface EvaluationResult {
     semanticSimilarity?: number;
     /** 实际检索到的文档ID列表 */
     retrievedDocIds?: string;
-    /** 检索评估得分 */
-    retrievalScore?: number;
     /** 事实忠实度 */
     faithfulness?: number;
     latencyMs?: number;
@@ -59,8 +57,6 @@ export interface EvaluationMetrics {
     averageScore?: number;
     /** 平均语义相似度 */
     averageSemanticSimilarity?: number;
-    /** 平均检索得分 */
-    averageRetrievalScore?: number;
     /** 平均忠实度 */
     averageFaithfulness?: number;
     averageLatencyMs?: number;

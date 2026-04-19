@@ -10,7 +10,6 @@ import {
     LineChartOutlined,
     LogoutOutlined,
     MessageOutlined,
-    RobotOutlined,
 } from '@ant-design/icons'
 import {Outlet, useLocation, useNavigate} from 'react-router-dom'
 import {useAuthStore} from '@/stores/authStore'
@@ -34,7 +33,6 @@ const menuItems: MenuProps['items'] = [
         label: '测试调试',
         children: [
             {key: '/chat', icon: <MessageOutlined/>, label: '对话调试'},
-            {key: '/rag', icon: <RobotOutlined/>, label: 'RAG 对话'},
         ]
     },
     {

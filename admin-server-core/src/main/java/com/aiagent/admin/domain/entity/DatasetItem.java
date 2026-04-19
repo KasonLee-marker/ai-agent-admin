@@ -17,7 +17,6 @@ import java.time.LocalDateTime;
  * <ul>
  *   <li>输入数据 - 测试问题或提示词</li>
  *   <li>输出数据 - 期望的回答</li>
- *   <li>RAG 评估数据 - 期望检索的文档 ID 和参考上下文</li>
  * </ul>
  * </p>
  *
@@ -74,23 +73,6 @@ public class DatasetItem {
     @Column(name = "output_data", length = 10000)
     private String output;
 
-    /**
-     * 期望检索到的文档 ID 列表（用于 RAG 评估）
-     * <p>
-     * JSON 数组格式：["docId1", "docId2"]
-     * </p>
-     */
-    @Column(name = "expected_doc_ids", length = 500)
-    private String expectedDocIds;
-
-    /**
-     * 参考上下文（用于 RAG 评估的 faithfulness 指标）
-     * <p>
-     * 提供正确答案应基于的事实内容，用于评估答案是否忠实于检索内容。
-     * </p>
-     */
-    @Column(name = "context_data", length = 5000)
-    private String context;
 
     /**
      * 元数据（JSON 格式）

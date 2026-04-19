@@ -349,6 +349,7 @@ public class EvaluationServiceImpl implements EvaluationService {
      * 获取评估任务的指标统计
      * <p>
      * 返回任务的汇总指标：成功率、平均延迟、Token 使用等。
+     * 同时计算平均 AI 得分、语义相似度、检索得分、忠实度等质量指标。
      * </p>
      *
      * @param jobId 任务唯一标识
@@ -360,7 +361,15 @@ public class EvaluationServiceImpl implements EvaluationService {
     public EvaluationMetricsResponse getMetrics(String jobId) {
         EvaluationJob job = evaluationJobRepository.findById(jobId)
                 .orElseThrow(() -> new EntityNotFoundException("Evaluation job not found with id: " + jobId));
-        return evaluationMapper.toMetricsResponse(job);
+
+        EvaluationMetricsResponse metrics = evaluationMapper.toMetricsResponse(job);
+
+        // 计算平均得分等指标（从评估结果表聚合）
+        metrics.setAverageScore(evaluationResultRepository.calculateAverageScoreByJobId(jobId));
+        metrics.setAverageSemanticSimilarity(evaluationResultRepository.calculateAverageSemanticSimilarityByJobId(jobId));
+        metrics.setAverageFaithfulness(evaluationResultRepository.calculateAverageFaithfulnessByJobId(jobId));
+
+        return metrics;
     }
 
     /**

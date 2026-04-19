@@ -62,6 +62,38 @@ public class ChatRequest {
         /** 系统消息（可选，最大 500 字符） */
         @Size(max = 500, message = "System message must not exceed 500 characters")
         private String systemMessage;
+
+        // ========== RAG 配置字段（可选） ==========
+
+        /**
+         * 是否启用 RAG 检索增强
+         */
+        private Boolean enableRag;
+
+        /**
+         * 关联知识库 ID（用于 RAG 检索）
+         */
+        private String knowledgeBaseId;
+
+        /**
+         * RAG 检索数量（topK）
+         */
+        private Integer ragTopK;
+
+        /**
+         * RAG 相似度阈值
+         */
+        private Double ragThreshold;
+
+        /**
+         * RAG 检索策略（VECTOR/BM25/HYBRID）
+         */
+        private String ragStrategy;
+
+        /**
+         * RAG Embedding 模型 ID
+         */
+        private String ragEmbeddingModelId;
     }
 
     /**
@@ -89,5 +121,33 @@ public class ChatRequest {
         /** 新系统消息（可选，最大 5000 字符） */
         @Size(max = 5000, message = "System message must not exceed 5000 characters")
         private String systemMessage;
+
+        // ========== RAG 配置字段（可选） ==========
+
+        /**
+         * 是否启用 RAG 检索增强
+         */
+        private Boolean enableRag;
+
+        /**
+         * 关联知识库 ID（用于 RAG 检索）
+         */
+        private String knowledgeBaseId;
+
+        /**
+         * RAG 检索数量（topK）
+         */
+        private Integer ragTopK;
+
+        /**
+         * RAG 相似度阈值
+         */
+        private Double ragThreshold;
+
+        /** RAG 检索策略（VECTOR/BM25/HYBRID） */
+        private String ragStrategy;
+
+        /** RAG Embedding 模型 ID */
+        private String ragEmbeddingModelId;
     }
 }

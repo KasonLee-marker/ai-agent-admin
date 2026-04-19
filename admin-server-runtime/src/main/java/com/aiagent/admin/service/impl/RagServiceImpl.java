@@ -79,6 +79,31 @@ public class RagServiceImpl implements RagService {
             """;
 
     /**
+     * 仅执行检索，返回文档来源（不调用 LLM）
+     * <p>
+     * 用于 ChatService 融合 RAG 功能时，先检索文档再自行调用模型。
+     * </p>
+     *
+     * @param request RAG 对话请求，包含问题、知识库ID、检索参数等
+     * @return 检索结果列表
+     */
+    @Override
+    public List<VectorSearchResult> retrieve(RagChatRequest request) {
+        VectorSearchRequest searchRequest = new VectorSearchRequest();
+        searchRequest.setQuery(request.getQuestion());
+        searchRequest.setTopK(request.getTopK() != null ? request.getTopK() : 5);
+        searchRequest.setThreshold(request.getThreshold() != null ? request.getThreshold() : 0.5);
+        searchRequest.setDocumentId(request.getDocumentId());
+        searchRequest.setEmbeddingModelId(request.getEmbeddingModelId());
+        searchRequest.setKnowledgeBaseId(request.getKnowledgeBaseId());
+        searchRequest.setStrategy(request.getStrategy());
+        searchRequest.setEnableRerank(request.getEnableRerank());
+        searchRequest.setRerankModelId(request.getRerankModelId());
+
+        return documentService.searchSimilar(searchRequest);
+    }
+
+    /**
      * 执行 RAG 对话（支持多轮）
      * <p>
      * 执行流程：

@@ -19,10 +19,6 @@ export interface DatasetItem {
     datasetId: string;
     input: string;
     output?: string;
-    /** 期望检索到的文档ID列表（用于RAG评估） */
-    expectedDocIds?: string;  // JSON数组格式
-    /** 参考上下文（用于RAG评估） */
-    context?: string;
     metadata?: Record<string, unknown>;
     createdAt: string;
 }
@@ -44,10 +40,6 @@ export interface UpdateDatasetRequest {
 export interface CreateDatasetItemRequest {
     input: string;
     output?: string;
-    /** 期望检索到的文档ID列表（用于RAG评估） */
-    expectedDocIds?: string;
-    /** 参考上下文（用于RAG评估） */
-    context?: string;
     metadata?: Record<string, unknown>;
 }
 

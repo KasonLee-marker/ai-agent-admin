@@ -12,12 +12,13 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Collections;
-import java.util.concurrent.CompletableFuture;
 
 import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(EvaluationController.class)
 @ContextConfiguration(classes = EvaluationController.class)
@@ -116,7 +117,7 @@ class EvaluationControllerTest {
         response.setId("job-123");
         response.setStatus("RUNNING");
 
-        when(evaluationService.runJob("job-123")).thenReturn(CompletableFuture.completedFuture(response));
+        when(evaluationService.runJob("job-123")).thenReturn(response);
 
         mockMvc.perform(post("/api/v1/evaluations/job-123/run"))
                 .andExpect(status().isOk())

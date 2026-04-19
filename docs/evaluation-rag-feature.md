@@ -1,6 +1,6 @@
 # RAG 评估系统功能文档
 
-> 更新时间：2026年4月13日
+> 更新时间：2026年4月18日
 > 状态: 进行中
 
 ---
@@ -11,8 +11,7 @@
 
 1. **没有知识库参与** - RAG场景下评估应测试检索+生成
 2. **评分方式单一** - 只有AI打分，缺少embedding相似度等客观指标
-3. **数据集缺少RAG字段** - 没有expectedDocIds/context
-4. **Embedding模型配置不清晰** - 用户不知道如何配置embedding模型
+3. **Embedding模型配置不清晰** - 用户不知道如何配置embedding模型
 
 本次改造目标是构建完整的 RAG 评估体系。
 
@@ -114,12 +113,7 @@
 
 ## Checkpoint 2: 数据集增强 ✅
 
-### 新增字段
-
-| 字段               | 类型            | 说明                      |
-|------------------|---------------|-------------------------|
-| `expectedDocIds` | String (JSON) | 期望检索到的文档ID列表，用于计算检索评估指标 |
-| `context`        | String        | 参考上下文，用于评估答案忠实度         |
+数据集项支持标准输入输出字段，无新增RAG特定字段。
 
 ### 关键文件
 
@@ -162,7 +156,6 @@ frontend/src/types/evaluation.ts
 |----------------------|---------------|---------------------|
 | `semanticSimilarity` | Float         | Embedding语义相似度（0-1） |
 | `retrievedDocIds`    | String (JSON) | 实际检索到的文档ID列表        |
-| `retrievalScore`     | Float         | 检索评估得分（Recall）      |
 | `faithfulness`       | Float         | 事实忠实度（0-1）          |
 
 ### 关键文件
@@ -307,14 +300,7 @@ Embedding 模型在系统中被多处调用，但引用逻辑不清晰：
 - **说明**: 计算期望输出与实际输出的向量相似度
 - **依赖**: EmbeddingService（需要配置 Embedding 模型）
 
-### 3. 检索得分 (retrievalScore) ✅
-
-- **范围**: 0-1
-- **方法**: Recall@K
-- **说明**: 期望文档被检索到的比例
-- **公式**: `命中期望文档数 / 期望文档总数`
-
-### 4. 忠实度 (faithfulness) ✅
+### 3. 忠实度 (faithfulness) ✅
 
 - **范围**: 0-1
 - **方法**: LLM评估
@@ -339,13 +325,12 @@ Embedding 模型在系统中被多处调用，但引用逻辑不清晰：
 ```
 1. 检索文档 → DocumentService.searchSimilar() → EmbeddingService
 2. 记录检索结果 (retrievedDocIds)
-3. 计算检索得分（如有 expectedDocIds）→ Recall
-4. 构建 RAG 提示词（包含检索上下文）
-5. 调用 Chat 模型获取响应
-6. 计算语义相似度 → EmbeddingService
-7. 计算忠实度 → LLM评估
-8. AI评分 → LLM-as-Judge
-9. 保存结果
+3. 构建 RAG 提示词（包含检索上下文）
+4. 调用 Chat 模型获取响应
+5. 计算语义相似度 → EmbeddingService
+6. 计算忠实度 → LLM评估
+7. AI评分 → LLM-as-Judge
+8. 保存结果
 ```
 
 ---
@@ -391,9 +376,9 @@ npm run dev
 
 - 配置 Embedding 模型（模型管理页面）
 - 上传文档（检查 embedding 是否正确存储）
-- 创建 RAG 评估任务（检查检索得分、相似度等指标）
+- 创建 RAG 评估任务（检查相似度、忠实度等指标）
 - 对比不同配置的评估结果
 
 ---
 
-*文档更新于 2026年4月13日*
+*文档更新于 2026年4月18日*

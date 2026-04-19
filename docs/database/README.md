@@ -51,23 +51,23 @@ docker exec -i agentx-postgres pg_dump -U adminuser -d admindb --schema-only --n
 
 ### 核心模块
 
-| 模块            | 表名                       | 说明                                  |
-|---------------|--------------------------|-------------------------------------|
-| **Prompt 管理** | prompt_templates         | Prompt 模板                           |
-|               | prompt_versions          | Prompt 版本历史                         |
-| **模型管理**      | model_config             | AI 模型配置（对话 + Embedding）             |
-| **对话调试**      | chat_sessions            | 对话会话                                |
-|               | chat_messages            | 对话消息                                |
-| **数据集管理**     | datasets                 | 数据集                                 |
-|               | dataset_items            | 数据集项（支持 context 和 expected_doc_ids） |
-| **评估系统**      | evaluation_jobs          | 评估任务（支持 RAG 评估）                     |
-|               | evaluation_results       | 评估结果（含语义相似度、忠实度等指标）                 |
-| **知识库管理**     | knowledge_bases          | 知识库（支持重索引）                          |
-| **文档检索**      | documents                | 文档（支持多种分块策略）                        |
-|               | document_chunks          | 文档分块（文本 + 全文搜索）                     |
-|               | document_embeddings_1024 | 文档向量（1024 维）                        |
-| **RAG 对话**    | rag_sessions             | RAG 会话                              |
-|               | rag_messages             | RAG 对话消息（含检索来源）                     |
+| 模块            | 表名                       | 说明                      |
+|---------------|--------------------------|-------------------------|
+| **Prompt 管理** | prompt_templates         | Prompt 模板               |
+|               | prompt_versions          | Prompt 版本历史             |
+| **模型管理**      | model_config             | AI 模型配置（对话 + Embedding） |
+| **对话调试**      | chat_sessions            | 对话会话                    |
+|               | chat_messages            | 对话消息                    |
+| **数据集管理**     | datasets                 | 数据集                     |
+|               | dataset_items            | 数据集项                    |
+| **评估系统**      | evaluation_jobs          | 评估任务（支持 RAG 评估）         |
+|               | evaluation_results       | 评估结果（含语义相似度、忠实度等指标）     |
+| **知识库管理**     | knowledge_bases          | 知识库（支持重索引）              |
+| **文档检索**      | documents                | 文档（支持多种分块策略）            |
+|               | document_chunks          | 文档分块（文本 + 全文搜索）         |
+|               | document_embeddings_1024 | 文档向量（1024 维）            |
+| **RAG 对话**    | rag_sessions             | RAG 会话                  |
+|               | rag_messages             | RAG 对话消息（含检索来源）         |
 
 ## 数据库特性
 

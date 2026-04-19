@@ -121,14 +121,6 @@ public class EvaluationResult {
     @Column(name = "retrieved_doc_ids", length = 500)
     private String retrievedDocIds;
 
-    /**
-     * 检索评估得分（Recall@K）
-     * <p>
-     * 表示期望文档被检索到的比例（0-1）。
-     * </p>
-     */
-    @Column(name = "retrieval_score")
-    private Float retrievalScore;
 
     /**
      * 事实忠实度（0-1）

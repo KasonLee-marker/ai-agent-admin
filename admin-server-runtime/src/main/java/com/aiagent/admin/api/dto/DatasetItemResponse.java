@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 /**
  * 数据集项响应 DTO
  * <p>
- * 返回单个数据集项的详细信息，包含输入、输出、RAG 评估字段等。
+ * 返回单个数据集项的详细信息，包含输入、输出。
  * </p>
  */
 @Data
@@ -32,16 +32,6 @@ public class DatasetItemResponse {
 
     /** 期望输出 */
     private String output;
-
-    /**
-     * 期望检索到的文档ID列表（用于RAG评估）
-     */
-    private String expectedDocIds;
-
-    /**
-     * 参考上下文（用于RAG评估）
-     */
-    private String context;
 
     /** 元数据 */
     private String metadata;

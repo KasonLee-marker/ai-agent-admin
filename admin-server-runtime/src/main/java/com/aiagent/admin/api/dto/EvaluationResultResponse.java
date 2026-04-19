@@ -59,11 +59,6 @@ public class EvaluationResultResponse {
     private String retrievedDocIds;
 
     /**
-     * 检索评估得分
-     */
-    private Float retrievalScore;
-
-    /**
      * 事实忠实度
      */
     private Float faithfulness;

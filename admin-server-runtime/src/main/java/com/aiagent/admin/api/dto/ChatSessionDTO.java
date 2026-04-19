@@ -47,6 +47,38 @@ public class ChatSessionDTO {
     /** 是否活跃 */
     private Boolean isActive;
 
+    // ========== RAG 配置字段 ==========
+
+    /**
+     * 是否启用 RAG 检索增强
+     */
+    private Boolean enableRag;
+
+    /**
+     * 关联知识库 ID
+     */
+    private String knowledgeBaseId;
+
+    /**
+     * RAG 检索数量（topK）
+     */
+    private Integer ragTopK;
+
+    /**
+     * RAG 相似度阈值
+     */
+    private Double ragThreshold;
+
+    /**
+     * RAG 检索策略
+     */
+    private String ragStrategy;
+
+    /**
+     * RAG Embedding 模型 ID
+     */
+    private String ragEmbeddingModelId;
+
     /** 创建时间 */
     private LocalDateTime createdAt;
 

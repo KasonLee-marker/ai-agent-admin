@@ -93,6 +93,16 @@ public class ChatMessage {
     private String errorMessage;
 
     /**
+     * RAG 检索来源 JSON
+     * <p>
+     * 仅助手消息有此字段，存储检索来源的 JSON 格式数据，
+     * 包含 chunkId、documentId、documentName、score 等信息。
+     * </p>
+     */
+    @Column(name = "sources", columnDefinition = "TEXT")
+    private String sources;
+
+    /**
      * 创建时间
      */
     @CreationTimestamp

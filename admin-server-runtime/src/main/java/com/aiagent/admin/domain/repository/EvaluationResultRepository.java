@@ -109,4 +109,31 @@ public interface EvaluationResultRepository extends JpaRepository<EvaluationResu
      * @param jobId 任务 ID
      */
     void deleteByJobId(String jobId);
+
+    /**
+     * 计算任务的平均 AI 得分（仅统计成功且有得分的结果）
+     *
+     * @param jobId 任务 ID
+     * @return 平均 AI 得分（0-100）
+     */
+    @Query("SELECT AVG(r.score) FROM EvaluationResult r WHERE r.jobId = :jobId AND r.status = 'SUCCESS' AND r.score IS NOT NULL")
+    Double calculateAverageScoreByJobId(@Param("jobId") String jobId);
+
+    /**
+     * 计算任务的平均语义相似度（仅统计成功且有值的结果）
+     *
+     * @param jobId 任务 ID
+     * @return 平均语义相似度（0-1）
+     */
+    @Query("SELECT AVG(r.semanticSimilarity) FROM EvaluationResult r WHERE r.jobId = :jobId AND r.status = 'SUCCESS' AND r.semanticSimilarity IS NOT NULL")
+    Double calculateAverageSemanticSimilarityByJobId(@Param("jobId") String jobId);
+
+    /**
+     * 计算任务的平均忠实度（仅统计成功且有值的结果）
+     *
+     * @param jobId 任务 ID
+     * @return 平均忠实度（0-1）
+     */
+    @Query("SELECT AVG(r.faithfulness) FROM EvaluationResult r WHERE r.jobId = :jobId AND r.status = 'SUCCESS' AND r.faithfulness IS NOT NULL")
+    Double calculateAverageFaithfulnessByJobId(@Param("jobId") String jobId);
 }

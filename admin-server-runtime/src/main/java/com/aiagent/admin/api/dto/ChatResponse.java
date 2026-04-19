@@ -50,6 +50,13 @@ public class ChatResponse {
     /** 错误信息（失败时） */
     private String errorMessage;
 
+    // ========== RAG 相关字段 ==========
+
+    /**
+     * RAG 检索来源（仅助手消息有此字段）
+     */
+    private List<VectorSearchResult> sources;
+
     /** 创建时间 */
     private LocalDateTime createdAt;
 

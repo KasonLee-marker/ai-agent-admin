@@ -527,15 +527,6 @@ const EvaluationPage: React.FC = () => {
                     color={sim >= 0.8 ? 'success' : sim >= 0.5 ? 'warning' : 'error'}>{(sim * 100).toFixed(0)}%</Tag> : '-'
         },
         {
-            title: '检索得分',
-            dataIndex: 'retrievalScore',
-            key: 'retrievalScore',
-            width: 80,
-            render: (score?: number) => score ?
-                <Tag
-                    color={score >= 0.8 ? 'success' : score >= 0.5 ? 'warning' : 'error'}>{(score * 100).toFixed(0)}%</Tag> : '-'
-        },
-        {
             title: '忠实度',
             dataIndex: 'faithfulness',
             key: 'faithfulness',

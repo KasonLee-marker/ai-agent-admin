@@ -1,6 +1,31 @@
 import React, {useEffect, useRef, useState} from 'react'
-import {Button, Card, Empty, Form, Input, Layout, List, message, Modal, Select, Space, Spin} from 'antd'
-import {DeleteOutlined, EditOutlined, InfoCircleOutlined, PlusOutlined, SendOutlined} from '@ant-design/icons'
+import {
+    Button,
+    Card,
+    Collapse,
+    Divider,
+    Empty,
+    Form,
+    Input,
+    Layout,
+    List,
+    message,
+    Modal,
+    Select,
+    Slider,
+    Space,
+    Spin,
+    Switch,
+    Tag
+} from 'antd'
+import {
+    DeleteOutlined,
+    EditOutlined,
+    FileTextOutlined,
+    InfoCircleOutlined,
+    PlusOutlined,
+    SendOutlined
+} from '@ant-design/icons'
 import {
     createSession,
     deleteSession,
@@ -11,9 +36,11 @@ import {
 } from '@/api/chat'
 import {listModels} from '@/api/models'
 import {listPrompts} from '@/api/prompts'
-import {ChatMessage, ChatSession, CreateSessionRequest} from '@/types/chat'
+import {listAllKnowledgeBases} from '@/api/knowledgeBase'
+import {ChatMessage, ChatSession, CreateSessionRequest, VectorSearchResult} from '@/types/chat'
 import {ModelConfig} from '@/types/model'
 import {PromptTemplate} from '@/types/prompt'
+import {KnowledgeBase} from '@/types/knowledgeBase'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
@@ -24,6 +51,8 @@ const {Sider, Content} = Layout
 const ChatPage: React.FC = () => {
     const [sessions, setSessions] = useState<ChatSession[]>([])
     const [models, setModels] = useState<ModelConfig[]>([])
+    const [embeddingModels, setEmbeddingModels] = useState<ModelConfig[]>([])
+    const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([])
     const [prompts, setPrompts] = useState<PromptTemplate[]>([])
     const [currentSession, setCurrentSession] = useState<ChatSession | null>(null)
     const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -38,6 +67,12 @@ const ChatPage: React.FC = () => {
     const [editSessionForm] = Form.useForm()
     const messagesEndRef = useRef<HTMLDivElement>(null)
 
+    // RAG 配置状态
+    const [enableRag, setEnableRag] = useState(false)
+    const [ragTopK, setRagTopK] = useState(5)
+    const [ragThreshold, setRagThreshold] = useState(0.5)
+    const [ragStrategy, setRagStrategy] = useState('VECTOR')
+
     // 流式输出状态
     const [isStreaming, setIsStreaming] = useState(false)
 
@@ -45,6 +80,7 @@ const ChatPage: React.FC = () => {
         fetchSessions()
         fetchModels()
         fetchPrompts()
+        fetchKnowledgeBases()
     }, [])
 
     useEffect(() => {
@@ -75,7 +111,12 @@ const ChatPage: React.FC = () => {
         try {
             const res = await listModels()
             if (res.success) {
-                setModels(res.data || [])
+                // Chat 模型用于对话
+                const chatModels = res.data.filter(m => m.modelType === 'CHAT')
+                setModels(chatModels)
+                // Embedding 模型用于 RAG 检索
+                const embedModels = res.data.filter(m => m.modelType === 'EMBEDDING')
+                setEmbeddingModels(embedModels)
             }
         } catch {
             // ignore
@@ -87,6 +128,17 @@ const ChatPage: React.FC = () => {
             const res = await listPrompts()
             if (res.success) {
                 setPrompts(res.data.content || [])
+            }
+        } catch {
+            // ignore
+        }
+    }
+
+    const fetchKnowledgeBases = async () => {
+        try {
+            const res = await listAllKnowledgeBases()
+            if (res.success) {
+                setKnowledgeBases(res.data || [])
             }
         } catch {
             // ignore
@@ -124,7 +176,15 @@ const ChatPage: React.FC = () => {
             const request: CreateSessionRequest = {
                 title: values.title,
                 modelId: values.modelId,
-                systemMessage: values.systemMessage
+                promptId: values.promptId,
+                systemMessage: values.systemMessage,
+                // RAG 配置
+                enableRag: enableRag,
+                knowledgeBaseId: enableRag ? values.knowledgeBaseId : undefined,
+                ragTopK: enableRag ? ragTopK : undefined,
+                ragThreshold: enableRag ? ragThreshold : undefined,
+                ragStrategy: enableRag ? ragStrategy : undefined,
+                ragEmbeddingModelId: enableRag ? values.ragEmbeddingModelId : undefined
             }
             const res = await createSession(request)
             if (res.success) {
@@ -133,6 +193,7 @@ const ChatPage: React.FC = () => {
                 setMessages([])
                 fetchSessions()
                 setSessionModalVisible(false)
+                setEnableRag(false)
                 message.success('创建成功')
             }
         } catch {
@@ -148,6 +209,15 @@ const ChatPage: React.FC = () => {
             promptId: session.promptId,
             systemMessage: session.systemMessage
         })
+        // 设置 RAG 配置状态
+        setEnableRag(session.enableRag || false)
+        setRagTopK(session.ragTopK || 5)
+        setRagThreshold(session.ragThreshold || 0.5)
+        setRagStrategy(session.ragStrategy || 'VECTOR')
+        editSessionForm.setFieldsValue({
+            knowledgeBaseId: session.knowledgeBaseId,
+            ragEmbeddingModelId: session.ragEmbeddingModelId
+        })
         setEditSessionModalVisible(true)
     }
 
@@ -155,7 +225,20 @@ const ChatPage: React.FC = () => {
         if (!editingSession) return
         try {
             const values = await editSessionForm.validateFields()
-            const res = await updateSession(editingSession.id, values)
+            const request = {
+                title: values.title,
+                modelId: values.modelId,
+                promptId: values.promptId,
+                systemMessage: values.systemMessage,
+                // RAG 配置
+                enableRag: enableRag,
+                knowledgeBaseId: enableRag ? values.knowledgeBaseId : undefined,
+                ragTopK: enableRag ? ragTopK : undefined,
+                ragThreshold: enableRag ? ragThreshold : undefined,
+                ragStrategy: enableRag ? ragStrategy : undefined,
+                ragEmbeddingModelId: enableRag ? values.ragEmbeddingModelId : undefined
+            }
+            const res = await updateSession(editingSession.id, request)
             if (res.success) {
                 // 如果编辑的是当前会话，更新当前会话信息
                 if (currentSession?.id === editingSession.id) {
@@ -163,6 +246,7 @@ const ChatPage: React.FC = () => {
                 }
                 fetchSessions()
                 setEditSessionModalVisible(false)
+                setEnableRag(false)
                 message.success('更新成功')
             }
         } catch {
@@ -250,11 +334,35 @@ const ChatPage: React.FC = () => {
         )
     }
 
+    const renderSource = (source: VectorSearchResult, index: number) => (
+        <Collapse
+            key={source.chunkId}
+            size="small"
+            items={[{
+                key: '1',
+                label: (
+                    <Space>
+                        <Tag color="blue">{index + 1}</Tag>
+                        <FileTextOutlined/>
+                        <span>{source.documentName}</span>
+                        <Tag>相似度: {source.score.toFixed(3)}</Tag>
+                    </Space>
+                ),
+                children: (
+                    <div style={{whiteSpace: 'pre-wrap', fontSize: 13}}>
+                        {source.content}
+                    </div>
+                )
+            }]}
+        />
+    )
+
     const renderMessage = (msg: ChatMessage) => {
         const isUser = msg.role === 'USER'
         const isError = msg.isError
         const content = isError && msg.errorMessage ? `**错误:** ${msg.errorMessage}` : msg.content
         const isTempAi = msg.id === 'temp-ai'
+        const hasSources = msg.sources && msg.sources.length > 0
 
         return (
             <div
@@ -279,6 +387,7 @@ const ChatPage: React.FC = () => {
                         {msg.latencyMs && ` - ${msg.latencyMs}ms`}
                         {isError && <span style={{color: '#cf1322'}}> [错误]</span>}
                         {isTempAi && isStreaming && <span style={{color: '#1890ff'}}> [生成中...]</span>}
+                        {hasSources && <Tag color="green" style={{marginLeft: 8}}>RAG</Tag>}
                     </div>
                     <div className="markdown-content">
                         {isUser ? (
@@ -318,6 +427,17 @@ const ChatPage: React.FC = () => {
                             </ReactMarkdown>
                         )}
                     </div>
+                    {hasSources && (
+                        <>
+                            <Divider style={{margin: '8px 0'}}/>
+                            <div style={{fontSize: 12, color: '#666', marginBottom: 8}}>
+                                参考来源 ({msg.sources!.length}个):
+                            </div>
+                            <div style={{maxHeight: 300, overflow: 'auto'}}>
+                                {msg.sources!.map((s, i) => renderSource(s, i))}
+                            </div>
+                        </>
+                    )}
                 </Card>
             </div>
         )
@@ -448,18 +568,31 @@ const ChatPage: React.FC = () => {
                 title="新建对话"
                 open={sessionModalVisible}
                 onOk={handleCreateSessionSubmit}
-                onCancel={() => setSessionModalVisible(false)}
+                onCancel={() => {
+                    setSessionModalVisible(false)
+                    setEnableRag(false)
+                }}
+                width={600}
             >
                 <Form form={sessionForm} layout="vertical">
                     <Form.Item name="title" label="标题">
                         <Input placeholder="对话标题"/>
+                    </Form.Item>
+                    <Form.Item name="modelId" label="模型">
+                        <Select placeholder="选择模型" allowClear>
+                            {models.filter(m => m.isActive).map(m => (
+                                <Select.Option key={m.id} value={m.id}>
+                                    {m.name} ({m.modelName})
+                                    {m.isDefault && ' [默认]'}
+                                </Select.Option>
+                            ))}
+                        </Select>
                     </Form.Item>
                     <Form.Item name="promptId" label="提示词模板">
                         <Select
                             placeholder="选择提示词模板（可选）"
                             allowClear
                             onChange={(value: string | undefined) => {
-                                // 选择模板后自动填充系统消息
                                 const prompt = prompts.find(p => p.id === value)
                                 if (prompt) {
                                     sessionForm.setFieldsValue({systemMessage: prompt.content})
@@ -473,6 +606,122 @@ const ChatPage: React.FC = () => {
                             ))}
                         </Select>
                     </Form.Item>
+                    <Form.Item name="systemMessage" label="系统提示">
+                        <Input.TextArea rows={3} placeholder="可选的系统提示词"/>
+                    </Form.Item>
+
+                    <Divider>RAG 检索增强（可选）</Divider>
+
+                    <Form.Item label={
+                        <Space>
+                            启用 RAG 检索增强
+                            <InfoCircleOutlined title="启用后，对话时会先从知识库检索相关文档，再生成回答"/>
+                        </Space>
+                    }>
+                        <Switch checked={enableRag} onChange={(v) => {
+                            setEnableRag(v)
+                            if (!v) {
+                                sessionForm.setFieldsValue({
+                                    knowledgeBaseId: undefined,
+                                    ragTopK: undefined,
+                                    ragThreshold: undefined,
+                                    ragStrategy: undefined,
+                                    ragEmbeddingModelId: undefined
+                                })
+                            }
+                        }}/>
+                    </Form.Item>
+
+                    {enableRag && (
+                        <>
+                            <Form.Item name="knowledgeBaseId" label="知识库"
+                                       rules={[{required: true, message: '请选择知识库'}]}>
+                                <Select
+                                    placeholder="选择知识库"
+                                    onChange={(value: string) => {
+                                        // 自动选择知识库的默认 Embedding 模型
+                                        const kb = knowledgeBases.find(k => k.id === value)
+                                        if (kb?.defaultEmbeddingModelId) {
+                                            sessionForm.setFieldsValue({ragEmbeddingModelId: kb.defaultEmbeddingModelId})
+                                        }
+                                    }}
+                                >
+                                    {knowledgeBases.map(kb => (
+                                        <Select.Option key={kb.id} value={kb.id}>
+                                            {kb.name} ({kb.documentCount}文档)
+                                        </Select.Option>
+                                    ))}
+                                </Select>
+                            </Form.Item>
+
+                            <Form.Item name="ragEmbeddingModelId" label="Embedding 模型">
+                                <Select placeholder="选择 Embedding 模型" allowClear>
+                                    {embeddingModels.map(m => (
+                                        <Select.Option key={m.id} value={m.id}>
+                                            {m.name}
+                                            {m.isDefaultEmbedding && ' [默认]'}
+                                        </Select.Option>
+                                    ))}
+                                </Select>
+                            </Form.Item>
+
+                            <Form.Item label="检索数量 (topK)">
+                                <Slider
+                                    min={1}
+                                    max={20}
+                                    value={ragTopK}
+                                    onChange={(v) => {
+                                        setRagTopK(v)
+                                        sessionForm.setFieldsValue({ragTopK: v})
+                                    }}
+                                    marks={{1: '1', 5: '5', 10: '10', 20: '20'}}
+                                />
+                            </Form.Item>
+
+                            <Form.Item label="相似度阈值">
+                                <Slider
+                                    min={0}
+                                    max={1}
+                                    step={0.1}
+                                    value={ragThreshold}
+                                    onChange={(v) => {
+                                        setRagThreshold(v)
+                                        sessionForm.setFieldsValue({ragThreshold: v})
+                                    }}
+                                    marks={{0: '0', 0.5: '0.5', 1: '1'}}
+                                />
+                            </Form.Item>
+
+                            <Form.Item name="ragStrategy" label="检索策略">
+                                <Select
+                                    value={ragStrategy}
+                                    onChange={(v) => setRagStrategy(v)}
+                                    options={[
+                                        {value: 'VECTOR', label: '向量检索'},
+                                        {value: 'BM25', label: 'BM25 关键词'},
+                                        {value: 'HYBRID', label: '混合检索'}
+                                    ]}
+                                />
+                            </Form.Item>
+                        </>
+                    )}
+                </Form>
+            </Modal>
+
+            <Modal
+                title="编辑对话"
+                open={editSessionModalVisible}
+                onOk={handleEditSessionSubmit}
+                onCancel={() => {
+                    setEditSessionModalVisible(false)
+                    setEnableRag(false)
+                }}
+                width={600}
+            >
+                <Form form={editSessionForm} layout="vertical">
+                    <Form.Item name="title" label="标题">
+                        <Input placeholder="对话标题"/>
+                    </Form.Item>
                     <Form.Item name="modelId" label="模型">
                         <Select placeholder="选择模型" allowClear>
                             {models.filter(m => m.isActive).map(m => (
@@ -483,28 +732,11 @@ const ChatPage: React.FC = () => {
                             ))}
                         </Select>
                     </Form.Item>
-                    <Form.Item name="systemMessage" label="系统提示">
-                        <Input.TextArea rows={3} placeholder="可选的系统提示词"/>
-                    </Form.Item>
-                </Form>
-            </Modal>
-
-            <Modal
-                title="编辑对话"
-                open={editSessionModalVisible}
-                onOk={handleEditSessionSubmit}
-                onCancel={() => setEditSessionModalVisible(false)}
-            >
-                <Form form={editSessionForm} layout="vertical">
-                    <Form.Item name="title" label="标题">
-                        <Input placeholder="对话标题"/>
-                    </Form.Item>
                     <Form.Item name="promptId" label="提示词模板">
                         <Select
                             placeholder="选择提示词模板（可选）"
                             allowClear
                             onChange={(value: string | undefined) => {
-                                // 选择模板后自动填充系统消息
                                 const prompt = prompts.find(p => p.id === value)
                                 if (prompt) {
                                     editSessionForm.setFieldsValue({systemMessage: prompt.content})
@@ -518,19 +750,95 @@ const ChatPage: React.FC = () => {
                             ))}
                         </Select>
                     </Form.Item>
-                    <Form.Item name="modelId" label="模型">
-                        <Select placeholder="选择模型" allowClear>
-                            {models.filter(m => m.isActive).map(m => (
-                                <Select.Option key={m.id} value={m.id}>
-                                    {m.name} ({m.modelName})
-                                    {m.isDefault && ' [默认]'}
-                                </Select.Option>
-                            ))}
-                        </Select>
-                    </Form.Item>
                     <Form.Item name="systemMessage" label="系统提示">
                         <Input.TextArea rows={3} placeholder="可选的系统提示词"/>
                     </Form.Item>
+
+                    <Divider>RAG 检索增强（可选）</Divider>
+
+                    <Form.Item label={
+                        <Space>
+                            启用 RAG 检索增强
+                            <InfoCircleOutlined title="启用后，对话时会先从知识库检索相关文档，再生成回答"/>
+                        </Space>
+                    }>
+                        <Switch checked={enableRag} onChange={(v) => {
+                            setEnableRag(v)
+                            if (!v) {
+                                editSessionForm.setFieldsValue({
+                                    knowledgeBaseId: undefined,
+                                    ragEmbeddingModelId: undefined
+                                })
+                            }
+                        }}/>
+                    </Form.Item>
+
+                    {enableRag && (
+                        <>
+                            <Form.Item name="knowledgeBaseId" label="知识库"
+                                       rules={[{required: true, message: '请选择知识库'}]}>
+                                <Select
+                                    placeholder="选择知识库"
+                                    onChange={(value: string) => {
+                                        const kb = knowledgeBases.find(k => k.id === value)
+                                        if (kb?.defaultEmbeddingModelId) {
+                                            editSessionForm.setFieldsValue({ragEmbeddingModelId: kb.defaultEmbeddingModelId})
+                                        }
+                                    }}
+                                >
+                                    {knowledgeBases.map(kb => (
+                                        <Select.Option key={kb.id} value={kb.id}>
+                                            {kb.name} ({kb.documentCount}文档)
+                                        </Select.Option>
+                                    ))}
+                                </Select>
+                            </Form.Item>
+
+                            <Form.Item name="ragEmbeddingModelId" label="Embedding 模型">
+                                <Select placeholder="选择 Embedding 模型" allowClear>
+                                    {embeddingModels.map(m => (
+                                        <Select.Option key={m.id} value={m.id}>
+                                            {m.name}
+                                            {m.isDefaultEmbedding && ' [默认]'}
+                                        </Select.Option>
+                                    ))}
+                                </Select>
+                            </Form.Item>
+
+                            <Form.Item label="检索数量 (topK)">
+                                <Slider
+                                    min={1}
+                                    max={20}
+                                    value={ragTopK}
+                                    onChange={(v) => setRagTopK(v)}
+                                    marks={{1: '1', 5: '5', 10: '10', 20: '20'}}
+                                />
+                            </Form.Item>
+
+                            <Form.Item label="相似度阈值">
+                                <Slider
+                                    min={0}
+                                    max={1}
+                                    step={0.1}
+                                    value={ragThreshold}
+                                    onChange={(v) => setRagThreshold(v)}
+                                    marks={{0: '0', 0.5: '0.5', 1: '1'}}
+                                />
+                            </Form.Item>
+
+                            <Form.Item label="检索策略">
+                                <Select
+                                    value={ragStrategy}
+                                    onChange={(v) => setRagStrategy(v)}
+                                    options={[
+                                        {value: 'VECTOR', label: '向量检索'},
+                                        {value: 'BM25', label: 'BM25 关键词'},
+                                        {value: 'HYBRID', label: '混合检索'}
+                                    ]}
+                                />
+                            </Form.Item>
+                        </>
+                    )}
                 </Form>
             </Modal>
         </Layout>

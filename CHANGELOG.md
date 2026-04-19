@@ -1,5 +1,37 @@
 # AI Agent Admin - 变更日志
 
+## 2026-04-18 移除检索得分功能
+
+### 功能调整
+
+**移除原因**：检索得分（Recall@K）需要用户在数据集项中预先标注期望文档ID，但评估任务创建时可动态选择知识库，两者无法匹配，导致该功能实际无法使用。
+
+**删除内容**：
+
+| 模块   | 删除项                           |
+|------|-------------------------------|
+| 数据集项 | `expectedDocIds`、`context` 字段 |
+| 评估结果 | `retrievalScore` 字段           |
+| 评估指标 | `averageRetrievalScore` 统计    |
+| 前端   | 数据集表单中的"期望文档ID"和"参考上下文"输入框    |
+| 前端   | 评估详情表格中的"检索得分"列               |
+
+**数据库变更**：
+
+```sql
+ALTER TABLE dataset_items DROP COLUMN IF EXISTS expected_doc_ids;
+ALTER TABLE dataset_items DROP COLUMN IF EXISTS context_data;
+ALTER TABLE evaluation_results DROP COLUMN IF EXISTS retrieval_score;
+```
+
+**保留的评估指标**：
+
+- AI 得分（0-100）- LLM-as-Judge 质量评分
+- 语义相似度（0-1）- Embedding 余弦相似度
+- 忠实度（0-1）- 答案是否忠实于检索内容
+
+---
+
 ## 2026-04-15 语义切分异步处理修复与优化
 
 ### Bug修复

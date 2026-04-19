@@ -1,8 +1,10 @@
 package com.aiagent.admin.service;
 
 import com.aiagent.admin.api.dto.*;
-import com.aiagent.admin.domain.entity.*;
+import com.aiagent.admin.domain.entity.EvaluationJob;
+import com.aiagent.admin.domain.entity.EvaluationResult;
 import com.aiagent.admin.domain.repository.*;
+import com.aiagent.admin.service.impl.EvaluationAsyncService;
 import com.aiagent.admin.service.impl.EvaluationServiceImpl;
 import com.aiagent.admin.service.mapper.EvaluationMapper;
 import jakarta.persistence.EntityNotFoundException;
@@ -19,8 +21,9 @@ import java.util.Collections;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class EvaluationServiceImplTest {
@@ -41,6 +44,12 @@ class EvaluationServiceImplTest {
     private EvaluationMapper evaluationMapper;
     @Mock
     private EncryptionService encryptionService;
+    @Mock
+    private ModelConfigService modelConfigService;
+    @Mock
+    private KnowledgeBaseRepository knowledgeBaseRepository;
+    @Mock
+    private EvaluationAsyncService evaluationAsyncService;
 
     @InjectMocks
     private EvaluationServiceImpl evaluationService;
@@ -177,6 +186,7 @@ class EvaluationServiceImplTest {
         evaluationService.cancelJob("job-123");
 
         verify(evaluationJobRepository).findById("job-123");
+        verify(evaluationAsyncService).requestCancellation("job-123");
     }
 
     @Test
@@ -196,10 +206,15 @@ class EvaluationServiceImplTest {
 
         when(evaluationJobRepository.findById("job-123")).thenReturn(Optional.of(testJob));
         when(evaluationMapper.toMetricsResponse(testJob)).thenReturn(new EvaluationMetricsResponse());
+        // Mock 平均值查询
+        when(evaluationResultRepository.calculateAverageScoreByJobId("job-123")).thenReturn(85.0);
+        when(evaluationResultRepository.calculateAverageSemanticSimilarityByJobId("job-123")).thenReturn(0.8);
+        when(evaluationResultRepository.calculateAverageFaithfulnessByJobId("job-123")).thenReturn(1.0);
 
         EvaluationMetricsResponse metrics = evaluationService.getMetrics("job-123");
 
         assertNotNull(metrics);
+        verify(evaluationResultRepository).calculateAverageScoreByJobId("job-123");
     }
 
     @Test

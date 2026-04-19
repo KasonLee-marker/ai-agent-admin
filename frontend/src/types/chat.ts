@@ -1,6 +1,16 @@
 // 消息角色
 export type MessageRole = 'USER' | 'ASSISTANT' | 'SYSTEM'
 
+// 向量搜索结果（RAG 检索来源）
+export interface VectorSearchResult {
+    chunkId: string;
+    documentId: string;
+    documentName: string;
+    content: string;
+    score: number;
+    chunkIndex?: number;
+}
+
 // 对话会话
 export interface ChatSession {
     id: string;
@@ -10,6 +20,13 @@ export interface ChatSession {
     systemMessage?: string;
     messageCount: number;
     isActive: boolean;
+    // RAG 配置字段
+    enableRag?: boolean;
+    knowledgeBaseId?: string;
+    ragTopK?: number;
+    ragThreshold?: number;
+    ragStrategy?: string;
+    ragEmbeddingModelId?: string;
     createdAt: string;
     updatedAt: string;
     createdBy: string;
@@ -26,6 +43,8 @@ export interface ChatMessage {
     latencyMs?: number;
     isError: boolean;
     errorMessage?: string;
+    // RAG 检索来源
+    sources?: VectorSearchResult[];
     createdAt: string;
 }
 
@@ -35,6 +54,13 @@ export interface CreateSessionRequest {
     modelId?: string;
     promptId?: string;
     systemMessage?: string;
+    // RAG 配置字段
+    enableRag?: boolean;
+    knowledgeBaseId?: string;
+    ragTopK?: number;
+    ragThreshold?: number;
+    ragStrategy?: string;
+    ragEmbeddingModelId?: string;
 }
 
 // 发送消息请求

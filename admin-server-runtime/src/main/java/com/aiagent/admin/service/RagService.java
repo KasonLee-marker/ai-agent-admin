@@ -2,7 +2,10 @@ package com.aiagent.admin.service;
 
 import com.aiagent.admin.api.dto.RagChatRequest;
 import com.aiagent.admin.api.dto.RagChatResponse;
+import com.aiagent.admin.api.dto.VectorSearchResult;
 import reactor.core.publisher.Flux;
+
+import java.util.List;
 
 /**
  * RAG（检索增强生成）服务接口
@@ -32,6 +35,17 @@ import reactor.core.publisher.Flux;
  * @see RagSessionService
  */
 public interface RagService {
+
+    /**
+     * 仅执行检索，返回文档来源（不调用 LLM）
+     * <p>
+     * 用于 ChatService 融合 RAG 功能时，先检索文档再自行调用模型。
+     * </p>
+     *
+     * @param request RAG 对话请求，包含问题、知识库ID、检索参数等
+     * @return 检索结果列表
+     */
+    List<VectorSearchResult> retrieve(RagChatRequest request);
 
     /**
      * 执行 RAG 对话（同步）
