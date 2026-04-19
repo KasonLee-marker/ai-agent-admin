@@ -13,6 +13,7 @@ import com.aiagent.admin.service.RagSessionService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.NonNull;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -80,16 +81,7 @@ public class RagServiceImpl implements RagService {
 
     @Override
     public List<VectorSearchResult> retrieve(RagChatRequest request) {
-        VectorSearchRequest searchRequest = new VectorSearchRequest();
-        searchRequest.setQuery(request.getQuestion());
-        searchRequest.setTopK(request.getTopK() != null ? request.getTopK() : 5);
-        searchRequest.setThreshold(request.getThreshold() != null ? request.getThreshold() : 0.5);
-        searchRequest.setDocumentId(request.getDocumentId());
-        searchRequest.setEmbeddingModelId(request.getEmbeddingModelId());
-        searchRequest.setKnowledgeBaseId(request.getKnowledgeBaseId());
-        searchRequest.setStrategy(request.getStrategy());
-        searchRequest.setEnableRerank(request.getEnableRerank());
-        searchRequest.setRerankModelId(request.getRerankModelId());
+        VectorSearchRequest searchRequest = getVectorSearchRequest(request);
 
         return documentService.searchSimilar(searchRequest);
     }
@@ -114,16 +106,7 @@ public class RagServiceImpl implements RagService {
         ragSessionService.saveUserMessage(sessionId, request.getQuestion());
 
         // 3. 检索相关文档
-        VectorSearchRequest searchRequest = new VectorSearchRequest();
-        searchRequest.setQuery(request.getQuestion());
-        searchRequest.setTopK(request.getTopK() != null ? request.getTopK() : 5);
-        searchRequest.setThreshold(request.getThreshold() != null ? request.getThreshold() : 0.5);
-        searchRequest.setDocumentId(request.getDocumentId());
-        searchRequest.setEmbeddingModelId(request.getEmbeddingModelId());
-        searchRequest.setKnowledgeBaseId(request.getKnowledgeBaseId());
-        searchRequest.setStrategy(request.getStrategy());
-        searchRequest.setEnableRerank(request.getEnableRerank());
-        searchRequest.setRerankModelId(request.getRerankModelId());
+        VectorSearchRequest searchRequest = getVectorSearchRequest(request);
 
         List<VectorSearchResult> sources = documentService.searchSimilar(searchRequest);
 
@@ -175,6 +158,26 @@ public class RagServiceImpl implements RagService {
                 .latencyMs(latency)
                 .modelName(modelConfig.getModelName())
                 .build();
+    }
+
+    /**
+     * 获取向量检索请求
+     *
+     * @param request RAG 聊天请求
+     * @return 向量检索请求
+     */
+    private static @NonNull VectorSearchRequest getVectorSearchRequest(RagChatRequest request) {
+        VectorSearchRequest searchRequest = new VectorSearchRequest();
+        searchRequest.setQuery(request.getQuestion());
+        searchRequest.setTopK(request.getTopK() != null ? request.getTopK() : 5);
+        searchRequest.setThreshold(request.getThreshold() != null ? request.getThreshold() : 0.5);
+        searchRequest.setDocumentId(request.getDocumentId());
+        searchRequest.setEmbeddingModelId(request.getEmbeddingModelId());
+        searchRequest.setKnowledgeBaseId(request.getKnowledgeBaseId());
+        searchRequest.setStrategy(request.getStrategy());
+        searchRequest.setEnableRerank(request.getEnableRerank());
+        searchRequest.setRerankModelId(request.getRerankModelId());
+        return searchRequest;
     }
 
     /**
@@ -309,16 +312,7 @@ public class RagServiceImpl implements RagService {
         ragSessionService.saveUserMessage(sessionId, request.getQuestion());
 
         // 3. 检索相关文档
-        VectorSearchRequest searchRequest = new VectorSearchRequest();
-        searchRequest.setQuery(request.getQuestion());
-        searchRequest.setTopK(request.getTopK() != null ? request.getTopK() : 5);
-        searchRequest.setThreshold(request.getThreshold() != null ? request.getThreshold() : 0.5);
-        searchRequest.setDocumentId(request.getDocumentId());
-        searchRequest.setEmbeddingModelId(request.getEmbeddingModelId());
-        searchRequest.setKnowledgeBaseId(request.getKnowledgeBaseId());
-        searchRequest.setStrategy(request.getStrategy());
-        searchRequest.setEnableRerank(request.getEnableRerank());
-        searchRequest.setRerankModelId(request.getRerankModelId());
+        VectorSearchRequest searchRequest = getVectorSearchRequest(request);
 
         List<VectorSearchResult> sources = documentService.searchSimilar(searchRequest);
 

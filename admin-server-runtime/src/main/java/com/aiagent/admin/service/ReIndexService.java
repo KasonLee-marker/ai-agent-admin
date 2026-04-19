@@ -2,6 +2,7 @@ package com.aiagent.admin.service;
 
 import com.aiagent.admin.api.dto.ReindexProgressResponse;
 import com.aiagent.admin.api.dto.ReindexRequest;
+import jakarta.persistence.EntityNotFoundException;
 
 /**
  * 知识库重索引服务接口

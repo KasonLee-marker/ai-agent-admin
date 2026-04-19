@@ -296,20 +296,20 @@ public class DocumentAsyncService {
                     sentence = sentence.trim();
                     if (sentence.isEmpty()) continue;
 
-                    if (currentChunk.length() + sentence.length() > chunkSize && currentChunk.length() > 0) {
+                    if (currentChunk.length() + sentence.length() > chunkSize && !currentChunk.isEmpty()) {
                         // 提交当前分块
                         chunks.add(overlapContent + currentChunk.toString().trim());
                         // 计算 overlap
-                        overlapContent = getOverlapFromChunk(overlapContent + currentChunk.toString(), overlap);
+                        overlapContent = getOverlapFromChunk(overlapContent + currentChunk, overlap);
                         currentChunk = new StringBuilder();
                     }
                     currentChunk.append(sentence).append(" ");
                 }
             } else {
                 // 段落未超过限制，直接添加
-                if (currentChunk.length() + paragraph.length() > chunkSize && currentChunk.length() > 0) {
+                if (currentChunk.length() + paragraph.length() > chunkSize && !currentChunk.isEmpty()) {
                     chunks.add(overlapContent + currentChunk.toString().trim());
-                    overlapContent = getOverlapFromChunk(overlapContent + currentChunk.toString(), overlap);
+                    overlapContent = getOverlapFromChunk(overlapContent + currentChunk, overlap);
                     currentChunk = new StringBuilder();
                 }
                 currentChunk.append(paragraph).append(" ");
@@ -317,7 +317,7 @@ public class DocumentAsyncService {
         }
 
         // 处理最后一个分块
-        if (currentChunk.length() > 0) {
+        if (!currentChunk.isEmpty()) {
             chunks.add(overlapContent + currentChunk.toString().trim());
         }
 
@@ -336,11 +336,11 @@ public class DocumentAsyncService {
         String overlapContent = "";
 
         for (String sentence : sentences) {
-            if (currentChunk.length() + sentence.length() > chunkSize && currentChunk.length() > 0) {
+            if (currentChunk.length() + sentence.length() > chunkSize && !currentChunk.isEmpty()) {
                 // 提交当前分块
                 chunks.add(overlapContent + currentChunk.toString().trim());
                 // 计算 overlap（从当前分块末尾取）
-                overlapContent = getOverlapFromChunk(overlapContent + currentChunk.toString(), overlap);
+                overlapContent = getOverlapFromChunk(overlapContent + currentChunk, overlap);
                 currentChunk = new StringBuilder();
             }
             currentChunk.append(sentence).append(" ");
@@ -424,7 +424,7 @@ public class DocumentAsyncService {
 
         if (sentences.size() <= 1) {
             // 更新进度：快速完成
-            updateSemanticProgress(documentId, 1, sentences.size() > 0 ? sentences.size() : 1);
+            updateSemanticProgress(documentId, 1, !sentences.isEmpty() ? sentences.size() : 1);
             chunks.add(text);
             return chunks;
         }
@@ -476,18 +476,15 @@ public class DocumentAsyncService {
             String sentence = sentences.get(i);
 
             // 检查是否需要在当前句子前分割
-            boolean shouldBreak = false;
-            if (i > 0 && similarities[i - 1] < threshold) {
-                // 相似度低于阈值，语义断点
-                shouldBreak = true;
-            }
+            boolean shouldBreak = i > 0 && similarities[i - 1] < threshold;
+            // 相似度低于阈值，语义断点
 
             // 或者当前块超过最大大小
-            if (currentChunk.length() + sentence.length() > maxChunkSize && currentChunk.length() > 0) {
+            if (currentChunk.length() + sentence.length() > maxChunkSize && !currentChunk.isEmpty()) {
                 shouldBreak = true;
             }
 
-            if (shouldBreak && currentChunk.length() > 0) {
+            if (shouldBreak && !currentChunk.isEmpty()) {
                 chunks.add(currentChunk.toString().trim());
                 currentChunk = new StringBuilder();
             }
@@ -496,7 +493,7 @@ public class DocumentAsyncService {
         }
 
         // 添加最后一个块
-        if (currentChunk.length() > 0) {
+        if (!currentChunk.isEmpty()) {
             chunks.add(currentChunk.toString().trim());
         }
 
@@ -650,7 +647,7 @@ public class DocumentAsyncService {
             int embeddedCount = 0;
 
             // 如果dimension是从第一个chunk获取的，跳过第一个（已经计算过了）
-            int startIndex = (dimension != null && embeddingConfig.getEmbeddingDimension() == null) ? 1 : 0;
+            int startIndex = embeddingConfig.getEmbeddingDimension() == null ? 1 : 0;
 
             for (int i = startIndex; i < chunks.size(); i += batchSize) {
                 int end = Math.min(i + batchSize, chunks.size());

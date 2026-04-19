@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.jasypt.encryption.StringEncryptor;
 import org.jasypt.encryption.pbe.PooledPBEStringEncryptor;
 import org.jasypt.encryption.pbe.config.SimpleStringPBEConfig;
+import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -26,19 +27,7 @@ public class EncryptionService {
                 encryptorPassword != null && encryptorPassword.length() > 5
                         ? encryptorPassword.substring(0, 5) : "default");
 
-        PooledPBEStringEncryptor pooledEncryptor = new PooledPBEStringEncryptor();
-        SimpleStringPBEConfig config = new SimpleStringPBEConfig();
-        config.setPassword(encryptorPassword);
-        config.setAlgorithm(algorithm);
-        config.setKeyObtentionIterations("1000");
-        config.setPoolSize("1");
-        config.setProviderName("SunJCE");
-        config.setSaltGeneratorClassName("org.jasypt.salt.RandomSaltGenerator");
-        config.setIvGeneratorClassName("org.jasypt.iv.RandomIvGenerator");
-        config.setStringOutputType("base64");
-        pooledEncryptor.setConfig(config);
-
-        this.encryptor = pooledEncryptor;
+        this.encryptor = getPooledPBEStringEncryptor();
 
         // 测试加密解密是否正常
         try {
@@ -55,6 +44,32 @@ public class EncryptionService {
         }
     }
 
+    /**
+     * 获取 PooledPBEStringEncryptor
+     *
+     * @return PooledPBEStringEncryptor
+     */
+    private @NonNull PooledPBEStringEncryptor getPooledPBEStringEncryptor() {
+        PooledPBEStringEncryptor pooledEncryptor = new PooledPBEStringEncryptor();
+        SimpleStringPBEConfig config = new SimpleStringPBEConfig();
+        config.setPassword(encryptorPassword);
+        config.setAlgorithm(algorithm);
+        config.setKeyObtentionIterations("1000");
+        config.setPoolSize("1");
+        config.setProviderName("SunJCE");
+        config.setSaltGeneratorClassName("org.jasypt.salt.RandomSaltGenerator");
+        config.setIvGeneratorClassName("org.jasypt.iv.RandomIvGenerator");
+        config.setStringOutputType("base64");
+        pooledEncryptor.setConfig(config);
+        return pooledEncryptor;
+    }
+
+    /**
+     * 加密字符串
+     *
+     * @param plainText 明文字符串
+     * @return 加密后的字符串
+     */
     public String encrypt(String plainText) {
         if (plainText == null || plainText.isEmpty()) {
             return plainText;
@@ -66,6 +81,11 @@ public class EncryptionService {
         return "ENC(" + encrypted + ")";
     }
 
+    /**
+     *  解密字符串
+     * @param encryptedText 加密后的字符串
+     * @return 解密后的字符串
+     */
     public String decrypt(String encryptedText) {
         if (encryptedText == null || encryptedText.isEmpty()) {
             return encryptedText;

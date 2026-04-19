@@ -39,7 +39,7 @@ public class KnowledgeBaseRequest {
      * 如果更改此模型，将触发全库重索引。
      * </p>
      */
-    @Schema(description = "默认 Embedding 模型 ID（必填）", required = true)
+    @Schema(description = "默认 Embedding 模型 ID（必填）", requiredMode = Schema.RequiredMode.REQUIRED)
     @NotBlank(message = "Embedding 模型不能为空，请选择一个 Embedding 模型")
     private String defaultEmbeddingModelId;
 }

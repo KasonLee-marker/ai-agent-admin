@@ -496,8 +496,8 @@ public class DocumentServiceImpl implements DocumentService {
         Document document = documentRepository.findById(documentId)
                 .orElseThrow(() -> new EntityNotFoundException("Document not found: " + documentId));
 
-        Integer current = document.getSemanticProgressCurrent() != null ? document.getSemanticProgressCurrent() : 0;
-        Integer total = document.getSemanticProgressTotal() != null ? document.getSemanticProgressTotal() : 0;
+        int current = document.getSemanticProgressCurrent() != null ? document.getSemanticProgressCurrent() : 0;
+        int total = document.getSemanticProgressTotal() != null ? document.getSemanticProgressTotal() : 0;
         Integer percentage = total > 0 ? (int) ((current * 100.0) / total) : 0;
 
         return SemanticProgressResponse.builder()

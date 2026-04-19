@@ -1,5 +1,7 @@
 package com.aiagent.admin.domain.enums;
 
+import com.aiagent.admin.domain.entity.ChatMessage;
+import com.aiagent.admin.domain.entity.RagMessage;
 import lombok.Getter;
 
 /**

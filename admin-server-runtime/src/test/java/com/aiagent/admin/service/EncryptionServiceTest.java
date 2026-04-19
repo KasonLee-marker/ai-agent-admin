@@ -2,6 +2,7 @@ package com.aiagent.admin.service;
 
 import org.jasypt.encryption.pbe.PooledPBEStringEncryptor;
 import org.jasypt.encryption.pbe.config.SimpleStringPBEConfig;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -98,6 +99,22 @@ class EncryptionServiceTest {
         String encrypted = encryptionService.encrypt(plainText);
 
         // 创建一个新的 encryptor 用不同密码
+        PooledPBEStringEncryptor otherEncryptor = getPooledPBEStringEncryptor();
+
+        EncryptionService otherService = new EncryptionService();
+        ReflectionTestUtils.setField(otherService, "encryptor", otherEncryptor);
+
+        // 使用不同密码的 service 应该无法解密
+        String result = otherService.decrypt(encrypted);
+        assertEquals(encrypted, result); // 应该返回原始加密值
+    }
+
+    /**
+     * 获取一个 PooledPBEStringEncryptor 实例用于测试
+     *
+     * @return PooledPBEStringEncryptor
+     */
+    private static @NonNull PooledPBEStringEncryptor getPooledPBEStringEncryptor() {
         PooledPBEStringEncryptor otherEncryptor = new PooledPBEStringEncryptor();
         SimpleStringPBEConfig config = new SimpleStringPBEConfig();
         config.setPassword("different-password");
@@ -109,12 +126,6 @@ class EncryptionServiceTest {
         config.setIvGeneratorClassName("org.jasypt.iv.RandomIvGenerator");
         config.setStringOutputType("base64");
         otherEncryptor.setConfig(config);
-
-        EncryptionService otherService = new EncryptionService();
-        ReflectionTestUtils.setField(otherService, "encryptor", otherEncryptor);
-
-        // 使用不同密码的 service 应该无法解密
-        String result = otherService.decrypt(encrypted);
-        assertEquals(encrypted, result); // 应该返回原始加密值
+        return otherEncryptor;
     }
 }
