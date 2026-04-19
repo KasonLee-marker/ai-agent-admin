@@ -1,5 +1,61 @@
 # AI Agent Admin - 变更日志
 
+## v1.0.1 (2026-04-19) HanLP 中文句子分割集成
+
+### 功能概述
+
+集成 HanLP 中文 NLP 库，修复 LangChain4j 文档分块器对中文文本的 overlap 不生效问题。
+
+### 问题背景
+
+LangChain4j 的 overlapFrom 方法依赖英文标点符号（`.`、`!`、`?`）检测句子边界，对中文标点（`。`、`！`、`？`）无法识别，导致：
+- 中文文档分块后相邻块之间无重叠
+- 语义分块依赖 Embedding API 计算句子相似度，但句子分割不准确
+
+### 解决方案
+
+**引入 HanLP 中文句子分割**
+
+- 依赖: `com.hankcs:hanlp:portable-1.8.6`
+- API: `SentencesUtil.toSentenceList(text)` - 准确识别中文句子边界
+- 所有分块策略内部均使用 HanLP 进行句子分割
+
+**依赖升级**
+
+| 依赖           | 原版本   | 新版本   |
+|--------------|-------|-------|
+| LangChain4j  | 0.36.2 | 1.13.0 |
+| HanLP (新增)   | -     | portable-1.8.6 |
+
+### 分块策略改动
+
+| 策略          | 改动                                       |
+|-------------|------------------------------------------|
+| FIXED_SIZE  | 使用 HanLP 分句，再按字符数组合，实现正确 overlap        |
+| PARAGRAPH   | 使用 HanLP 分句，按段落边界分块，段落过长时递归分割           |
+| SENTENCE    | 使用 HanLP 分句，按句子边界分块                     |
+| RECURSIVE   | 使用 HanLP 分句，段落→句子递归分割                   |
+| SEMANTIC    | 使用 HanLP 分句 → Embedding 相似度计算 → 语义边界分割 |
+
+### 前端改动
+
+- 移除语义分块的 Embedding 模型选择框（自动使用知识库默认模型）
+- 文档上传页面：移除 SEMANTIC 策略的 embedding 选择
+- 知识库管理页面：移除 SEMANTIC 策略的 embedding 提示
+
+### 代码改动
+
+| 文件                         | 改动                                          |
+|----------------------------|---------------------------------------------|
+| `pom.xml`                  | 版本升级 1.0.0 → 1.0.1                         |
+| `admin-server-runtime/pom.xml` | LangChain4j 0.36.2 → 1.13.0, 新增 HanLP     |
+| `DocumentAsyncService.java` | 所有策略使用 HanLP 分句，新增 `splitBySentenceWithOverlap()` 等方法 |
+| `DocumentServiceImpl.java` | 语义分块自动使用知识库默认 Embedding 模型                 |
+| `Documents/index.tsx`      | 移除 SEMANTIC 策略的 embedding 选择框              |
+| `KnowledgeBases/index.tsx` | 移除 SEMANTIC 策略的 embedding 提示              |
+
+---
+
 ## 2026-04-19 pg_jieba 中文分词与 BM25 搜索优化
 
 ### 功能概述
