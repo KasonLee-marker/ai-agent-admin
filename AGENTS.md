@@ -3,8 +3,8 @@
 ## 项目概述
 
 - **名称**: AI Agent Admin
-- **技术栈**: Spring Boot 3.x + Spring AI + React 18 + PostgreSQL/H2
-- **目的**: 企业内网 AI Agent 管理平台（Prompt 管理、模型调用、对话调试、数据集管理、评估系统）
+- **技术栈**: Spring Boot 3.x + Spring AI + React 18 + TypeScript + PostgreSQL/H2
+- **目的**: 企业内网 AI Agent 管理平台（Prompt 管理、模型调用、对话调试、RAG 检索、知识库管理、评估系统）
 
 ## 快速链接
 
@@ -22,16 +22,17 @@
 
 ## 模块清单
 
-| 模块         | 状态    | 优先级 |
-|------------|-------|-----|
-| Prompt 管理  | ✅ 已完成 | P0  |
-| 模型管理       | ✅ 已完成 | P0  |
-| 对话调试       | ✅ 已完成 | P0  |
-| 数据集管理      | ✅ 已完成 | P1  |
-| 评估系统       | ⏳ 进行中 | P1  |
-| 文档检索/RAG   | ✅ 已完成 | P1  |
-| 前端 (React) | ⏳ 开发中 | P1  |
-| 可观测性       | ⏳ 待开始 | P2  |
+| 模块                      | 状态    | 优先级 |
+|-------------------------|-------|-----|
+| Prompt 管理               | ✅ 已完成 | P0  |
+| 模型管理                    | ✅ 已完成 | P0  |
+| 对话调试                    | ✅ 已完成 | P0  |
+| 知识库管理                   | ✅ 已完成 | P1  |
+| 数据集管理                   | ✅ 已完成 | P1  |
+| 评估系统                    | ✅ 已完成 | P1  |
+| 文档检索/RAG                | ✅ 已完成 | P1  |
+| 前端 (React + TypeScript) | ✅ 已完成 | P1  |
+| 可观测性                    | ⏳ 待开始 | P2  |
 
 ## 项目结构 (Multi-Module Maven)
 
@@ -64,9 +65,10 @@ admin-server-start -> admin-server-runtime -> admin-server-core
 ## 技术栈
 
 - **后端**: Spring Boot 3.2.12 + Spring AI 0.8.1
-- **前端**: React 18 + Ant Design 5.x
+- **前端**: React 18 + TypeScript 5.3 + Ant Design 5.x + Vite 5
 - **主数据库**: PostgreSQL 15 + pgvector (prod) / H2 (dev)
 - **向量数据库**: PostgreSQL + pgvector
+- **Embedding**: text-embedding-v1 (DashScope) 等
 - **构建工具**: Maven 3.9+
 - **Java版本**: 17
 
@@ -86,15 +88,6 @@ mvn clean package
 cd admin-server-start
 mvn spring-boot:run
 ```
-
-## 技术栈
-
-- **后端**: Spring Boot 3.2.12 + Spring AI 0.8.1
-- **前端**: React 18 + Ant Design 5.x
-- **主数据库**: PostgreSQL 15 + pgvector / H2 (dev)
-- **向量数据库**: PostgreSQL + pgvector
-- **Embedding**: text-embedding-v1 (DashScope) 等
-- **部署**: Docker Compose 单节点
 
 ## 任务工作流
 

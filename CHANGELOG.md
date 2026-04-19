@@ -1,5 +1,111 @@
 # AI Agent Admin - 变更日志
 
+## 2026-04-19 Chat与RAG功能合并 (v1.0.0)
+
+### 功能概述
+
+将独立的"对话调试"和"RAG对话"功能合并为统一的对话调试页面，RAG作为可选增强功能。
+
+### 新增功能
+
+**对话调试页面 RAG 配置**
+
+- 新建对话时可配置 RAG 检索增强（可选开关）
+- 编辑对话时可修改 RAG 配置
+- RAG 配置项：
+    - 知识库选择
+    - Embedding 模型选择（自动关联知识库默认模型）
+    - 检索数量(topK)配置（1-20）
+    - 相似度阈值配置（0-1）
+    - 检索策略选择（向量检索/BM25/混合检索）
+- 消息显示 RAG 检索来源（折叠面板）
+
+### 数据模型变更
+
+**ChatSession 实体新增字段**：
+
+```java
+@Column(name = "enable_rag")
+private Boolean enableRag;              // 是否启用RAG
+
+@Column(name = "knowledge_base_id")
+private String knowledgeBaseId;         // 关联知识库
+
+@Column(name = "rag_top_k")
+private Integer ragTopK;                // 检索数量
+
+@Column(name = "rag_threshold")
+private Double ragThreshold;            // 相似度阈值
+
+@Column(name = "rag_strategy")
+private String ragStrategy;             // 检索策略
+
+@Column(name = "rag_embedding_model_id")
+private String ragEmbeddingModelId;     // Embedding模型
+```
+
+**ChatMessage 实体新增字段**：
+
+```java
+@Column(name = "sources", columnDefinition = "TEXT")
+private String sources;                 // RAG检索来源JSON
+```
+
+### 代码改动
+
+**后端改动**：
+
+| 文件                     | 改动                                                                      |
+|------------------------|-------------------------------------------------------------------------|
+| `ChatSession.java`     | 新增6个RAG配置字段                                                             |
+| `ChatMessage.java`     | 新增sources字段                                                             |
+| `ChatRequest.java`     | CreateSessionRequest/UpdateSessionRequest新增RAG字段                        |
+| `ChatSessionDTO.java`  | 新增RAG配置字段                                                               |
+| `ChatResponse.java`    | 新增sources字段                                                             |
+| `ChatServiceImpl.java` | createSession/updateSession支持RAG字段；sendMessage/sendMessageStream集成RAG检索 |
+| `RagService.java`      | 新增retrieve()方法（仅检索，不生成回答）                                               |
+| `RagServiceImpl.java`  | 实现retrieve()方法                                                          |
+
+**前端改动**：
+
+| 文件                     | 改动                                                                         |
+|------------------------|----------------------------------------------------------------------------|
+| `types/chat.ts`        | ChatSession/ChatMessage/CreateSessionRequest新增RAG字段；新增VectorSearchResult类型 |
+| `pages/Chat/index.tsx` | 新建/编辑对话弹窗增加RAG配置UI；消息渲染增加来源显示                                              |
+| `App.tsx`              | 删除/RAG路由                                                                   |
+| `Layout/index.tsx`     | 删除"RAG对话"菜单项                                                               |
+
+**删除内容**：
+
+- 前端 `pages/Rag/` 目录（独立RAG对话页面）
+- 前端 `api/rag.ts`、`api/ragSession.ts`
+- 前端 `types/rag.ts`
+
+### 单元测试
+
+新增 RAG 相关单元测试，覆盖核心方法：
+
+| 测试类                   | 测试数 | 覆盖内容                                                                                    |
+|-----------------------|-----|-----------------------------------------------------------------------------------------|
+| `ChatServiceImplTest` | 41  | createSession RAG字段、sendMessage RAG启用/禁用、retrieveDocuments、buildSystemMessage、sources解析 |
+| `RagServiceImplTest`  | 13  | retrieve()方法各种参数组合                                                                      |
+
+**覆盖率**（RAG核心方法）：
+
+- `retrieveDocuments()`: 100%
+- `buildSystemMessage()`: 87%
+- `createSession()`: 87%
+- `getSessionAndModelContext()`: 100%
+- `RagServiceImpl.retrieve()`: 100%
+
+### 发布
+
+- Release: v1.0.0
+- 发布包: `ai-agent-admin-v1.0.0.zip`（含后端jar + 前端 + README）
+- GitHub: https://github.com/KasonLee-marker/ai-agent-admin/releases/tag/v1.0.0
+
+---
+
 ## 2026-04-18 移除检索得分功能
 
 ### 功能调整
