@@ -93,31 +93,25 @@ public class BuiltInToolInitializer implements ApplicationRunner {
      * 获取工具描述
      */
     private String getDescription(String toolName) {
-        switch (toolName) {
-            case "calculator":
-                return "Calculate mathematical expressions. Input: expression string. Output: numeric result.";
-            case "datetime":
-                return "Get current date and time. Input: optional timezone. Output: formatted datetime string.";
-            case "knowledgeRetrieval":
-                return "Retrieve relevant documents from knowledge base. Input: query string. Output: document list with scores.";
-            default:
-                return "Built-in tool: " + toolName;
-        }
+        return switch (toolName) {
+            case "calculator" ->
+                    "Calculate mathematical expressions. Input: expression string. Output: numeric result.";
+            case "datetime" ->
+                    "Get current date and time. Input: optional timezone. Output: formatted datetime string.";
+            case "knowledgeRetrieval" ->
+                    "Retrieve relevant documents from knowledge base. Input: query string. Output: document list with scores.";
+            default -> "Built-in tool: " + toolName;
+        };
     }
 
     /**
      * 获取工具类别
      */
     private ToolCategory getCategory(String toolName) {
-        switch (toolName) {
-            case "calculator":
-                return ToolCategory.CALCULATION;
-            case "datetime":
-                return ToolCategory.GENERAL;
-            case "knowledgeRetrieval":
-                return ToolCategory.KNOWLEDGE;
-            default:
-                return ToolCategory.GENERAL;
-        }
+        return switch (toolName) {
+            case "calculator" -> ToolCategory.CALCULATION;
+            case "knowledgeRetrieval" -> ToolCategory.KNOWLEDGE;
+            default -> ToolCategory.GENERAL;
+        };
     }
 }

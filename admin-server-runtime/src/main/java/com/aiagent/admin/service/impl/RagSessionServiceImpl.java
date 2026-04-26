@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -175,7 +176,7 @@ public class RagSessionServiceImpl implements RagSessionService {
             messages = ragMessageRepository.findRecentMessages(sessionId, limit);
             // 反转顺序，使消息按时间升序排列
             messages = messages.stream()
-                    .sorted((m1, m2) -> m1.getCreatedAt().compareTo(m2.getCreatedAt()))
+                    .sorted(Comparator.comparing(RagMessage::getCreatedAt))
                     .collect(Collectors.toList());
         } else {
             messages = ragMessageRepository.findConversationHistory(sessionId);

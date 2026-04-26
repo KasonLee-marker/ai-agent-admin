@@ -334,8 +334,13 @@ public class EvaluationAsyncService {
                 .orElse("");
 
         if (template == null || template.isEmpty()) {
-            template = "请根据以下参考信息回答问题。如果参考信息中没有相关内容，请说明。\n\n" +
-                    "参考信息：\n{context}\n\n问题：{{input}}";
+            template = """
+                    请根据以下参考信息回答问题。如果参考信息中没有相关内容，请说明。
+                    
+                    参考信息：
+                    {context}
+                    
+                    问题：{{input}}""";
         }
 
         String result = template.replace("{context}", context);
@@ -422,7 +427,7 @@ public class EvaluationAsyncService {
                 com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
                 Map<String, Object> variables = mapper.readValue(inputData, Map.class);
                 Matcher matcher = VARIABLE_PATTERN.matcher(result);
-                StringBuffer sb = new StringBuffer();
+                StringBuilder sb = new StringBuilder();
                 while (matcher.find()) {
                     String varName = matcher.group(1).trim();
                     Object value = variables.get(varName);

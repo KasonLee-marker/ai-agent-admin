@@ -192,13 +192,9 @@ public class ChatController {
             }
         });
 
-        emitter.onError(e -> {
-            log.error("Chat SSE emitter error: {}", e.getMessage());
-        });
+        emitter.onError(e -> log.error("Chat SSE emitter error: {}", e.getMessage()));
 
-        emitter.onCompletion(() -> {
-            log.info("Chat SSE stream completed for session: {}", request.getSessionId());
-        });
+        emitter.onCompletion(() -> log.info("Chat SSE stream completed for session: {}", request.getSessionId()));
 
         // 检查是否为 Agent 会话
         ChatSession session = chatSessionRepository.findById(request.getSessionId()).orElse(null);

@@ -356,13 +356,11 @@ public class DocumentServiceImpl implements DocumentService {
                 queryEmbedding, embeddingConfig, request.getDocumentId(), knowledgeBaseId, searchTopK, threshold);
 
         // 补充分块内容信息
-        results.forEach(result -> {
-            documentChunkRepository.findById(result.getChunkId()).ifPresent(chunk -> {
-                result.setChunkIndex(chunk.getChunkIndex());
-                result.setContent(chunk.getContent());
-                result.setMetadata(chunk.getMetadata());
-            });
-        });
+        results.forEach(result -> documentChunkRepository.findById(result.getChunkId()).ifPresent(chunk -> {
+            result.setChunkIndex(chunk.getChunkIndex());
+            result.setContent(chunk.getContent());
+            result.setMetadata(chunk.getMetadata());
+        }));
 
         // 如果启用 rerank，进行二次排序
         if (Boolean.TRUE.equals(request.getEnableRerank()) && request.getRerankModelId() != null && !results.isEmpty()) {

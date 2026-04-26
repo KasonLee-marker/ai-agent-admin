@@ -244,7 +244,7 @@ public class SseMcpClient implements McpClient {
                 .bodyToMono(String.class)
                 .subscribe(
                         response -> log.debug("POST response: {}", response),
-                        error -> future.completeExceptionally(error)
+                        future::completeExceptionally
                 );
 
         // 等待响应（最多 30 秒）

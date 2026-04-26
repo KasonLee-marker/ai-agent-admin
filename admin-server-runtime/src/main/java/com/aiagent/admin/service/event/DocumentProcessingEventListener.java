@@ -55,21 +55,21 @@ public class DocumentProcessingEventListener {
     @Async("taskExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleDocumentUpload(DocumentUploadEvent event) {
-        log.info("Received DocumentUploadEvent after transaction commit, processing document: {}", event.getDocumentId());
+        log.info("Received DocumentUploadEvent after transaction commit, processing document: {}", event.documentId());
 
         // 使用 MockMultipartFile 包装字节数组（因为原始临时文件可能已被清理）
         MultipartFile mockFile = new MockMultipartFile(
                 "file",
-                event.getOriginalFilename(),
-                event.getContentType(),
-                event.getFileContent()
+                event.originalFilename(),
+                event.contentType(),
+                event.fileContent()
         );
 
         documentAsyncService.processDocumentAsync(
-                event.getDocumentId(),
+                event.documentId(),
                 mockFile,
-                event.getContentType(),
-                event.getEmbeddingModelId()
+                event.contentType(),
+                event.embeddingModelId()
         );
     }
 
@@ -84,7 +84,7 @@ public class DocumentProcessingEventListener {
     @Async("taskExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleEmbeddingStart(EmbeddingStartEvent event) {
-        log.info("Received EmbeddingStartEvent after transaction commit, processing document: {}", event.getDocumentId());
-        documentAsyncService.embedChunksAsync(event.getDocumentId(), event.getEmbeddingConfig());
+        log.info("Received EmbeddingStartEvent after transaction commit, processing document: {}", event.documentId());
+        documentAsyncService.embedChunksAsync(event.documentId(), event.embeddingConfig());
     }
 }

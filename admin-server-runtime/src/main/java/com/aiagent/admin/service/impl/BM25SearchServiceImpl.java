@@ -294,12 +294,10 @@ public class BM25SearchServiceImpl implements BM25SearchService {
      * 补充分块元数据信息
      */
     private void enrichChunkMetadata(List<VectorSearchResult> results) {
-        results.forEach(result -> {
-            documentChunkRepository.findById(result.getChunkId()).ifPresent(chunk -> {
-                result.setChunkIndex(chunk.getChunkIndex());
-                result.setMetadata(chunk.getMetadata());
-            });
-        });
+        results.forEach(result -> documentChunkRepository.findById(result.getChunkId()).ifPresent(chunk -> {
+            result.setChunkIndex(chunk.getChunkIndex());
+            result.setMetadata(chunk.getMetadata());
+        }));
     }
 
     /**

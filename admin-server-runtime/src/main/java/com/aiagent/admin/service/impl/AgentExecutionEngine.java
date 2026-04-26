@@ -428,7 +428,7 @@ public class AgentExecutionEngine {
             return Map.of("type", "object", "properties", Map.of());
         }
         try {
-            return objectMapper.readValue(schema, new TypeReference<Map<String, Object>>() {
+            return objectMapper.readValue(schema, new TypeReference<>() {
             });
         } catch (JsonProcessingException e) {
             log.warn("Failed to parse tool schema: {}", e.getMessage());
@@ -444,7 +444,7 @@ public class AgentExecutionEngine {
             return Map.of();
         }
         try {
-            return objectMapper.readValue(argsJson, new TypeReference<Map<String, Object>>() {
+            return objectMapper.readValue(argsJson, new TypeReference<>() {
             });
         } catch (JsonProcessingException e) {
             return Map.of();
@@ -459,7 +459,7 @@ public class AgentExecutionEngine {
             return Map.of();
         }
         try {
-            return objectMapper.readValue(config, new TypeReference<Map<String, Object>>() {
+            return objectMapper.readValue(config, new TypeReference<>() {
             });
         } catch (JsonProcessingException e) {
             return Map.of();

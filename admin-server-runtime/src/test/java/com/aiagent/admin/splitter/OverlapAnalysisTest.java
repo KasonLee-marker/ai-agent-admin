@@ -176,9 +176,14 @@ public class OverlapAnalysisTest {
     void testEnglishOverlapDetailed() throws IOException {
         writeToFile("\n========== 英文文本重叠效果 (RECURSIVE, 100字符, 30重叠) ==========\n");
 
-        String text = "This is the first paragraph for testing. We need enough text.\n\n" +
-                "This is the second paragraph. Adding more content for testing purposes.\n\n" +
-                "This is the third paragraph. Overlap should work correctly for English.\n\n";
+        String text = """
+                This is the first paragraph for testing. We need enough text.
+                
+                This is the second paragraph. Adding more content for testing purposes.
+                
+                This is the third paragraph. Overlap should work correctly for English.
+                
+                """;
 
         writeToFile("原文:\n" + text);
 

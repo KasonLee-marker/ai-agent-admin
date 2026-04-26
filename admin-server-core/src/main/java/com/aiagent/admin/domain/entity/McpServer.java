@@ -19,7 +19,7 @@ import java.time.LocalDateTime;
  * Agent 可以绑定 MCP Server 提供的工具。
  * </p>
  *
- * @see McpTool
+ *
  */
 @Entity
 @Table(name = "mcp_servers")

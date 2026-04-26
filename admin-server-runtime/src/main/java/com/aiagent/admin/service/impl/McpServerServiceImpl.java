@@ -65,7 +65,7 @@ public class McpServerServiceImpl implements McpServerService {
         // 解析 JSON
         Map<String, Object> rootConfig;
         try {
-            rootConfig = objectMapper.readValue(configJson, new TypeReference<Map<String, Object>>() {
+            rootConfig = objectMapper.readValue(configJson, new TypeReference<>() {
             });
         } catch (JsonProcessingException e) {
             throw new IllegalArgumentException("JSON 格式不正确: " + e.getMessage());
@@ -73,7 +73,7 @@ public class McpServerServiceImpl implements McpServerService {
 
         // 获取 mcpServers 对象
         Object mcpServersObj = rootConfig.get("mcpServers");
-        if (mcpServersObj == null || !(mcpServersObj instanceof Map)) {
+        if (!(mcpServersObj instanceof Map)) {
             throw new IllegalArgumentException("配置中缺少 'mcpServers' 字段或格式不正确");
         }
 
@@ -115,7 +115,7 @@ public class McpServerServiceImpl implements McpServerService {
         // 解析 JSON
         Map<String, Object> rootConfig;
         try {
-            rootConfig = objectMapper.readValue(configJson, new TypeReference<Map<String, Object>>() {
+            rootConfig = objectMapper.readValue(configJson, new TypeReference<>() {
             });
         } catch (JsonProcessingException e) {
             throw new IllegalArgumentException("JSON 格式不正确: " + e.getMessage());
@@ -331,13 +331,7 @@ public class McpServerServiceImpl implements McpServerService {
         }
 
         // 验证 transport 配置
-        String transportType = request.getTransportType() != null ? request.getTransportType() : server.getTransportType();
-        if ("stdio".equals(transportType) && request.getCommand() == null && server.getCommand() == null) {
-            throw new IllegalArgumentException("Command is required for stdio transport");
-        }
-        if ("sse".equals(transportType) && request.getUrl() == null && server.getUrl() == null) {
-            throw new IllegalArgumentException("URL is required for SSE transport");
-        }
+        String transportType = buildTransport(request, server);
 
         // 更新字段
         server.setName(request.getName());
@@ -352,6 +346,24 @@ public class McpServerServiceImpl implements McpServerService {
         log.info("Updated MCP Server: {}", id);
 
         return toResponseWithToolCount(server);
+    }
+
+    /**
+     * 获取mcpServer transport类型
+     *
+     * @param request 创建mcpServer请求
+     * @param server  McpServer对象
+     * @return 返回协议类型
+     */
+    private String buildTransport(CreateMcpServerRequest request, McpServer server) {
+        String transportType = request.getTransportType() != null ? request.getTransportType() : server.getTransportType();
+        if ("stdio".equals(transportType) && request.getCommand() == null && server.getCommand() == null) {
+            throw new IllegalArgumentException("Command is required for stdio transport");
+        }
+        if ("sse".equals(transportType) && request.getUrl() == null && server.getUrl() == null) {
+            throw new IllegalArgumentException("URL is required for SSE transport");
+        }
+        return transportType;
     }
 
     @Override

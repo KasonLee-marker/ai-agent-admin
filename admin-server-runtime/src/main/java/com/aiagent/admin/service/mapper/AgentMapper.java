@@ -145,7 +145,7 @@ public interface AgentMapper {
             return Map.of();
         }
         try {
-            return OBJECT_MAPPER.readValue(config, new TypeReference<Map<String, Object>>() {
+            return OBJECT_MAPPER.readValue(config, new TypeReference<>() {
             });
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to deserialize config to map", e);

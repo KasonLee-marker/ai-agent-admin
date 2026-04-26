@@ -280,7 +280,7 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
             return List.of();
         }
         try {
-            return objectMapper.readValue(toolCallsJson, new TypeReference<List<ToolCallRecord>>() {
+            return objectMapper.readValue(toolCallsJson, new TypeReference<>() {
             });
         } catch (JsonProcessingException e) {
             return List.of();
