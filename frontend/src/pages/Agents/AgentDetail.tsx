@@ -67,6 +67,7 @@ const AgentDetailPage: React.FC = () => {
     const [loading, setLoading] = useState(false)
     const [editModalVisible, setEditModalVisible] = useState(false)
     const [toolModalVisible, setToolModalVisible] = useState(false)
+    const [activeTab, setActiveTab] = useState('info')
     const [form] = Form.useForm()
 
     // 测试对话状态
@@ -229,8 +230,8 @@ const AgentDetailPage: React.FC = () => {
             await bindTool(id, binding)
             message.success('绑定成功')
             setToolModalVisible(false)
+            // 只刷新工具绑定，不刷新整个 Agent，保持当前 Tab
             fetchToolBindings()
-            fetchAgent()
         } catch {
             message.error('绑定失败')
         }
@@ -251,8 +252,8 @@ const AgentDetailPage: React.FC = () => {
             }
             message.success(`已绑定 ${tools.length} 个工具`)
             setToolModalVisible(false)
+            // 只刷新工具绑定，不刷新整个 Agent，保持当前 Tab
             fetchToolBindings()
-            fetchAgent()
         } catch {
             message.error('绑定失败')
         }
@@ -281,8 +282,8 @@ const AgentDetailPage: React.FC = () => {
         try {
             await unbindTool(id, toolId)
             message.success('解绑成功')
+            // 只刷新工具绑定，不刷新整个 Agent，保持当前 Tab
             fetchToolBindings()
-            fetchAgent()
         } catch {
             message.error('解绑失败')
         }
@@ -738,7 +739,11 @@ const AgentDetailPage: React.FC = () => {
             </div>
 
             <Card title={`Agent: ${agent.name}`}>
-                <Tabs items={tabItems}/>
+                <Tabs
+                    activeKey={activeTab}
+                    onChange={setActiveTab}
+                    items={tabItems}
+                />
             </Card>
 
             {/* 编辑 Agent Modal */}

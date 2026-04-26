@@ -35,4 +35,13 @@ public class McpServerJsonRequest {
      */
     @NotBlank(message = "配置 JSON 不能为空")
     private String configJson;
+
+    /**
+     * MCP Server 描述
+     * <p>
+     * 可选，优先级高于 JSON 配置中的 description 字段。
+     * 如果提供，将覆盖 JSON 中的描述。
+     * </p>
+     */
+    private String description;
 }

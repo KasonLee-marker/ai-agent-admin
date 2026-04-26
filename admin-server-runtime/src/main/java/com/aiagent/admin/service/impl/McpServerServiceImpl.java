@@ -1,12 +1,16 @@
 package com.aiagent.admin.service.impl;
 
+import com.aiagent.admin.api.dto.AgentInfoDTO;
 import com.aiagent.admin.api.dto.CreateMcpServerRequest;
 import com.aiagent.admin.api.dto.McpServerJsonRequest;
 import com.aiagent.admin.api.dto.McpServerResponse;
+import com.aiagent.admin.domain.entity.AgentTool;
 import com.aiagent.admin.domain.entity.McpServer;
 import com.aiagent.admin.domain.entity.Tool;
 import com.aiagent.admin.domain.enums.ToolCategory;
 import com.aiagent.admin.domain.enums.ToolType;
+import com.aiagent.admin.domain.repository.AgentRepository;
+import com.aiagent.admin.domain.repository.AgentToolRepository;
 import com.aiagent.admin.domain.repository.McpServerRepository;
 import com.aiagent.admin.domain.repository.ToolRepository;
 import com.aiagent.admin.service.IdGenerator;
@@ -38,21 +42,21 @@ public class McpServerServiceImpl implements McpServerService {
 
     private final McpServerRepository mcpServerRepository;
     private final ToolRepository toolRepository;
-    private final StdioMcpClient stdioMcpClient;
-    private final SseMcpClient sseMcpClient;
+    private final AgentToolRepository agentToolRepository;
+    private final AgentRepository agentRepository;
     private final IdGenerator idGenerator;
     private final ObjectMapper objectMapper;
 
     public McpServerServiceImpl(McpServerRepository mcpServerRepository,
                                 ToolRepository toolRepository,
-                                StdioMcpClient stdioMcpClient,
-                                SseMcpClient sseMcpClient,
+                                AgentToolRepository agentToolRepository,
+                                AgentRepository agentRepository,
                                 IdGenerator idGenerator,
                                 ObjectMapper objectMapper) {
         this.mcpServerRepository = mcpServerRepository;
         this.toolRepository = toolRepository;
-        this.stdioMcpClient = stdioMcpClient;
-        this.sseMcpClient = sseMcpClient;
+        this.agentToolRepository = agentToolRepository;
+        this.agentRepository = agentRepository;
         this.idGenerator = idGenerator;
         this.objectMapper = objectMapper;
     }
@@ -95,10 +99,13 @@ public class McpServerServiceImpl implements McpServerService {
             // 自动识别 transport 类型
             String transportType = determineTransportType(serverConfig);
 
-            // 创建 MCP Server
-            McpServer server = createMcpServerFromConfig(serverName, serverConfig, transportType);
+            // 创建 MCP Server，传入 request 中的 description（优先级高于 JSON 中的 description）
+            McpServer server = createMcpServerFromConfig(serverName, serverConfig, transportType, request.getDescription());
             created.add(toResponseWithToolCount(server));
-            log.info("Created MCP Server '{}' (transport: {})", serverName, transportType);
+            log.info("Created MCP Server '{}' (transport: {}, description: {})", serverName, transportType,
+                    request.getDescription() != null ? "from request" : "from JSON/config");
+            // 刷新工具列表
+            refreshTools(server.getId());
         }
 
         return created;
@@ -145,8 +152,8 @@ public class McpServerServiceImpl implements McpServerService {
         // 自动识别 transport 类型
         String transportType = determineTransportType(serverConfig);
 
-        // 更新 Server
-        updateMcpServerFromConfig(existingServer, newName, serverConfig, transportType);
+        // 更新 Server，传入 request 中的 description（优先级高于 JSON 中的 description）
+        updateMcpServerFromConfig(existingServer, newName, serverConfig, transportType, request.getDescription());
 
         return toResponseWithToolCount(existingServer);
     }
@@ -171,7 +178,7 @@ public class McpServerServiceImpl implements McpServerService {
     /**
      * 从配置创建 MCP Server 实体
      */
-    private McpServer createMcpServerFromConfig(String name, Map<String, Object> config, String transportType) {
+    private McpServer createMcpServerFromConfig(String name, Map<String, Object> config, String transportType, String description) {
         // 检查名称唯一性
         if (mcpServerRepository.existsByName(name)) {
             throw new IllegalArgumentException("MCP Server name already exists: " + name);
@@ -182,10 +189,13 @@ public class McpServerServiceImpl implements McpServerService {
         List<String> args = parseArgsList(config.get("args"));
         Map<String, String> env = parseEnvMap(config.get("env"));
 
+        // 优先级：传入的 description > JSON 中的 description
+        String finalDescription = description != null ? description : (String) config.get("description");
+
         McpServer server = McpServer.builder()
                 .id(idGenerator.generateId())
                 .name(name)
-                .description((String) config.get("description"))
+                .description(finalDescription)
                 .transportType(transportType)
                 .url(url)
                 .command(command)
@@ -201,9 +211,11 @@ public class McpServerServiceImpl implements McpServerService {
      * 从配置更新 MCP Server 实体
      */
     private void updateMcpServerFromConfig(McpServer server, String newName,
-                                           Map<String, Object> config, String transportType) {
+                                           Map<String, Object> config, String transportType, String description) {
         server.setName(newName);
-        server.setDescription((String) config.get("description"));
+        // 优先级：传入的 description > JSON 中的 description
+        String finalDescription = description != null ? description : (String) config.get("description");
+        server.setDescription(finalDescription);
         server.setTransportType(transportType);
 
         if (transportType.equals("sse")) {
@@ -304,11 +316,18 @@ public class McpServerServiceImpl implements McpServerService {
         McpServer server = mcpServerRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("MCP Server not found: " + id));
 
-        // 删除关联的 MCP 工具
+        // 删除关联的 MCP 工具及其 Agent 绑定
         List<Tool> mcpTools = toolRepository.findByType(ToolType.MCP);
         for (Tool tool : mcpTools) {
             Map<String, Object> config = parseConfig(tool.getConfig());
             if (id.equals(config.get("mcpServerId"))) {
+                // 先删除该工具的 Agent 绑定
+                List<AgentTool> agentTools = agentToolRepository.findByToolId(tool.getId());
+                for (AgentTool agentTool : agentTools) {
+                    agentToolRepository.delete(agentTool);
+                    log.info("Deleted AgentTool binding: agentId={}, toolId={}", agentTool.getAgentId(), tool.getId());
+                }
+                // 再删除工具
                 toolRepository.delete(tool);
                 log.info("Deleted MCP tool: {}", tool.getId());
             }
@@ -316,6 +335,45 @@ public class McpServerServiceImpl implements McpServerService {
 
         mcpServerRepository.delete(server);
         log.info("Deleted MCP Server: {}", id);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AgentInfoDTO> getReferencingAgents(String id) {
+        // 获取该 MCP Server 下的所有工具 ID
+        List<Tool> mcpTools = toolRepository.findByType(ToolType.MCP);
+        List<String> toolIds = mcpTools.stream()
+                .filter(tool -> {
+                    Map<String, Object> config = parseConfig(tool.getConfig());
+                    return id.equals(config.get("mcpServerId"));
+                })
+                .map(Tool::getId)
+                .collect(Collectors.toList());
+
+        if (toolIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // 获取引用这些工具的 Agent
+        Set<String> agentIds = new HashSet<>();
+        for (String toolId : toolIds) {
+            List<AgentTool> agentTools = agentToolRepository.findByToolId(toolId);
+            agentTools.forEach(at -> agentIds.add(at.getAgentId()));
+        }
+
+        // 查询 Agent 信息
+        List<AgentInfoDTO> result = new ArrayList<>();
+        for (String agentId : agentIds) {
+            agentRepository.findById(agentId).ifPresent(agent -> {
+                result.add(AgentInfoDTO.builder()
+                        .id(agent.getId())
+                        .name(agent.getName())
+                        .status(agent.getStatus() != null ? agent.getStatus().name() : null)
+                        .build());
+            });
+        }
+
+        return result;
     }
 
     @Override
@@ -394,8 +452,9 @@ public class McpServerServiceImpl implements McpServerService {
             return tools;
 
         } catch (McpConnectionException e) {
-            log.error("Failed to connect to MCP Server {}: {}", id, e.getMessage());
-            throw new RuntimeException("Failed to connect to MCP Server: " + e.getMessage(), e);
+            log.error("Failed to connect to MCP Server {}: {}", id, e.getMessage(), e);
+            // 直接抛出原始异常，保留完整的错误信息
+            throw e;
         } finally {
             if (client.isConnected()) {
                 client.disconnect();
@@ -411,12 +470,15 @@ public class McpServerServiceImpl implements McpServerService {
 
     /**
      * 根据 transport 类型获取对应的 Client
+     * <p>
+     * 每次创建新实例，避免单例状态冲突。
+     * </p>
      */
     private McpClient getClient(String transportType) {
         if ("sse".equals(transportType)) {
-            return sseMcpClient;
+            return new SseMcpClient(objectMapper);
         }
-        return stdioMcpClient;
+        return new StdioMcpClient(objectMapper);
     }
 
     /**

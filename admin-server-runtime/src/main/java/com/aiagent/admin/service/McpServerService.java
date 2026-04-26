@@ -1,5 +1,6 @@
 package com.aiagent.admin.service;
 
+import com.aiagent.admin.api.dto.AgentInfoDTO;
 import com.aiagent.admin.api.dto.CreateMcpServerRequest;
 import com.aiagent.admin.api.dto.McpServerJsonRequest;
 import com.aiagent.admin.api.dto.McpServerResponse;
@@ -106,4 +107,15 @@ public interface McpServerService {
      * @return MCP Server 实体 Optional
      */
     Optional<McpServer> findEntityById(String id);
+
+    /**
+     * 获取引用指定 MCP Server 的 Agent 列表
+     * <p>
+     * 返回绑定了该 MCP Server 下任何工具的 Agent 列表。
+     * </p>
+     *
+     * @param id MCP Server ID
+     * @return Agent 信息列表（id, name）
+     */
+    List<AgentInfoDTO> getReferencingAgents(String id);
 }

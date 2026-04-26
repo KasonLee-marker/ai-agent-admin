@@ -129,3 +129,12 @@ export interface AgentStreamingEvent {
     sequence: number
     timestamp: string
 }
+
+/**
+ * Agent 简要信息
+ */
+export interface AgentInfo {
+    id: string
+    name: string
+    status: string
+}

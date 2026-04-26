@@ -1,8 +1,9 @@
 import React, {useEffect, useState} from 'react'
-import {Button, Form, Input, List, message, Modal, Popconfirm, Space, Table, Tag, Tooltip} from 'antd'
+import {Button, Form, Input, List, message, Modal, Space, Table, Tag, Tooltip} from 'antd'
 import {
     DeleteOutlined,
     EditOutlined,
+    ExclamationCircleOutlined,
     PlusOutlined,
     QuestionCircleOutlined,
     ReloadOutlined,
@@ -13,24 +14,31 @@ import {
     createMcpServerFromJson,
     deleteMcpServer,
     getMcpServerTools,
+    getReferencingAgents,
     listMcpServers,
     refreshMcpTools,
-    updateMcpServer,
     updateMcpServerFromJson
 } from '@/api/mcp'
 import {McpServer} from '@/types/mcp'
-import {Tool} from '@/types/agent'
+import {AgentInfo, Tool} from '@/types/agent'
 
 const McpServerPage: React.FC = () => {
     const [data, setData] = useState<McpServer[]>([])
     const [loading, setLoading] = useState(false)
     const [modalVisible, setModalVisible] = useState(false)
+    const [submitLoading, setSubmitLoading] = useState(false)
     const [toolPreviewVisible, setToolPreviewVisible] = useState(false)
     const [previewTools, setPreviewTools] = useState<Tool[]>([])
     const [previewServerName, setPreviewServerName] = useState('')
     const [editingServer, setEditingServer] = useState<McpServer | null>(null)
     const [refreshingId, setRefreshingId] = useState<string | null>(null)
     const [form] = Form.useForm()
+
+    // 删除引用确认弹窗状态
+    const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false)
+    const [deletingServer, setDeletingServer] = useState<McpServer | null>(null)
+    const [referencingAgents, setReferencingAgents] = useState<AgentInfo[]>([])
+    const [checkingReferences, setCheckingReferences] = useState(false)
 
     useEffect(() => {
         fetchData()
@@ -55,8 +63,9 @@ const McpServerPage: React.FC = () => {
             description: '',
             configJson: `{
   "mcpServers": {
-    "server-name": {
-      "url": "https://mcp-server.example.com/sse"
+    "my-mcp-server": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"]
     }
   }
 }`
@@ -89,20 +98,59 @@ const McpServerPage: React.FC = () => {
         setModalVisible(true)
     }
 
-    const handleDelete = async (id: string) => {
+    // 点击删除按钮时先检查引用
+    const handleDeleteClick = async (record: McpServer) => {
+        setDeletingServer(record)
+        setCheckingReferences(true)
+        setDeleteConfirmVisible(true)
         try {
-            await deleteMcpServer(id)
-            message.success('删除成功')
-            fetchData()
-        } catch {
-            message.error('删除失败')
+            const res = await getReferencingAgents(record.id)
+            if (res.success) {
+                setReferencingAgents(res.data || [])
+            } else {
+                message.error(res.message || '检查引用失败')
+                setDeleteConfirmVisible(false)
+            }
+        } catch (error: unknown) {
+            const axiosError = error as { response?: { data?: { message?: string } } }
+            message.error(axiosError.response?.data?.message || '检查引用失败')
+            setDeleteConfirmVisible(false)
+        } finally {
+            setCheckingReferences(false)
         }
+    }
+
+    // 确认删除
+    const handleConfirmDelete = async () => {
+        if (!deletingServer) return
+        try {
+            const res = await deleteMcpServer(deletingServer.id) as { success: boolean; message?: string }
+            if (res.success) {
+                message.success('删除成功')
+                setDeleteConfirmVisible(false)
+                setDeletingServer(null)
+                setReferencingAgents([])
+                fetchData()
+            } else {
+                message.error(res.message || '删除失败')
+            }
+        } catch (error: unknown) {
+            const axiosError = error as { response?: { data?: { message?: string } } }
+            message.error(axiosError.response?.data?.message || '删除失败')
+        }
+    }
+
+    // 取消删除
+    const handleCancelDelete = () => {
+        setDeleteConfirmVisible(false)
+        setDeletingServer(null)
+        setReferencingAgents([])
     }
 
     // 查看已保存的工具列表
     const handleViewTools = async (record: McpServer) => {
         try {
-            const res = await getMcpServerTools(record.id)
+            const res = await getMcpServerTools(record.id) as { success: boolean; data?: Tool[]; message?: string }
             if (res.success) {
                 const tools = res.data || []
                 if (tools.length > 0) {
@@ -112,9 +160,12 @@ const McpServerPage: React.FC = () => {
                 } else {
                     message.info('暂无已保存的工具，请先刷新工具列表')
                 }
+            } else {
+                message.error(res.message || '获取工具列表失败')
             }
-        } catch {
-            message.error('获取工具列表失败')
+        } catch (error: unknown) {
+            const axiosError = error as { response?: { data?: { message?: string } } }
+            message.error(axiosError.response?.data?.message || '获取工具列表失败')
         }
     }
 
@@ -122,7 +173,7 @@ const McpServerPage: React.FC = () => {
     const handleRefreshTools = async (record: McpServer) => {
         setRefreshingId(record.id)
         try {
-            const res = await refreshMcpTools(record.id)
+            const res = await refreshMcpTools(record.id) as { success: boolean; data?: unknown[]; message?: string }
             if (res.success) {
                 const tools = res.data || []
                 message.success(`发现 ${tools.length} 个工具`)
@@ -132,15 +183,19 @@ const McpServerPage: React.FC = () => {
                     // 获取已保存的工具列表显示
                     handleViewTools(record)
                 }
+            } else {
+                message.error(res.message || '刷新工具失败')
             }
-        } catch {
-            message.error('刷新工具失败')
+        } catch (error: unknown) {
+            const axiosError = error as { response?: { data?: { message?: string } } }
+            message.error(axiosError.response?.data?.message || '刷新工具失败')
         } finally {
             setRefreshingId(null)
         }
     }
 
     const handleSubmit = async () => {
+        setSubmitLoading(true)
         try {
             const values = await form.validateFields()
             const configJson = values.configJson
@@ -154,27 +209,37 @@ const McpServerPage: React.FC = () => {
             }
 
             if (editingServer) {
-                // 更新：分别更新描述和配置
-                await updateMcpServer(editingServer.id, {
-                    description: values.description
-                })
-                await updateMcpServerFromJson(editingServer.id, configJson)
-                message.success('更新成功')
-            } else {
-                // 创建：先从 JSON 创建，再更新描述
-                const created = await createMcpServerFromJson(configJson)
-                if (created.success && created.data && created.data.length > 0 && values.description) {
-                    await updateMcpServer(created.data[0].id, {
-                        description: values.description
-                    })
+                // 编辑：一次调用同时更新配置和描述
+                const res = await updateMcpServerFromJson(editingServer.id, configJson, values.description) as {
+                    success: boolean;
+                    message?: string
                 }
-                message.success('创建成功')
+                if (res.success) {
+                    message.success('更新成功')
+                    setModalVisible(false)
+                    fetchData()
+                } else {
+                    message.error(res.message || '更新失败')
+                }
+            } else {
+                // 创建：直接传递 description，不再单独调用更新
+                const res = await createMcpServerFromJson(configJson, values.description) as {
+                    success: boolean;
+                    message?: string
+                }
+                if (res.success) {
+                    message.success('创建成功')
+                    setModalVisible(false)
+                    fetchData()
+                } else {
+                    message.error(res.message || '创建失败')
+                }
             }
-
-            setModalVisible(false)
-            fetchData()
-        } catch {
-            message.error(editingServer ? '更新失败' : '创建失败')
+        } catch (error: unknown) {
+            const axiosError = error as { response?: { data?: { message?: string } } }
+            message.error(axiosError.response?.data?.message || (editingServer ? '更新失败' : '创建失败'))
+        } finally {
+            setSubmitLoading(false)
         }
     }
 
@@ -264,11 +329,15 @@ const McpServerPage: React.FC = () => {
                             onClick={() => handleRefreshTools(record)}
                         />
                     </Tooltip>
-                    <Popconfirm title="确定删除此 MCP Server?" onConfirm={() => handleDelete(record.id)}>
-                        <Tooltip title="删除">
-                            <Button type="text" size="small" danger icon={<DeleteOutlined/>}/>
-                        </Tooltip>
-                    </Popconfirm>
+                    <Tooltip title="删除">
+                        <Button
+                            type="text"
+                            size="small"
+                            danger
+                            icon={<DeleteOutlined/>}
+                            onClick={() => handleDeleteClick(record)}
+                        />
+                    </Tooltip>
                 </Space>
             )
         }
@@ -302,6 +371,7 @@ const McpServerPage: React.FC = () => {
                 onOk={handleSubmit}
                 onCancel={() => setModalVisible(false)}
                 width={700}
+                confirmLoading={submitLoading}
             >
                 <Form form={form} layout="vertical">
                     <Form.Item
@@ -317,20 +387,22 @@ const McpServerPage: React.FC = () => {
                             <Space>
                                 MCP Server 配置 JSON
                                 <Tooltip title={
-                                    <div>
-                                        <p>请输入 MCP Server 配置 JSON，格式如下：</p>
-                                        <pre style={{fontSize: 11, margin: 0}}>
-{`// 远程 SSE Server
-{
+                                    <div style={{maxWidth: 400}}>
+                                        <p>支持两种配置方式：</p>
+                                        <p style={{color: '#1890ff', marginTop: 8}}><strong>1. 远程 SSE</strong></p>
+                                        <pre style={{fontSize: 11, margin: '4px 0'}}>
+{`{
   "mcpServers": {
     "server-name": {
-      "url": "https://..."
+      "url": "https://mcp-server.example.com/sse"
     }
   }
-}
-
-// 本地 Stdio Server
-{
+}`}
+                                        </pre>
+                                        <p style={{color: '#52c41a', marginTop: 8}}><strong>2. 本地 Stdio (如 npx,
+                                            uvx)</strong></p>
+                                        <pre style={{fontSize: 11, margin: '4px 0'}}>
+{`{
   "mcpServers": {
     "memory": {
       "command": "npx",
@@ -338,8 +410,20 @@ const McpServerPage: React.FC = () => {
     }
   }
 }`}
-                    </pre>
-                                        <p style={{marginTop: 4}}>系统根据 url 或 command 自动识别类型</p>
+                                        </pre>
+                                        <pre style={{fontSize: 11, margin: '4px 0'}}>
+{`{
+  "mcpServers": {
+    "github-trending": {
+      "command": "uvx",
+      "args": ["mcp-github-trending"]
+    }
+  }
+}`}
+                                        </pre>
+                                        <p style={{color: '#999', marginTop: 8, fontSize: 12}}>
+                                            注意：本地命令需要先在服务器上安装（如 npx/uvx）
+                                        </p>
                                     </div>
                                 }>
                                     <QuestionCircleOutlined style={{color: '#1890ff'}}/>
@@ -350,10 +434,23 @@ const McpServerPage: React.FC = () => {
                     >
                         <Input.TextArea
                             rows={10}
-                            placeholder={`{
+                            placeholder={`// 支持 SSE 远程或 Stdio 本地两种方式
+
+// 方式1: SSE 远程
+{
   "mcpServers": {
     "server-name": {
-      "url": "https://..."
+      "url": "https://mcp-server.example.com/sse"
+    }
+  }
+}
+
+// 方式2: Stdio 本地 (需先安装命令)
+{
+  "mcpServers": {
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"]
     }
   }
 }`}
@@ -382,6 +479,63 @@ const McpServerPage: React.FC = () => {
                         </List.Item>
                     )}
                 />
+            </Modal>
+
+            {/* 删除确认弹窗 - 显示引用信息 */}
+            <Modal
+                title={
+                    <Space>
+                        <ExclamationCircleOutlined style={{color: '#faad14'}}/>
+                        {referencingAgents.length > 0 ? '确认删除 MCP Server' : '删除 MCP Server'}
+                    </Space>
+                }
+                open={deleteConfirmVisible}
+                onOk={handleConfirmDelete}
+                onCancel={handleCancelDelete}
+                confirmLoading={checkingReferences}
+                okText={referencingAgents.length > 0 ? '确认删除（将自动解绑）' : '确认删除'}
+                okButtonProps={{danger: true}}
+            >
+                {checkingReferences ? (
+                    <div style={{padding: 20, textAlign: 'center'}}>正在检查引用...</div>
+                ) : referencingAgents.length > 0 ? (
+                    <div>
+                        <p>
+                            <strong>{deletingServer?.name}</strong> 正在被以下 <strong>{referencingAgents.length}</strong> 个
+                            Agent 引用：
+                        </p>
+                        <div style={{
+                            maxHeight: 200,
+                            overflow: 'auto',
+                            border: '1px solid #d9d9d9',
+                            borderRadius: 6,
+                            padding: '8px 16px',
+                            marginBottom: 16
+                        }}>
+                            <List
+                                size="small"
+                                dataSource={referencingAgents}
+                                renderItem={(agent) => (
+                                    <List.Item style={{padding: '4px 0'}}>
+                                        <Tag color="blue">{agent.name}</Tag>
+                                        <Tag color={agent.status === 'PUBLISHED' ? 'green' : 'default'}>
+                                            {agent.status === 'DRAFT' ? '草稿' : agent.status === 'PUBLISHED' ? '已发布' : '已归档'}
+                                        </Tag>
+                                    </List.Item>
+                                )}
+                            />
+                        </div>
+                        <p style={{color: '#ff4d4f'}}>
+                            删除后，上述 Agent 将自动解绑该 MCP Server 下的所有工具。此操作不可撤销。
+                        </p>
+                    </div>
+                ) : (
+                    <p>
+                        确定要删除 <strong>{deletingServer?.name}</strong> 吗？
+                        <br/>
+                        <span style={{color: '#666', fontSize: 12}}>该 MCP Server 没有被任何 Agent 引用。</span>
+                    </p>
+                )}
             </Modal>
         </div>
     )

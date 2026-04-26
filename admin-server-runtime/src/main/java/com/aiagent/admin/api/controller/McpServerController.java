@@ -117,7 +117,22 @@ public class McpServerController {
      * @param id MCP Server ID
      * @return 成功响应
      */
-    @DeleteMapping("/{id}")
+    /**
+     * 获取引用指定 MCP Server 的 Agent 列表
+     * <p>
+     * 返回绑定了该 MCP Server 下任何工具的 Agent 列表。
+     * </p>
+     *
+     * @param id MCP Server ID
+     * @return Agent 信息列表
+     */
+    @GetMapping("/{id}/referencing-agents")
+    @Operation(summary = "Get agents referencing this MCP Server",
+            description = "Returns list of agents that have bound tools from this MCP Server")
+    public ApiResponse<List<AgentInfoDTO>> getReferencingAgents(
+            @Parameter(description = "MCP Server ID") @PathVariable String id) {
+        return ApiResponse.success(mcpServerService.getReferencingAgents(id));
+    }
     @Operation(summary = "Delete MCP server")
     public ApiResponse<Void> deleteMcpServer(
             @Parameter(description = "MCP Server ID") @PathVariable String id) {

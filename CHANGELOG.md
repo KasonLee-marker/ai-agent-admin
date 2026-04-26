@@ -955,3 +955,87 @@ private Integer semanticProgressTotal;     // 总句子数
 - 评估任务增强：documentId/enableRag字段
 - 评估结果增强：semanticSimilarity/retrievalScore/faithfulness字段
 - 多指标评估：AI评分 + 语义相似度 + 检索得分 + 忠实度
+
+---
+
+## 2026-04-26 MCP Server 管理优化
+
+### 功能概述
+
+优化 MCP Server 创建流程和删除体验，支持创建时直接传入描述，删除时检查 Agent 引用并自动解绑。
+
+### 改动详情
+
+#### 1. MCP Server 创建优化
+
+**后端** (`McpServerJsonRequest.java`, `McpServerServiceImpl.java`)
+
+- `McpServerJsonRequest` 新增 `description` 字段
+- `createFromJson()` 和 `updateFromJson()` 优先使用请求中的 description
+- 创建时不再需要二次调用更新接口
+
+**前端** (`api/mcp.ts`, `pages/McpServers/index.tsx`)
+
+- `createMcpServerFromJson(configJson, description?)` 支持可选描述参数
+- `updateMcpServerFromJson(id, configJson, description?)` 支持可选描述参数
+- 创建和编辑都只需一次 API 调用
+- Modal 添加 `confirmLoading` 状态
+
+#### 2. MCP Server 删除优化
+
+**后端** (`McpServerServiceImpl.java`, `McpServerController.java`)
+
+- 新增 `GET /{id}/referencing-agents` 接口查询引用该 Server 的 Agent 列表
+- `delete()` 方法先删除工具与 Agent 的绑定，再删除工具和 Server
+- 使用 `AgentToolRepository` 查询和删除绑定关系
+
+**前端** (`pages/McpServers/index.tsx`)
+
+- 点击删除时先调用 `getReferencingAgents()` 检查引用
+- 弹窗显示引用的 Agent 列表
+- 确认删除后才调用 `deleteMcpServer()`
+- 无引用时直接显示确认对话框
+
+#### 3. Agent 详情页 Tab 保持
+
+**前端** (`pages/Agents/AgentDetail.tsx`)
+
+- 添加 `activeTab` 状态控制当前选中 Tab
+- 工具绑定/解绑后只刷新工具列表，不刷新整个 Agent
+- 操作完成后保持在"工具绑定" Tab
+
+#### 4. 错误提示优化
+
+**后端** (`StdioMcpClient.java`, `McpServerServiceImpl.java`, `McpExceptionHandler.java`)
+
+- `StdioMcpClient.startProcess()` 增加命令存在性检查
+- `connect()` 方法提取原始错误信息，避免多层包装
+- `refreshTools()` 直接抛出原始异常而非包装成 RuntimeException
+- 新增 `McpExceptionHandler` 全局异常处理器，返回友好错误信息
+
+#### 5. MCP Client 单例问题修复
+
+**后端** (`McpServerServiceImpl.java`)
+
+- `getClient()` 每次创建新的 Client 实例
+- 解决多个 Server 连接状态冲突问题
+
+### 文件变更
+
+| 类型 | 文件路径                                                                                           |
+|----|------------------------------------------------------------------------------------------------|
+| 新增 | `admin-server-runtime/src/main/java/com/aiagent/admin/api/dto/AgentInfoDTO.java`               |
+| 新增 | `admin-server-runtime/src/main/java/com/aiagent/admin/api/advice/McpExceptionHandler.java`     |
+| 修改 | `admin-server-runtime/src/main/java/com/aiagent/admin/api/dto/McpServerJsonRequest.java`       |
+| 修改 | `admin-server-runtime/src/main/java/com/aiagent/admin/service/McpServerService.java`           |
+| 修改 | `admin-server-runtime/src/main/java/com/aiagent/admin/service/impl/McpServerServiceImpl.java`  |
+| 修改 | `admin-server-runtime/src/main/java/com/aiagent/admin/api/controller/McpServerController.java` |
+| 修改 | `admin-server-runtime/src/main/java/com/aiagent/admin/service/mcp/StdioMcpClient.java`         |
+| 修改 | `frontend/src/api/mcp.ts`                                                                      |
+| 修改 | `frontend/src/types/agent.ts`                                                                  |
+| 修改 | `frontend/src/pages/McpServers/index.tsx`                                                      |
+| 修改 | `frontend/src/pages/Agents/AgentDetail.tsx`                                                    |
+
+### 待完成功能
+
+- MCP 连接错误提示进一步细化（需要重启后端验证）

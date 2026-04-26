@@ -74,7 +74,9 @@ public class StdioMcpClient implements McpClient {
 
         } catch (Exception e) {
             closeProcess();
-            throw new McpConnectionException("Failed to connect to MCP Server: " + config.getName(), e);
+            // 提取原始错误信息，避免多层包装导致信息丢失
+            String rootCause = extractRootCauseMessage(e);
+            throw new McpConnectionException("Failed to connect to MCP Server '" + config.getName() + "': " + rootCause, e);
         }
     }
 
@@ -171,25 +173,56 @@ public class StdioMcpClient implements McpClient {
     }
 
     /**
+     * 提取原始错误信息
+     */
+    private String extractRootCauseMessage(Throwable throwable) {
+        Throwable cause = throwable;
+        while (cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        String message = cause.getMessage();
+        if (message == null || message.isEmpty()) {
+            message = cause.getClass().getSimpleName();
+        }
+        return message;
+    }
+
+    /**
      * 启动 MCP Server 进程
      */
     private void startProcess() throws IOException {
+        String cmd = config.getCommand();
         List<String> command = new ArrayList<>();
-        command.add(config.getCommand());
+        command.add(cmd);
         if (config.getArgs() != null) {
             command.addAll(config.getArgs());
+        }
+
+        // 检查命令是否存在
+        if (!isCommandAvailable(cmd)) {
+            throw new IOException("Command not found: " + cmd +
+                    ". Please ensure it is installed and available in PATH.");
         }
 
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.redirectErrorStream(false);
 
-        // 设置环境变量
+        // 继承系统环境变量
+        Map<String, String> env = pb.environment();
+        env.putAll(System.getenv());
+
+        // 设置额外的环境变量
         if (config.getEnv() != null) {
-            Map<String, String> env = pb.environment();
             env.putAll(config.getEnv());
         }
 
-        process = pb.start();
+        try {
+            process = pb.start();
+        } catch (IOException e) {
+            throw new IOException("Failed to start command '" + cmd + "': " + e.getMessage() +
+                    ". Please check if the command exists and is executable.", e);
+        }
+
         reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
         writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
 
@@ -209,6 +242,22 @@ public class StdioMcpClient implements McpClient {
         });
         errorThread.setDaemon(true);
         errorThread.start();
+    }
+
+    /**
+     * 检查命令是否可用
+     */
+    private boolean isCommandAvailable(String command) {
+        // Windows 使用 where, Unix/Linux/Mac 使用 which
+        String checkCommand = System.getProperty("os.name").toLowerCase().contains("windows")
+                ? "where " + command
+                : "which " + command;
+        try {
+            Process process = Runtime.getRuntime().exec(checkCommand);
+            return process.waitFor() == 0;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**
