@@ -1,11 +1,8 @@
 package com.aiagent.admin.service;
 
-import com.aiagent.admin.api.dto.ChatRequest;
-import com.aiagent.admin.api.dto.ChatResponse;
-import com.aiagent.admin.api.dto.ChatSessionDTO;
+import com.aiagent.admin.api.dto.*;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.data.domain.Pageable;
-import reactor.core.publisher.Flux;
 
 import java.util.List;
 
@@ -118,12 +115,16 @@ public interface ChatService {
     ChatResponse sendMessage(ChatRequest request);
 
     /**
-     * 流式发送消息（SSE 流式响应）
+     * 流式发送消息（回调模式）
+     * <p>
+     * 支持普通对话和Agent对话的流式输出。
+     * Agent对话会实时显示工具调用过程。
+     * </p>
      *
      * @param request 消息请求，包含会话ID、用户消息内容等
-     * @return 流式响应，逐步返回 AI 生成的内容片段
+     * @param onChunk 内容回调，每次收到内容片段时调用
      */
-    Flux<String> sendMessageStream(ChatRequest request);
+    void sendMessageStreamWithCallback(ChatRequest request, java.util.function.Consumer<String> onChunk);
 
     /**
      * 获取指定会话的所有消息记录
@@ -140,4 +141,30 @@ public interface ChatService {
      * @return 对话历史列表，包含用户消息和AI回复
      */
     List<ChatResponse> getConversationHistory(String sessionId);
+
+    /**
+     * 保存用户消息（用于流式接口）
+     *
+     * @param sessionId 会话ID
+     * @param content   用户消息内容
+     */
+    void saveUserMessage(String sessionId, String content);
+
+    /**
+     * 保存流式响应完成后生成的助手消息（事务模式）
+     * <p>
+     * 用于在流式执行完成后保存消息，支持工具调用记录。
+     * </p>
+     *
+     * @param sessionId    会话ID
+     * @param modelName    模型名称（可选）
+     * @param content      响应内容
+     * @param sources      RAG检索来源（可选）
+     * @param toolCalls    工具调用记录（可选）
+     * @param success      是否成功
+     * @param errorMessage 错误信息（可选）
+     */
+    void saveAssistantMessageTransactional(String sessionId, String modelName, String content,
+                                           List<VectorSearchResult> sources, List<ToolCallRecord> toolCalls,
+                                           boolean success, String errorMessage);
 }

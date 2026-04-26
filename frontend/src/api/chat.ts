@@ -1,6 +1,7 @@
 import client from './client'
 import {ApiResponse, PageParams, PageResponse} from '@/types/api'
 import {ChatMessage, ChatSession, CreateSessionRequest, MessageListResponse, SendMessageRequest} from '@/types/chat'
+import {AgentStreamingEvent} from '@/types/agent'
 
 const BASE_URL = '/chat'
 
@@ -46,7 +47,7 @@ export async function getConversationHistory(sessionId: string): Promise<ApiResp
     return client.get(`${BASE_URL}/sessions/${sessionId}/history`)
 }
 
-// 流式发送消息
+// 流式发送消息（普通对话）
 export async function sendMessageStream(
     data: SendMessageRequest,
     onChunk: (text: string) => void,
@@ -102,6 +103,80 @@ export async function sendMessageStream(
             if (content) {
                 fullContent += content
                 onChunk(fullContent)
+            }
+        }
+
+        onComplete()
+    } catch (error) {
+        onError(error instanceof Error ? error : new Error('Unknown error'))
+    }
+}
+
+// 流式发送消息（Agent对话，结构化事件）
+export async function sendMessageStreamAgent(
+    data: SendMessageRequest,
+    onEvent: (event: AgentStreamingEvent) => void,
+    onComplete: () => void,
+    onError: (error: Error) => void
+): Promise<void> {
+    try {
+        const response = await fetch('/api/v1/chat/messages/stream', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data),
+        })
+
+        if (!response.ok) {
+            throw new Error(`HTTP error: ${response.status}`)
+        }
+
+        const reader = response.body?.getReader()
+        if (!reader) {
+            throw new Error('No response body')
+        }
+
+        const decoder = new TextDecoder()
+        let buffer = ''
+
+        while (true) {
+            const {done, value} = await reader.read()
+            if (done) break
+
+            buffer += decoder.decode(value, {stream: true})
+
+            // 解析 SSE 格式: "data: xxx\n"
+            const lines = buffer.split('\n')
+            buffer = lines.pop() || '' // 保留不完整的行
+
+            for (const line of lines) {
+                if (line.startsWith('data:')) {
+                    const content = line.slice(5).trim()
+                    if (content) {
+                        // 尝试解析为 JSON 事件
+                        try {
+                            const event = JSON.parse(content) as AgentStreamingEvent
+                            onEvent(event)
+                        } catch {
+                            // 如果不是 JSON，可能是普通文本（普通对话模式）
+                            onEvent({type: 'MODEL_OUTPUT', content, sequence: 0, timestamp: new Date().toISOString()})
+                        }
+                    }
+                }
+            }
+        }
+
+        // 处理剩余 buffer
+        if (buffer.startsWith('data:')) {
+            const content = buffer.slice(5).trim()
+            if (content) {
+                try {
+                    const event = JSON.parse(content) as AgentStreamingEvent
+                    onEvent(event)
+                } catch {
+                    onEvent({type: 'MODEL_OUTPUT', content, sequence: 0, timestamp: new Date().toISOString()})
+                }
             }
         }
 

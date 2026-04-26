@@ -79,6 +79,18 @@ public class ChatSessionDTO {
      */
     private String ragEmbeddingModelId;
 
+    // ========== Agent 关联字段 ==========
+
+    /**
+     * 关联 Agent ID（可选）
+     */
+    private String agentId;
+
+    /**
+     * Agent 名称（用于显示）
+     */
+    private String agentName;
+
     /** 创建时间 */
     private LocalDateTime createdAt;
 

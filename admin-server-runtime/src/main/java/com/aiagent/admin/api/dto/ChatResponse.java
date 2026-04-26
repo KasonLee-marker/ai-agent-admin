@@ -57,6 +57,13 @@ public class ChatResponse {
      */
     private List<VectorSearchResult> sources;
 
+    // ========== Agent 工具调用字段 ==========
+
+    /**
+     * 工具调用记录（仅Agent对话的助手消息有此字段）
+     */
+    private List<ToolCallRecord> toolCalls;
+
     /** 创建时间 */
     private LocalDateTime createdAt;
 

@@ -94,6 +94,14 @@ public class ChatRequest {
          * RAG Embedding 模型 ID
          */
         private String ragEmbeddingModelId;
+
+        /**
+         * 关联 Agent ID（可选）
+         * <p>
+         * 如果设置了 Agent，会话将使用 Agent 的模型、系统提示词和工具。
+         * </p>
+         */
+        private String agentId;
     }
 
     /**
@@ -149,5 +157,13 @@ public class ChatRequest {
 
         /** RAG Embedding 模型 ID */
         private String ragEmbeddingModelId;
+
+        /**
+         * 关联 Agent ID（可选）
+         * <p>
+         * 如果设置了 Agent，会话将使用 Agent 的模型、系统提示词和工具。
+         * </p>
+         */
+        private String agentId;
     }
 }

@@ -20,6 +20,9 @@ export interface ChatSession {
     systemMessage?: string;
     messageCount: number;
     isActive: boolean;
+    // Agent 关联字段
+    agentId?: string;
+    agentName?: string;
     // RAG 配置字段
     enableRag?: boolean;
     knowledgeBaseId?: string;
@@ -45,7 +48,21 @@ export interface ChatMessage {
     errorMessage?: string;
     // RAG 检索来源
     sources?: VectorSearchResult[];
+    // 工具调用状态（Agent 流式执行时使用）
+    toolCalls?: ToolCallDisplay[];
+    // 工具调用记录（从后端返回的已保存数据）
+    toolCallRecords?: ToolCallRecord[];
     createdAt: string;
+}
+
+// 工具调用显示状态
+export interface ToolCallDisplay {
+    toolName: string;
+    args?: Record<string, unknown>;
+    result?: unknown;
+    status: 'pending' | 'running' | 'completed' | 'error';
+    durationMs?: number;
+    errorMessage?: string;
 }
 
 // 创建会话请求
@@ -54,6 +71,8 @@ export interface CreateSessionRequest {
     modelId?: string;
     promptId?: string;
     systemMessage?: string;
+    // Agent 关联字段
+    agentId?: string;
     // RAG 配置字段
     enableRag?: boolean;
     knowledgeBaseId?: string;
@@ -75,4 +94,15 @@ export interface MessageListResponse {
     sessionId: string;
     messages: ChatMessage[];
     total: number;
+}
+
+// 工具调用记录（从后端返回）
+export interface ToolCallRecord {
+    toolId?: string;
+    toolName: string;
+    args?: Record<string, unknown>;
+    result?: unknown;
+    durationMs?: number;
+    success?: boolean;
+    errorMessage?: string;
 }

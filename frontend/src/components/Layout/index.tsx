@@ -2,6 +2,7 @@ import React, {useState} from 'react'
 import type {MenuProps} from 'antd'
 import {Layout, Menu, theme} from 'antd'
 import {
+    ApiOutlined,
     CloudServerOutlined,
     DashboardOutlined,
     DatabaseOutlined,
@@ -10,6 +11,7 @@ import {
     LineChartOutlined,
     LogoutOutlined,
     MessageOutlined,
+    RobotOutlined,
 } from '@ant-design/icons'
 import {Outlet, useLocation, useNavigate} from 'react-router-dom'
 import {useAuthStore} from '@/stores/authStore'
@@ -19,12 +21,21 @@ const {Header, Sider, Content} = Layout
 const menuItems: MenuProps['items'] = [
     {key: '/', icon: <DashboardOutlined/>, label: '仪表盘'},
     {
+        key: 'agent-group',
+        type: 'group' as const,
+        label: 'Agent',
+        children: [
+            {key: '/agents', icon: <RobotOutlined/>, label: 'Agent 管理'},
+        ]
+    },
+    {
         key: 'config-group',
         type: 'group' as const,
         label: '基础配置',
         children: [
             {key: '/models', icon: <CloudServerOutlined/>, label: '模型管理'},
             {key: '/prompts', icon: <FileTextOutlined/>, label: 'Prompt 管理'},
+            {key: '/mcp-servers', icon: <ApiOutlined/>, label: 'MCP Server'},
         ]
     },
     {

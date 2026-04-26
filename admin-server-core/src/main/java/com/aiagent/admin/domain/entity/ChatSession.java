@@ -139,6 +139,16 @@ public class ChatSession {
     private String ragEmbeddingModelId;
 
     /**
+     * 关联 Agent ID（可选）
+     * <p>
+     * 如果设置了 Agent，对话时会使用 Agent 的工具和系统提示词。
+     * Agent 配置会覆盖 modelId 和 systemMessage。
+     * </p>
+     */
+    @Column(name = "agent_id", length = 64)
+    private String agentId;
+
+    /**
      * 创建人
      */
     @Column(length = 100)

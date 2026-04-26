@@ -103,6 +103,16 @@ public class ChatMessage {
     private String sources;
 
     /**
+     * 工具调用记录 JSON
+     * <p>
+     * 仅Agent对话的助手消息有此字段，存储工具调用记录的 JSON 格式数据，
+     * 包含 toolId、toolName、args、result、success、durationMs 等信息。
+     * </p>
+     */
+    @Column(name = "tool_calls", columnDefinition = "TEXT")
+    private String toolCalls;
+
+    /**
      * 创建时间
      */
     @CreationTimestamp

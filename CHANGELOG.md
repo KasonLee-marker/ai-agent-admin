@@ -1,5 +1,403 @@
 # AI Agent Admin - 变更日志
 
+## v2.0.0 (2026-04-25) Agent MVP 版本
+
+### 功能概述
+
+实现 Agent 核心能力：创建、配置、运行单 Agent，支持工具绑定和执行。为后续 MCP 集成和多 Agent 协作奠定基础。
+
+### MVP-1: Agent 实体与基础 CRUD
+
+**新增实体**：
+
+- `Agent` - Agent 配置实体（名称、描述、模型、系统提示词、配置、状态）
+- `AgentTool` - Agent-Tool 绑定关系（工具ID、启用状态、配置）
+- `AgentStatus` 枚举 - DRAFT、PUBLISHED、ARCHIVED
+
+**数据库表**：
+
+```sql
+CREATE TABLE agents (
+    id VARCHAR(64) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    version VARCHAR(20) DEFAULT '1.0.0',
+    model_id VARCHAR(64) NOT NULL,
+    system_prompt TEXT,
+    config JSONB DEFAULT '{"temperature": 0.7, "maxTokens": 4096}',
+    status VARCHAR(20) DEFAULT 'DRAFT',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE agent_tools (
+    id VARCHAR(64) PRIMARY KEY,
+    agent_id VARCHAR(64) NOT NULL REFERENCES agents(id),
+    tool_id VARCHAR(64) NOT NULL REFERENCES tools(id),
+    enabled BOOLEAN DEFAULT true,
+    config JSONB DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(agent_id, tool_id)
+);
+```
+
+**API 端点**：
+
+- `POST /api/v1/agents` - 创建 Agent
+- `GET /api/v1/agents` - Agent 列表（支持状态、模型、关键词筛选）
+- `GET /api/v1/agents/{id}` - Agent 详情
+- `PUT /api/v1/agents/{id}` - 更新 Agent
+- `DELETE /api/v1/agents/{id}` - 删除 Agent
+- `PUT /api/v1/agents/{id}/status` - 状态管理（DRAFT → PUBLISHED → ARCHIVED）
+- `POST /api/v1/agents/{id}/tools` - 绑定工具
+- `DELETE /api/v1/agents/{id}/tools/{toolId}` - 解绑工具
+- `PUT /api/v1/agents/{id}/tools/{toolId}` - 更新工具配置
+
+---
+
+### MVP-2: Tool 实体与内置工具
+
+**新增实体**：
+
+- `Tool` - 工具定义实体（名称、描述、类型、类别、Schema）
+- `ToolType` 枚举 - BUILTIN、CUSTOM、MCP
+- `ToolCategory` 枚举 - GENERAL、SEARCH、CALCULATION、KNOWLEDGE、SHELL、HTTP
+
+**内置工具**：
+
+| 工具                   | 描述      | 执行器                        |
+|----------------------|---------|----------------------------|
+| `calculator`         | 数学表达式计算 | CalculatorExecutor         |
+| `datetime`           | 获取当前时间  | DatetimeExecutor           |
+| `knowledgeRetrieval` | 知识库检索   | KnowledgeRetrievalExecutor |
+
+**启动自动注册**：
+
+- `BuiltInToolInitializer` - 实现 ApplicationRunner，启动时自动注册内置工具
+
+**工具执行架构**：
+
+- `ToolExecutor` 接口 - 工具执行器接口
+- `ExecutionContext` - 执行上下文（agentId、agentToolConfig、userContext）
+- `ToolResult` - 执行结果包装器
+
+---
+
+### MVP-3: Agent 执行引擎
+
+**新增实体**：
+
+- `AgentExecutionLog` - 执行日志（输入、输出、工具调用记录、耗时）
+
+**执行流程**：
+
+1. 构建 Prompt（系统提示词 + 工具定义）
+2. 调用 LLM
+3. 检测 JSON 格式 tool_calls
+4. 执行工具，获取结果
+5. 将工具结果加入对话，再次调用 LLM
+6. 重复直到无 tool_calls（最大 5 次）
+7. 返回响应并保存执行日志
+
+**API 端点**：
+
+- `POST /api/v1/agents/{id}/execute` - 执行 Agent（同步）
+- `GET /api/v1/agents/{id}/logs` - 执行日志列表
+- `GET /api/v1/agents/{id}/logs/{logId}` - 日志详情
+
+**工具调用格式**（LLM 响应）：
+
+```json
+```json
+{"tool": "calculator", "args": {"expression": "2+3"}}
+```
+
+```
+
+---
+
+### MVP-4: 前端 Agent 管理
+
+**新增页面**：
+- `/agents` - Agent 列表（表格、搜索、创建按钮）
+- `/agents/:id` - Agent 详情（四个 Tab）
+
+**详情页 Tab**：
+- 基本信息 - 名称、描述、模型、状态、系统提示词
+- 工具绑定 - 工具列表、添加/解绑工具
+- 测试对话 - 输入框、AI响应、工具调用可视化
+- 执行日志 - 日志列表（输入摘要、输出摘要、工具调用数）
+
+**前端文件**：
+- `frontend/src/types/agent.ts` - Agent 类型定义
+- `frontend/src/api/agent.ts` - Agent API 调用
+- `frontend/src/pages/Agents/index.tsx` - Agent 列表页
+- `frontend/src/pages/Agents/AgentDetail.tsx` - Agent 详情页
+
+---
+
+### 验证结果
+
+```
+
+后端测试: Tests run: 283, Failures: 0, Errors: 0
+前端构建: ✓ built in 11.08s
+
+Agent 执行测试:
+
+- 输入: "计算 5+7*2"
+- 输出: "计算结果是19，按照数学运算优先级先计算乘法7×2=14，再计算加法5+14=19"
+- 工具调用: calculator(expression="5+7*2", result=19)
+- 执行耗时: ~3000ms
+
+```
+
+---
+
+## v2.0.1 (2026-04-25) MCP Server 集成（Phase 2）
+
+### 功能概述
+
+实现 MCP (Model Context Protocol) 服务器集成，让 Agent 可以调用外部 MCP 工具。支持 stdio 和 SSE 双 Transport，成功连接百度 MCP Playground。
+
+### Phase 2-1: MCP Client 核心
+
+**新增实体**：
+- `McpServer` - MCP Server 配置（名称、描述、transportType、command/url、args、env）
+
+**数据库表**：
+```sql
+CREATE TABLE mcp_servers (
+    id VARCHAR(64) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    transport_type VARCHAR(20) DEFAULT 'stdio',
+    command VARCHAR(200),
+    url VARCHAR(500),
+    args JSONB DEFAULT '[]',
+    env JSONB DEFAULT '{}',
+    status VARCHAR(20) DEFAULT 'ACTIVE',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**MCP Client 接口**：
+
+```java
+public interface McpClient {
+    void connect(McpServerConfig config);
+    boolean isConnected();
+    List<McpTool> listTools();
+    McpToolResult callTool(String toolName, Map<String, Object> args);
+    void disconnect();
+    String getServerName();
+}
+```
+
+**Transport 实现**：
+
+- `StdioMcpClient` - 通过 stdin/stdout 与 MCP Server 进程通信
+- `SseMcpClient` - 通过 SSE 长连接 + POST message endpoint 通信
+
+**API 端点**：
+
+- `POST /api/v1/mcp-servers` - 创建 MCP Server
+- `GET /api/v1/mcp-servers` - MCP Server 列表
+- `GET /api/v1/mcp-servers/{id}` - 详情
+- `DELETE /api/v1/mcp-servers/{id}` - 删除
+- `POST /api/v1/mcp-servers/{id}/refresh-tools` - 刷新工具列表
+
+---
+
+### Phase 2-2: MCP 工具注册
+
+**工具注册流程**：
+
+1. 连接 MCP Server
+2. 调用 `tools/list` 获取工具列表
+3. 解析 inputSchema
+4. 注册到 Tool 表（type = MCP, executor = mcpToolExecutor）
+
+**McpToolExecutor**：
+
+- 从 Tool.config 获取 MCP Server 配置
+- 建立/复用 MCP Client 连接
+- 调用 `tools/call` 执行工具
+- 返回结果包装器
+
+---
+
+### Phase 2-3: 前端 MCP Server 管理
+
+**新增页面**：
+
+- `/mcp-servers` - MCP Server 配置列表
+- 创建弹窗（Transport 类型选择、SSE URL/Stdio 命令输入）
+
+**前端文件**：
+
+- `frontend/src/types/mcp.ts` - MCP 类型定义
+- `frontend/src/api/mcp.ts` - MCP API 调用
+- `frontend/src/pages/McpServers/index.tsx` - MCP Server 管理页
+
+---
+
+### SSE 连接测试
+
+**百度 MCP Playground**：
+
+- URL: `https://mcp-playground.baidu.com/.../sse`
+- 发现 10 个地图工具：
+    - `map_directions` - 路线规划
+    - `map_distance_matrix` - 距离矩阵
+    - `map_geocode` - 地址转坐标
+    - `map_ip_location` - IP 定位
+    - `map_place_details` - POI 详情
+    - `map_poi_extract` - POI 标注
+    - `map_reverse_geocode` - 坐标转地址
+    - `map_road_traffic` - 道路拥堵
+    - `map_search_places` - 地点搜索
+    - `map_weather` - 天气查询
+
+---
+
+### Phase 2-4: 工具列表查看优化
+
+**新增功能**：
+
+- 工具刷新后自动保存到 Tool 表
+- 点击工具数量标签直接查看已保存的工具列表
+- 无需每次连接 MCP Server 获取工具
+- 刷新按钮仍可用于更新工具列表
+
+**新增 API 端点**：
+
+- `GET /api/v1/mcp-servers/{id}/tools` - 获取已保存的工具列表
+
+**数据库查询**：
+
+```sql
+-- PostgreSQL JSON 查询：从 config 字段提取 mcpServerId
+SELECT * FROM tools 
+WHERE type = 'MCP' 
+AND config::json->>'mcpServerId' = :mcpServerId
+```
+
+**前端改进** (`McpServers/index.tsx`)：
+
+- 工具数量标签改为可点击（cursor=pointer）
+- 点击触发 `handleViewTools()` 查询已保存工具
+- Tooltip 提示区分：
+    - 有工具："点击查看工具列表"
+    - 无工具："点击刷新后可查看工具列表"
+
+**后端改动**：
+
+- `ToolRepository.java` - 新增 `findByMcpServerId()` 原生 SQL 查询
+- `McpServerController.java` - 新增 `/{id}/tools` GET 端点
+- `ToolMapper.java` - 新增 `toResponseList()` 方法
+
+**验证结果**：
+
+```
+后端构建: mvn clean install -DskipTests 成功
+前端构建: ✓ built in 5.11s
+API 测试: GET /api/v1/mcp-servers/{id}/tools 返回 10 个工具
+前端测试: 点击工具标签直接显示工具列表 Modal
+```
+
+---
+
+### 关键修复
+
+1. **SseMcpClient URL 字段**：使用 `config.getUrl()` 替代 `config.getCommand()`
+2. **messageEndpoint 相对路径**：转换为完整 URL（从 SSE URL 提取 baseUrl）
+3. **EntityScan 包路径**：修复为 `com.aiagent.admin.domain.entity`
+4. **McpToolExecutor SSE 支持**：注入 StdioMcpClient + SseMcpClient，根据 transportType 选择
+5. **MCP 配置继承**：AgentExecutionServiceImpl 合并 Tool.config 到 agentToolConfig
+
+---
+
+### 验证结果
+
+```
+后端构建: mvn clean install -DskipTests 成功
+前端构建: ✓ built in 9.98s
+SSE 连接: 成功连接百度 MCP Playground
+工具发现: 10 个地图工具已注册
+
+MCP 工具执行测试:
+- 输入: "查询北京市海淀区的经纬度坐标"
+- 工具调用: map_geocode(address="北京市海淀区")
+- MCP 响应: lng=116.3054340544974, lat=39.96548984110075
+- 执行耗时: 2738ms (MCP) + 6603ms (总)
+```
+
+---
+
+## v2.0.2 (2026-04-26) Bug Fixes
+
+### Agent 工具调用修复
+
+**问题**：Agent 执行时无法正确调用工具，LLM 返回 tool_calls 但未被解析执行。
+
+**根本原因**：Spring AI Function 构造器参数顺序错误。`Function` record 期望 `(description, name, parameters)`，但代码传入了
+`(name, description, parameters)`。
+
+**修复位置**：`AgentExecutionServiceImpl.java:229-233`
+
+```java
+// 修复前（错误）
+Function function = new Function(
+    tool.getName(),          // name 作为第一个参数（错误）
+    tool.getDescription(),   // description 作为第二个参数（错误）
+    parameters
+);
+
+// 修复后（正确）
+Function function = new Function(
+    tool.getDescription(),   // description 作为第一个参数（正确）
+    tool.getName(),          // name 作为第二个参数（正确）
+    parameters
+);
+```
+
+**验证结果**：
+
+```
+curl 测试: POST /api/v1/agents/{id}/execute
+输入: "现在几点了？"
+工具调用: datetime(result="2026-04-25 16:48:18 UTC")
+输出: "现在是2026年4月25日16:48:18 UTC时间"
+```
+
+---
+
+### 对话调试页面按钮布局修复
+
+**问题**：对话调试页面上方创建对话按钮显示不全，两个按钮并排只显示部分内容。
+
+**根本原因**：`Space` 组件使用水平布局（`direction="horizontal"`），按钮未设置 `block` 属性。
+
+**修复位置**：`frontend/src/pages/Chat/index.tsx`
+
+```tsx
+// 修复前（水平布局，按钮显示不全）
+<Space>
+    <Button icon={<MessageOutlined />}>普通对话</Button>
+    <Button type="primary" icon={<RobotOutlined />}>Agent对话</Button>
+</Space>
+
+// 修复后（垂直布局，block 按钮）
+<Space direction="vertical" style={{width: '100%'}} size="small">
+    <Button block icon={<MessageOutlined />}>普通对话</Button>
+    <Button type="primary" block icon={<RobotOutlined />}>Agent对话</Button>
+</Space>
+```
+
+---
+
 ## v1.0.1 (2026-04-19) HanLP 中文句子分割集成
 
 ### 功能概述
