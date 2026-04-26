@@ -34,7 +34,7 @@ public class DatetimeExecutor implements ToolExecutor {
 
         try {
             // 获取时区参数（可选）
-            String timezone = args.containsKey("timezone") ? (String) args.get("timezone") : "UTC";
+            String timezone = args.containsKey("timezone") ? (String) args.get("timezone") : ZoneId.systemDefault().toString();
 
             // 获取当前时间
             ZoneId zoneId = parseZoneId(timezone);
@@ -82,8 +82,8 @@ public class DatetimeExecutor implements ToolExecutor {
         try {
             return ZoneId.of(timezone);
         } catch (Exception e) {
-            // 默认使用 UTC
-            return ZoneId.of("UTC");
+            // 默认使用 机器的时区
+            return ZoneId.systemDefault();
         }
     }
 }

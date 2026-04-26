@@ -599,9 +599,122 @@ const AgentDetailPage: React.FC = () => {
                         <List.Item>
                             <Card size="small" style={{width: '100%'}}>
                                 <Descriptions size="small" column={4}>
-                                    <Descriptions.Item label="输入">{log.inputSummary}</Descriptions.Item>
-                                    <Descriptions.Item label="输出">{log.outputSummary}</Descriptions.Item>
-                                    <Descriptions.Item label="工具调用">{log.toolCallCount} 次</Descriptions.Item>
+                                    <Descriptions.Item label="输入">
+                                        <Tooltip title={log.inputSummary}>
+                                            <span style={{
+                                                maxWidth: 150,
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                display: 'inline-block',
+                                                whiteSpace: 'nowrap'
+                                            }}>
+                                                {log.inputSummary}
+                                            </span>
+                                        </Tooltip>
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="输出">
+                                        <Tooltip title={
+                                            <div style={{maxWidth: 400, whiteSpace: 'pre-wrap'}}>
+                                                {log.outputSummary}
+                                            </div>
+                                        }>
+                                            <span style={{
+                                                maxWidth: 150,
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                display: 'inline-block',
+                                                whiteSpace: 'nowrap'
+                                            }}>
+                                                {log.outputSummary}
+                                            </span>
+                                        </Tooltip>
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="工具调用">
+                                        {log.toolCalls && log.toolCalls.length > 0 ? (
+                                            <Tooltip
+                                                styles={{
+                                                    root: {maxWidth: 600, maxHeight: 400},
+                                                    body: {maxHeight: 380, overflow: 'auto', paddingRight: 8}
+                                                }}
+                                                title={
+                                                    <div>
+                                                        {log.toolCalls.map((call, idx) => (
+                                                            <div key={idx} style={{
+                                                                marginBottom: idx < log.toolCalls!.length - 1 ? 12 : 0,
+                                                                padding: '8px 0',
+                                                                borderBottom: idx < log.toolCalls!.length - 1 ? '1px dashed #555' : 'none'
+                                                            }}>
+                                                                <div style={{fontWeight: 'bold', marginBottom: 4}}>
+                                                                    <Tag color={call.success ? 'green' : 'red'}
+                                                                         style={{marginRight: 4}}>
+                                                                        {call.success ? '成功' : '失败'}
+                                                                    </Tag>
+                                                                    {call.toolName}
+                                                                    <span style={{
+                                                                        marginLeft: 8,
+                                                                        color: '#aaa'
+                                                                    }}>{call.durationMs}ms</span>
+                                                                </div>
+                                                                <div style={{fontSize: 12}}>
+                                                                    <div
+                                                                        style={{color: '#aaa', marginBottom: 2}}>参数:
+                                                                    </div>
+                                                                    <pre style={{
+                                                                        margin: 0,
+                                                                        padding: '4px 8px',
+                                                                        background: '#333',
+                                                                        borderRadius: 4,
+                                                                        fontSize: 11,
+                                                                        maxHeight: 100,
+                                                                        overflow: 'auto',
+                                                                        whiteSpace: 'pre-wrap',
+                                                                        wordBreak: 'break-all'
+                                                                    }}>
+                                                                        {JSON.stringify(call.args, null, 2)}
+                                                                    </pre>
+                                                                    {call.result !== undefined && call.result !== null && (
+                                                                        <div style={{marginTop: 4}}>
+                                                                            <div style={{
+                                                                                color: '#aaa',
+                                                                                marginBottom: 2
+                                                                            }}>结果:
+                                                                            </div>
+                                                                            <pre style={{
+                                                                                margin: 0,
+                                                                                padding: '4px 8px',
+                                                                                background: '#1a472a',
+                                                                                borderRadius: 4,
+                                                                                fontSize: 11,
+                                                                                maxHeight: 150,
+                                                                                overflow: 'auto',
+                                                                                whiteSpace: 'pre-wrap',
+                                                                                wordBreak: 'break-all',
+                                                                                color: '#7fc97f'
+                                                                            }}>
+                                                                                {typeof call.result === 'string' ? call.result : JSON.stringify(call.result, null, 2)}
+                                                                            </pre>
+                                                                        </div>
+                                                                    )}
+                                                                    {call.errorMessage && (
+                                                                        <div style={{marginTop: 4, color: '#ff6b6b'}}>
+                                                                            错误: {call.errorMessage}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                }
+                                            >
+                                                <Tag color="blue" style={{cursor: 'pointer'}}>
+                                                    <ToolOutlined style={{marginRight: 4}}/>
+                                                    {log.toolCallCount} 次
+                                                </Tag>
+                                            </Tooltip>
+                                        ) : (
+                                            <span>{log.toolCallCount} 次</span>
+                                        )}
+                                    </Descriptions.Item>
                                     <Descriptions.Item label="耗时">{log.durationMs}ms</Descriptions.Item>
                                 </Descriptions>
                                 <div style={{marginTop: 8, color: '#666'}}>

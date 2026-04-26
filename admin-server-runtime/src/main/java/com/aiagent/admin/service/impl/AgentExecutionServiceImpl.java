@@ -235,7 +235,7 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
     private AgentExecutionLogResponse toLogResponse(AgentExecutionLog log) {
         String inputSummary = truncate(log.getInput(), 100);
         String outputSummary = truncate(log.getOutput(), 100);
-        int toolCallCount = parseToolCalls(log.getToolCalls()).size();
+        List<ToolCallRecord> toolCalls = parseToolCalls(log.getToolCalls());
 
         return AgentExecutionLogResponse.builder()
                 .id(log.getId())
@@ -243,11 +243,12 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                 .sessionId(log.getSessionId())
                 .inputSummary(inputSummary)
                 .outputSummary(outputSummary)
-                .toolCallCount(toolCallCount)
+                .toolCallCount(toolCalls.size())
                 .durationMs(log.getDurationMs())
                 .success(log.getSuccess())
                 .errorMessage(log.getErrorMessage())
                 .createdAt(log.getCreatedAt())
+                .toolCalls(toolCalls)
                 .build();
     }
 
