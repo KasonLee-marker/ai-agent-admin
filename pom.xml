@@ -14,7 +14,7 @@
 
     <groupId>com.aiagent.admin</groupId>
     <artifactId>ai-agent-admin</artifactId>
-    <version>1.0.1</version>
+    <version>1.0.2</version>
     <name>AI Agent Admin</name>
     <description>AI Agent Admin Platform - Multi-module Spring Boot Application</description>
     <packaging>pom</packaging>
