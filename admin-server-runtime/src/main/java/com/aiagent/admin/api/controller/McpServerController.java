@@ -117,6 +117,14 @@ public class McpServerController {
      * @param id MCP Server ID
      * @return 成功响应
      */
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Delete MCP server")
+    public ApiResponse<Void> deleteMcpServer(
+            @Parameter(description = "MCP Server ID") @PathVariable String id) {
+        mcpServerService.delete(id);
+        return ApiResponse.success();
+    }
+
     /**
      * 获取引用指定 MCP Server 的 Agent 列表
      * <p>
@@ -132,12 +140,6 @@ public class McpServerController {
     public ApiResponse<List<AgentInfoDTO>> getReferencingAgents(
             @Parameter(description = "MCP Server ID") @PathVariable String id) {
         return ApiResponse.success(mcpServerService.getReferencingAgents(id));
-    }
-    @Operation(summary = "Delete MCP server")
-    public ApiResponse<Void> deleteMcpServer(
-            @Parameter(description = "MCP Server ID") @PathVariable String id) {
-        mcpServerService.delete(id);
-        return ApiResponse.success();
     }
 
     /**
