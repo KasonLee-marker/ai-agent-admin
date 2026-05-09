@@ -33,6 +33,16 @@ public class CreateMcpServerRequest {
     private String description;
 
     /**
+     * 运行模式
+     * <p>
+     * LOCAL: 本地子进程模式
+     * DOCKER: Docker 容器模式
+     * </p>
+     */
+    @Builder.Default
+    private String runtimeMode = "DOCKER";
+
+    /**
      * Transport 类型
      * <p>
      * 支持：stdio、sse

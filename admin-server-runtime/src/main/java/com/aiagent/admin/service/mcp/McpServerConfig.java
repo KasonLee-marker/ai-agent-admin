@@ -35,6 +35,24 @@ public class McpServerConfig {
     private String transportType = "stdio";
 
     /**
+     * 运行模式
+     * <p>
+     * LOCAL: 本地子进程模式（直接启动）
+     * DOCKER: Docker 容器模式（通过 MCP Host Service）
+     * </p>
+     */
+    @Builder.Default
+    private String runtimeMode = "DOCKER";
+
+    /**
+     * MCP Host Service 地址（DOCKER 模式下）
+     * <p>
+     * 例如：http://localhost:8080
+     * </p>
+     */
+    private String mcpHostUrl;
+
+    /**
      * 启动命令（stdio transport）
      * <p>
      * 例如：uvx、npx、python

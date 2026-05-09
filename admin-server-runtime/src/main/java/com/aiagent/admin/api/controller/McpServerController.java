@@ -194,4 +194,48 @@ public class McpServerController {
         List<com.aiagent.admin.domain.entity.Tool> tools = toolRepository.findByMcpServerId(id);
         return ApiResponse.success(toolMapper.toResponseList(tools));
     }
+
+    /**
+     * 获取 MCP Server 进程日志（DOCKER 模式）
+     *
+     * @param id    MCP Server ID
+     * @param lines 日志行数（默认 100）
+     * @return 日志内容
+     */
+    @GetMapping("/{id}/logs")
+    @Operation(summary = "Get MCP server process logs",
+            description = "Get logs from the MCP server process in Docker runtime (DOCKER mode only)")
+    public ApiResponse<String> getProcessLogs(
+            @Parameter(description = "MCP Server ID") @PathVariable String id,
+            @RequestParam(defaultValue = "100") int lines) {
+        return ApiResponse.success(mcpServerService.getProcessLogs(id, lines));
+    }
+
+    /**
+     * 获取 MCP Server 进程状态（DOCKER 模式）
+     *
+     * @param id MCP Server ID
+     * @return 进程状态
+     */
+    @GetMapping("/{id}/process/status")
+    @Operation(summary = "Get MCP server process status",
+            description = "Get process status from Docker runtime (DOCKER mode only)")
+    public ApiResponse<McpServerService.ProcessStatusDTO> getProcessStatus(
+            @Parameter(description = "MCP Server ID") @PathVariable String id) {
+        return ApiResponse.success(mcpServerService.getProcessStatus(id));
+    }
+
+    /**
+     * 重启 MCP Server 进程（DOCKER 模式）
+     *
+     * @param id MCP Server ID
+     * @return 重启结果
+     */
+    @PostMapping("/{id}/process/restart")
+    @Operation(summary = "Restart MCP server process",
+            description = "Restart the MCP server process in Docker runtime (DOCKER mode only)")
+    public ApiResponse<Boolean> restartProcess(
+            @Parameter(description = "MCP Server ID") @PathVariable String id) {
+        return ApiResponse.success(mcpServerService.restartProcess(id));
+    }
 }

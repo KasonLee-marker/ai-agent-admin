@@ -67,6 +67,31 @@ public class McpServerResponse {
     private String status;
 
     /**
+     * 运行模式 (LOCAL/DOCKER)
+     */
+    private String runtimeMode;
+
+    /**
+     * Docker 容器 ID
+     */
+    private String containerId;
+
+    /**
+     * 容器内进程 ID
+     */
+    private Integer processId;
+
+    /**
+     * 进程状态 (RUNNING/STOPPED/ERROR)
+     */
+    private String processStatus;
+
+    /**
+     * 最近错误日志
+     */
+    private String lastLog;
+
+    /**
      * 创建时间
      */
     private LocalDateTime createdAt;

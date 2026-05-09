@@ -16,13 +16,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * MCP 工具执行器
  * <p>
  * 执行 MCP 类型工具，通过 MCP Client 调用外部 MCP Server。
- * 支持 stdio 和 SSE 两种 transport。
+ * 支持 stdio (LOCAL/DOCKER) 和 SSE 两种 transport。
  * </p>
  * <p>
  * 执行流程：
  * <ol>
  *   <li>从工具配置中获取 MCP Server 信息</li>
- *   <li>根据 transportType 选择 Client</li>
+ *   <li>根据 transportType 和 runtimeMode 选择 Client</li>
  *   <li>建立或复用 MCP Client 连接</li>
  *   <li>调用 MCP 工具</li>
  *   <li>返回结果</li>
@@ -31,7 +31,9 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * @see ToolExecutor
  * @see McpClient
+ * @see McpClientFactory
  * @see StdioMcpClient
+ * @see DockerMcpClient
  * @see SseMcpClient
  */
 @Slf4j
@@ -39,8 +41,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class McpToolExecutor implements ToolExecutor {
 
-    private final StdioMcpClient stdioMcpClient;
-    private final SseMcpClient sseMcpClient;
+    private final McpClientFactory mcpClientFactory;
     private final ObjectMapper objectMapper;
 
     /**
@@ -115,7 +116,7 @@ public class McpToolExecutor implements ToolExecutor {
     /**
      * 获取或创建 MCP Client
      * <p>
-     * 根据 transportType 选择对应的 Client 实现。
+     * 根据 transportType 和 runtimeMode 选择对应的 Client 实现。
      * </p>
      */
     private McpClient getOrCreateClient(String serverId, Map<String, Object> config) throws McpConnectionException {
@@ -130,16 +131,20 @@ public class McpToolExecutor implements ToolExecutor {
         log.info("Creating new MCP Client for server: {}", serverId);
 
         String transportType = (String) config.get("transportType");
-        McpClient client = "sse".equals(transportType) ? sseMcpClient : stdioMcpClient;
+        String runtimeMode = (String) config.get("runtimeMode");
 
         McpServerConfig mcpConfig = McpServerConfig.builder()
                 .name((String) config.get("mcpServerName"))
                 .transportType(transportType)
+                .runtimeMode(runtimeMode != null ? runtimeMode : "DOCKER")
                 .url((String) config.get("url"))
                 .command((String) config.get("command"))
                 .args(parseList(config.get("args")))
                 .env(parseMap(config.get("env")))
                 .build();
+
+        // 使用 Factory 根据配置获取 Client
+        McpClient client = mcpClientFactory.getClient(mcpConfig);
 
         client.connect(mcpConfig);
         clientPool.put(serverId, client);

@@ -1,12 +1,16 @@
 import React, {useEffect, useState} from 'react'
-import {Button, Form, Input, List, message, Modal, Space, Table, Tag, Tooltip} from 'antd'
+import {Button, Card, Descriptions, Form, Input, List, message, Modal, Space, Table, Tag, Tooltip} from 'antd'
 import {
+    ContainerOutlined,
     DeleteOutlined,
     EditOutlined,
     ExclamationCircleOutlined,
+    FileTextOutlined,
+    PlayCircleOutlined,
     PlusOutlined,
     QuestionCircleOutlined,
     ReloadOutlined,
+    StopOutlined,
     ToolOutlined
 } from '@ant-design/icons'
 import type {ColumnsType} from 'antd/es/table'
@@ -14,13 +18,19 @@ import {
     createMcpServerFromJson,
     deleteMcpServer,
     getMcpServerTools,
+    getProcessLogs,
     getReferencingAgents,
+    getRuntimeLogs,
+    getRuntimeStatus,
     listMcpServers,
     refreshMcpTools,
+    restartProcess,
+    startRuntime,
+    stopRuntime,
     updateMcpServerFromJson
 } from '@/api/mcp'
-import {McpServer} from '@/types/mcp'
-import {AgentInfo, Tool} from '@/types/agent'
+import type {McpServer} from '@/types/mcp'
+import type {AgentInfo, Tool} from '@/types/agent'
 
 const McpServerPage: React.FC = () => {
     const [data, setData] = useState<McpServer[]>([])
@@ -40,8 +50,30 @@ const McpServerPage: React.FC = () => {
     const [referencingAgents, setReferencingAgents] = useState<AgentInfo[]>([])
     const [checkingReferences, setCheckingReferences] = useState(false)
 
+    // Docker Runtime 状态
+    const [runtimeStatus, setRuntimeStatus] = useState<{
+        containerId?: string
+        running: boolean
+        state: string
+        health: string
+    } | null>(null)
+    const [runtimeLoading, setRuntimeLoading] = useState(false)
+
+    // 进程日志 Modal
+    const [logModalVisible, setLogModalVisible] = useState(false)
+    const [logServerId, setLogServerId] = useState<string>('')
+    const [logServerName, setLogServerName] = useState<string>('')
+    const [processLogs, setProcessLogs] = useState<string>('')
+    const [logsLoading, setLogsLoading] = useState(false)
+
+    // Runtime 日志 Modal
+    const [runtimeLogModalVisible, setRuntimeLogModalVisible] = useState(false)
+    const [runtimeLogs, setRuntimeLogs] = useState<string>('')
+    const [runtimeLogsLoading, setRuntimeLogsLoading] = useState(false)
+
     useEffect(() => {
         fetchData()
+        fetchRuntimeStatus()
     }, [])
 
     const fetchData = async () => {
@@ -56,6 +88,53 @@ const McpServerPage: React.FC = () => {
         }
     }
 
+    const fetchRuntimeStatus = async () => {
+        setRuntimeLoading(true)
+        try {
+            const res = await getRuntimeStatus()
+            if (res.success) {
+                setRuntimeStatus(res.data)
+            }
+        } finally {
+            setRuntimeLoading(false)
+        }
+    }
+
+    const handleStartRuntime = async () => {
+        try {
+            const res = await startRuntime()
+            if (res.success) {
+                message.success('MCP Runtime 容器已启动')
+                fetchRuntimeStatus()
+            }
+        } catch (error) {
+            message.error('启动容器失败')
+        }
+    }
+
+    const handleStopRuntime = async () => {
+        try {
+            await stopRuntime()
+            message.success('MCP Runtime 容器已停止')
+            fetchRuntimeStatus()
+        } catch (error) {
+            message.error('停止容器失败')
+        }
+    }
+
+    const handleViewRuntimeLogs = async () => {
+        setRuntimeLogsLoading(true)
+        setRuntimeLogModalVisible(true)
+        try {
+            const res = await getRuntimeLogs(100)
+            if (res.success) {
+                setRuntimeLogs(res.data.logs)
+            }
+        } finally {
+            setRuntimeLogsLoading(false)
+        }
+    }
+
     const handleCreate = () => {
         setEditingServer(null)
         form.resetFields()
@@ -65,7 +144,8 @@ const McpServerPage: React.FC = () => {
   "mcpServers": {
     "my-mcp-server": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory"]
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "runtimeMode": "DOCKER"
     }
   }
 }`
@@ -80,6 +160,7 @@ const McpServerPage: React.FC = () => {
             serverConfig['url'] = record.url
         } else {
             serverConfig['command'] = record.command
+            serverConfig['runtimeMode'] = record.runtimeMode || 'DOCKER'
             if (record.args && record.args.length > 0) {
                 serverConfig['args'] = record.args
             }
@@ -194,6 +275,37 @@ const McpServerPage: React.FC = () => {
         }
     }
 
+    // 查看进程日志
+    const handleViewLogs = async (record: McpServer) => {
+        setLogServerId(record.id)
+        setLogServerName(record.name)
+        setLogModalVisible(true)
+        setLogsLoading(true)
+        try {
+            const res = await getProcessLogs(record.id, 100)
+            if (res.success) {
+                setProcessLogs(res.data || '无日志')
+            }
+        } finally {
+            setLogsLoading(false)
+        }
+    }
+
+    // 重启进程
+    const handleRestartProcess = async (record: McpServer) => {
+        try {
+            const res = await restartProcess(record.id)
+            if (res.success && res.data) {
+                message.success('进程重启成功')
+                fetchData()
+            } else {
+                message.error('进程重启失败')
+            }
+        } catch (error) {
+            message.error('进程重启失败')
+        }
+    }
+
     const handleSubmit = async () => {
         setSubmitLoading(true)
         try {
@@ -245,9 +357,17 @@ const McpServerPage: React.FC = () => {
 
     // 状态中文映射
     const statusMap: Record<string, { text: string; color: string }> = {
-        ACTIVE: {text: '运行中', color: 'green'},
-        INACTIVE: {text: '已停止', color: 'red'},
+        ACTIVE: {text: '正常', color: 'green'},
+        INACTIVE: {text: '停用', color: 'red'},
         ERROR: {text: '异常', color: 'orange'}
+    }
+
+    // 进程状态映射
+    const processStatusMap: Record<string, { text: string; color: string; icon: React.ReactNode }> = {
+        RUNNING: {text: '运行中', color: 'green', icon: <ContainerOutlined/>},
+        STOPPED: {text: '已停止', color: 'red', icon: <StopOutlined/>},
+        ERROR: {text: '异常', color: 'orange', icon: <ExclamationCircleOutlined/>},
+        NOT_FOUND: {text: '未启动', color: 'gray', icon: <ContainerOutlined/>}
     }
 
     const columns: ColumnsType<McpServer> = [
@@ -265,6 +385,22 @@ const McpServerPage: React.FC = () => {
             )
         },
         {
+            title: '运行模式',
+            dataIndex: 'runtimeMode',
+            key: 'runtimeMode',
+            width: 100,
+            render: (mode: string, record: McpServer) => {
+                if (record.transportType === 'sse') {
+                    return <Tag>不适用</Tag>
+                }
+                return (
+                    <Tag color={mode === 'DOCKER' ? 'purple' : 'cyan'}>
+                        {mode === 'DOCKER' ? 'Docker' : '本地'}
+                    </Tag>
+                )
+            }
+        },
+        {
             title: '连接配置',
             key: 'config',
             ellipsis: true,
@@ -275,6 +411,23 @@ const McpServerPage: React.FC = () => {
                 const cmd = record.command
                 const args = record.args?.join(' ') || ''
                 return `${cmd} ${args}`
+            }
+        },
+        {
+            title: '进程状态',
+            key: 'processStatus',
+            width: 100,
+            render: (_, record) => {
+                if (record.transportType === 'sse') {
+                    return <Tag>远程</Tag>
+                }
+                const status = record.processStatus || 'NOT_FOUND'
+                const mapped = processStatusMap[status] || {text: status, color: 'default', icon: null}
+                return (
+                    <Tag color={mapped.color} icon={mapped.icon}>
+                        {mapped.text}
+                    </Tag>
+                )
             }
         },
         {
@@ -309,7 +462,7 @@ const McpServerPage: React.FC = () => {
         {
             title: '操作',
             key: 'action',
-            width: 100,
+            width: 150,
             render: (_, record) => (
                 <Space size="small">
                     <Tooltip title="编辑">
@@ -329,6 +482,26 @@ const McpServerPage: React.FC = () => {
                             onClick={() => handleRefreshTools(record)}
                         />
                     </Tooltip>
+                    {record.transportType === 'stdio' && record.runtimeMode === 'DOCKER' && (
+                        <>
+                            <Tooltip title="查看日志">
+                                <Button
+                                    type="text"
+                                    size="small"
+                                    icon={<FileTextOutlined/>}
+                                    onClick={() => handleViewLogs(record)}
+                                />
+                            </Tooltip>
+                            <Tooltip title="重启进程">
+                                <Button
+                                    type="text"
+                                    size="small"
+                                    icon={<ReloadOutlined/>}
+                                    onClick={() => handleRestartProcess(record)}
+                                />
+                            </Tooltip>
+                        </>
+                    )}
                     <Tooltip title="删除">
                         <Button
                             type="text"
@@ -345,11 +518,67 @@ const McpServerPage: React.FC = () => {
 
     return (
         <div>
+            {/* MCP Runtime 状态卡片 */}
+            <Card
+                title={<Space><ContainerOutlined/> MCP Runtime 容器状态</Space>}
+                style={{marginBottom: 16}}
+                loading={runtimeLoading}
+                extra={
+                    <Space>
+                        <Button
+                            size="small"
+                            icon={<FileTextOutlined/>}
+                            onClick={handleViewRuntimeLogs}
+                        >
+                            查看日志
+                        </Button>
+                        {runtimeStatus?.running ? (
+                            <Button
+                                size="small"
+                                danger
+                                icon={<StopOutlined/>}
+                                onClick={handleStopRuntime}
+                            >
+                                停止容器
+                            </Button>
+                        ) : (
+                            <Button
+                                size="small"
+                                type="primary"
+                                icon={<PlayCircleOutlined/>}
+                                onClick={handleStartRuntime}
+                            >
+                                启动容器
+                            </Button>
+                        )}
+                    </Space>
+                }
+            >
+                {runtimeStatus && (
+                    <Descriptions size="small" column={4}>
+                        <Descriptions.Item label="容器ID">
+                            {runtimeStatus.containerId?.substring(0, 12) || 'N/A'}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="运行状态">
+                            <Tag color={runtimeStatus.running ? 'green' : 'red'}>
+                                {runtimeStatus.running ? '运行中' : '已停止'}
+                            </Tag>
+                        </Descriptions.Item>
+                        <Descriptions.Item label="状态">{runtimeStatus.state}</Descriptions.Item>
+                        <Descriptions.Item label="健康检查">{runtimeStatus.health}</Descriptions.Item>
+                    </Descriptions>
+                )}
+                {!runtimeStatus && (
+                    <div style={{color: '#999'}}>无法获取容器状态</div>
+                )}
+            </Card>
+
             <div style={{marginBottom: 16, display: 'flex', justifyContent: 'space-between'}}>
                 <div>
                     <h2 style={{marginBottom: 0}}>MCP Server 配置</h2>
                     <p style={{color: '#666', marginTop: 4}}>
-                        配置 MCP Server，支持远程 SSE 和本地 Stdio。刷新工具列表后可在 Agent 中绑定。
+                        配置 MCP Server，支持远程 SSE 和本地 Stdio。Docker 模式下所有 stdio MCP Server
+                        共享一个容器运行。
                     </p>
                 </div>
                 <Button type="primary" icon={<PlusOutlined/>} onClick={handleCreate}>
@@ -399,14 +628,15 @@ const McpServerPage: React.FC = () => {
   }
 }`}
                                         </pre>
-                                        <p style={{color: '#52c41a', marginTop: 8}}><strong>2. 本地 Stdio (如 npx,
-                                            uvx)</strong></p>
+                                        <p style={{color: '#52c41a', marginTop: 8}}><strong>2. 本地 Stdio (Docker
+                                            模式)</strong></p>
                                         <pre style={{fontSize: 11, margin: '4px 0'}}>
 {`{
   "mcpServers": {
     "memory": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory"]
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "runtimeMode": "DOCKER"
     }
   }
 }`}
@@ -416,13 +646,16 @@ const McpServerPage: React.FC = () => {
   "mcpServers": {
     "github-trending": {
       "command": "uvx",
-      "args": ["mcp-github-trending"]
+      "args": ["mcp-github-trending"],
+      "runtimeMode": "DOCKER"
     }
   }
 }`}
                                         </pre>
                                         <p style={{color: '#999', marginTop: 8, fontSize: 12}}>
-                                            注意：本地命令需要先在服务器上安装（如 npx/uvx）
+                                            runtimeMode: DOCKER = 在 Docker 容器中运行（推荐）
+                                            <br/>
+                                            runtimeMode: LOCAL = 在本地子进程中运行
                                         </p>
                                     </div>
                                 }>
@@ -433,7 +666,7 @@ const McpServerPage: React.FC = () => {
                         rules={[{required: true, message: '请输入配置 JSON'}]}
                     >
                         <Input.TextArea
-                            rows={10}
+                            rows={12}
                             placeholder={`// 支持 SSE 远程或 Stdio 本地两种方式
 
 // 方式1: SSE 远程
@@ -445,12 +678,13 @@ const McpServerPage: React.FC = () => {
   }
 }
 
-// 方式2: Stdio 本地 (需先安装命令)
+// 方式2: Stdio 本地 (Docker 模式推荐)
 {
   "mcpServers": {
     "memory": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory"]
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "runtimeMode": "DOCKER"
     }
   }
 }`}
@@ -479,6 +713,61 @@ const McpServerPage: React.FC = () => {
                         </List.Item>
                     )}
                 />
+            </Modal>
+
+            {/* 进程日志 Modal */}
+            <Modal
+                title={`${logServerName} - 进程日志`}
+                open={logModalVisible}
+                onCancel={() => setLogModalVisible(false)}
+                footer={
+                    <Button onClick={() => setLogModalVisible(false)}>
+                        关闭
+                    </Button>
+                }
+                width={800}
+            >
+                <pre
+                    style={{
+                        background: '#f5f5f5',
+                        padding: 12,
+                        borderRadius: 4,
+                        maxHeight: 400,
+                        overflow: 'auto',
+                        fontSize: 12,
+                        fontFamily: 'monospace'
+                    }}
+                >
+                    {logsLoading ? '加载中...' : processLogs}
+                </pre>
+            </Modal>
+
+            {/* Runtime 日志 Modal */}
+            <Modal
+                title="MCP Runtime 容器日志"
+                open={runtimeLogModalVisible}
+                onCancel={() => setRuntimeLogModalVisible(false)}
+                footer={
+                    <Button onClick={() => setRuntimeLogModalVisible(false)}>
+                        关闭
+                    </Button>
+                }
+                width={900}
+            >
+                <pre
+                    style={{
+                        background: '#1a1a2e',
+                        color: '#eee',
+                        padding: 12,
+                        borderRadius: 4,
+                        maxHeight: 500,
+                        overflow: 'auto',
+                        fontSize: 12,
+                        fontFamily: 'monospace'
+                    }}
+                >
+                    {runtimeLogsLoading ? '加载中...' : (runtimeLogs || '暂无日志')}
+                </pre>
             </Modal>
 
             {/* 删除确认弹窗 - 显示引用信息 */}

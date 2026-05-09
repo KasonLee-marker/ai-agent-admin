@@ -46,19 +46,25 @@ public class McpServerServiceImpl implements McpServerService {
     private final AgentRepository agentRepository;
     private final IdGenerator idGenerator;
     private final ObjectMapper objectMapper;
+    private final McpClientFactory mcpClientFactory;
+    private final McpRuntimeManager mcpRuntimeManager;
 
     public McpServerServiceImpl(McpServerRepository mcpServerRepository,
                                 ToolRepository toolRepository,
                                 AgentToolRepository agentToolRepository,
                                 AgentRepository agentRepository,
                                 IdGenerator idGenerator,
-                                ObjectMapper objectMapper) {
+                                ObjectMapper objectMapper,
+                                McpClientFactory mcpClientFactory,
+                                McpRuntimeManager mcpRuntimeManager) {
         this.mcpServerRepository = mcpServerRepository;
         this.toolRepository = toolRepository;
         this.agentToolRepository = agentToolRepository;
         this.agentRepository = agentRepository;
         this.idGenerator = idGenerator;
         this.objectMapper = objectMapper;
+        this.mcpClientFactory = mcpClientFactory;
+        this.mcpRuntimeManager = mcpRuntimeManager;
     }
 
     @Override
@@ -189,6 +195,12 @@ public class McpServerServiceImpl implements McpServerService {
         List<String> args = parseArgsList(config.get("args"));
         Map<String, String> env = parseEnvMap(config.get("env"));
 
+        // 获取 runtimeMode，默认 DOCKER
+        String runtimeMode = (String) config.get("runtimeMode");
+        if (runtimeMode == null || runtimeMode.isEmpty()) {
+            runtimeMode = "DOCKER";  // 默认使用 Docker 模式
+        }
+
         // 优先级：传入的 description > JSON 中的 description
         String finalDescription = description != null ? description : (String) config.get("description");
 
@@ -197,11 +209,13 @@ public class McpServerServiceImpl implements McpServerService {
                 .name(name)
                 .description(finalDescription)
                 .transportType(transportType)
+                .runtimeMode(runtimeMode)
                 .url(url)
                 .command(command)
                 .args(toJson(args))
                 .env(toJson(env))
                 .status("ACTIVE")
+                .processStatus(transportType.equals("stdio") ? "STOPPED" : null)
                 .build();
 
         return mcpServerRepository.save(server);
@@ -217,6 +231,12 @@ public class McpServerServiceImpl implements McpServerService {
         String finalDescription = description != null ? description : (String) config.get("description");
         server.setDescription(finalDescription);
         server.setTransportType(transportType);
+
+        // 更新 runtimeMode（如果配置中有）
+        String runtimeMode = (String) config.get("runtimeMode");
+        if (runtimeMode != null && !runtimeMode.isEmpty()) {
+            server.setRuntimeMode(runtimeMode);
+        }
 
         if (transportType.equals("sse")) {
             server.setUrl((String) config.get("url"));
@@ -431,7 +451,7 @@ public class McpServerServiceImpl implements McpServerService {
                 .orElseThrow(() -> new IllegalArgumentException("MCP Server not found: " + id));
 
         McpServerConfig config = toMcpServerConfig(server);
-        McpClient client = getClient(server.getTransportType());
+        McpClient client = getClient(server);
 
         try {
             // 连接 MCP Server
@@ -448,11 +468,22 @@ public class McpServerServiceImpl implements McpServerService {
             // 断开连接
             client.disconnect();
 
+            // 更新进程状态（Docker 模式下）
+            if ("stdio".equals(server.getTransportType()) && "DOCKER".equals(server.getRuntimeMode())) {
+                updateProcessStatus(server);
+            }
+
             log.info("Refreshed {} tools from MCP Server: {}", tools.size(), id);
             return tools;
 
         } catch (McpConnectionException e) {
             log.error("Failed to connect to MCP Server {}: {}", id, e.getMessage(), e);
+            // 更新错误状态和日志
+            if ("stdio".equals(server.getTransportType()) && "DOCKER".equals(server.getRuntimeMode())) {
+                server.setProcessStatus("ERROR");
+                server.setLastLog(e.getMessage());
+                mcpServerRepository.save(server);
+            }
             // 直接抛出原始异常，保留完整的错误信息
             throw e;
         } finally {
@@ -469,16 +500,13 @@ public class McpServerServiceImpl implements McpServerService {
     }
 
     /**
-     * 根据 transport 类型获取对应的 Client
+     * 根据 transport 类型和 runtimeMode 获取对应的 Client
      * <p>
-     * 每次创建新实例，避免单例状态冲突。
+     * 使用 McpClientFactory 根据配置创建合适的 Client 实例。
      * </p>
      */
-    private McpClient getClient(String transportType) {
-        if ("sse".equals(transportType)) {
-            return new SseMcpClient(objectMapper);
-        }
-        return new StdioMcpClient(objectMapper);
+    private McpClient getClient(McpServer server) {
+        return mcpClientFactory.getClient(toMcpServerConfig(server));
     }
 
     /**
@@ -548,7 +576,8 @@ public class McpServerServiceImpl implements McpServerService {
     private McpServerConfig toMcpServerConfig(McpServer server) {
         McpServerConfig.McpServerConfigBuilder builder = McpServerConfig.builder()
                 .name(server.getName())
-                .transportType(server.getTransportType());
+                .transportType(server.getTransportType())
+                .runtimeMode(server.getRuntimeMode());
 
         if ("sse".equals(server.getTransportType())) {
             builder.url(server.getUrl());
@@ -565,19 +594,25 @@ public class McpServerServiceImpl implements McpServerService {
      * 转换为响应 DTO
      */
     private McpServerResponse toResponse(McpServer server) {
-        return McpServerResponse.builder()
+        McpServerResponse response = McpServerResponse.builder()
                 .id(server.getId())
                 .name(server.getName())
                 .description(server.getDescription())
                 .transportType(server.getTransportType())
+                .runtimeMode(server.getRuntimeMode())
                 .command(server.getCommand())
                 .url(server.getUrl())
                 .args(parseArgs(server.getArgs()))
                 .env(parseEnv(server.getEnv()))
                 .status(server.getStatus())
+                .processStatus(server.getProcessStatus())
+                .containerId(server.getContainerId())
+                .processId(server.getProcessId())
+                .lastLog(server.getLastLog())
                 .createdAt(server.getCreatedAt())
                 .updatedAt(server.getUpdatedAt())
                 .build();
+        return response;
     }
 
     /**
@@ -631,5 +666,92 @@ public class McpServerServiceImpl implements McpServerService {
         } catch (JsonProcessingException e) {
             return Collections.emptyMap();
         }
+    }
+
+    /**
+     * 更新进程状态（DOCKER 模式）
+     */
+    private void updateProcessStatus(McpServer server) {
+        if (!"DOCKER".equals(server.getRuntimeMode())) {
+            return;
+        }
+
+        McpRuntimeManager.ProcessStatus status = mcpRuntimeManager.getProcessStatus(server.getName());
+        server.setProcessStatus(status.getStatus());
+        server.setProcessId(status.getPid());
+        mcpServerRepository.save(server);
+    }
+
+    @Override
+    public String getProcessLogs(String id, int lines) {
+        McpServer server = mcpServerRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("MCP Server not found: " + id));
+
+        if (!"stdio".equals(server.getTransportType()) || !"DOCKER".equals(server.getRuntimeMode())) {
+            return "Not available for this server type";
+        }
+
+        return mcpRuntimeManager.getProcessLogs(server.getName(), lines);
+    }
+
+    @Override
+    public boolean restartProcess(String id) {
+        McpServer server = mcpServerRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("MCP Server not found: " + id));
+
+        if (!"stdio".equals(server.getTransportType()) || !"DOCKER".equals(server.getRuntimeMode())) {
+            return false;
+        }
+
+        // 停止旧进程
+        mcpRuntimeManager.stopServerProcess(server.getName());
+
+        // 重新启动（通过 refreshTools 或直接启动）
+        try {
+            McpServerConfig config = toMcpServerConfig(server);
+            boolean started = mcpRuntimeManager.startServerProcess(server);
+
+            if (started) {
+                server.setProcessStatus("RUNNING");
+                mcpServerRepository.save(server);
+            }
+
+            return started;
+        } catch (Exception e) {
+            log.error("Failed to restart process for server {}: {}", id, e.getMessage());
+            server.setProcessStatus("ERROR");
+            server.setLastLog(e.getMessage());
+            mcpServerRepository.save(server);
+            return false;
+        }
+    }
+
+    @Override
+    public ProcessStatusDTO getProcessStatus(String id) {
+        McpServer server = mcpServerRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("MCP Server not found: " + id));
+
+        if (!"stdio".equals(server.getTransportType()) || !"DOCKER".equals(server.getRuntimeMode())) {
+            return ProcessStatusDTO.builder()
+                    .serverId(id)
+                    .status("NOT_SUPPORTED")
+                    .build();
+        }
+
+        McpRuntimeManager.ProcessStatus status = mcpRuntimeManager.getProcessStatus(server.getName());
+
+        // 同步数据库状态
+        if (!status.getStatus().equals(server.getProcessStatus())) {
+            server.setProcessStatus(status.getStatus());
+            server.setProcessId(status.getPid());
+            mcpServerRepository.save(server);
+        }
+
+        return ProcessStatusDTO.builder()
+                .serverId(id)
+                .status(status.getStatus())
+                .pid(status.getPid())
+                .uptimeSeconds(status.getUptimeSeconds())
+                .build();
     }
 }

@@ -107,6 +107,44 @@ public class McpServer {
     private String status = "ACTIVE";
 
     /**
+     * 运行模式
+     * <p>
+     * LOCAL: 本地子进程模式（直接启动）
+     * DOCKER: Docker 容器模式（单容器多进程）
+     * </p>
+     */
+    @Column(name = "runtime_mode", length = 20)
+    @Builder.Default
+    private String runtimeMode = "LOCAL";
+
+    /**
+     * Docker 容器 ID（DOCKER 模式下）
+     */
+    @Column(name = "container_id", length = 64)
+    private String containerId;
+
+    /**
+     * 容器内进程 ID
+     */
+    @Column(name = "process_id")
+    private Integer processId;
+
+    /**
+     * 进程状态（DOCKER 模式下）
+     * <p>
+     * RUNNING/STOPPED/ERROR/NOT_FOUND
+     * </p>
+     */
+    @Column(name = "process_status", length = 20)
+    private String processStatus;
+
+    /**
+     * 最近错误日志
+     */
+    @Column(name = "last_log", columnDefinition = "TEXT")
+    private String lastLog;
+
+    /**
      * 创建时间
      */
     @CreationTimestamp

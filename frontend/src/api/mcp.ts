@@ -43,3 +43,50 @@ export async function getMcpServerTools(id: string): Promise<ApiResponse<Tool[]>
 export async function getReferencingAgents(id: string): Promise<ApiResponse<AgentInfo[]>> {
     return client.get(`/mcp-servers/${id}/referencing-agents`)
 }
+
+/**
+ * MCP Runtime 管理 API
+ */
+
+export interface ContainerStatus {
+    containerId?: string
+    running: boolean
+    state: string
+    health: string
+    statusText?: string
+}
+
+export interface ProcessStatus {
+    serverId: string
+    status: string
+    pid?: number
+    uptimeSeconds?: number
+}
+
+export async function getRuntimeStatus(): Promise<ApiResponse<ContainerStatus>> {
+    return client.get('/mcp-runtime/status')
+}
+
+export async function startRuntime(): Promise<ApiResponse<ContainerStatus>> {
+    return client.post('/mcp-runtime/start')
+}
+
+export async function stopRuntime(): Promise<ApiResponse<void>> {
+    return client.post('/mcp-runtime/stop')
+}
+
+export async function getRuntimeLogs(lines?: number): Promise<ApiResponse<{ logs: string, lines: number }>> {
+    return client.get('/mcp-runtime/logs', {params: {lines}})
+}
+
+export async function getProcessLogs(id: string, lines?: number): Promise<ApiResponse<string>> {
+    return client.get(`/mcp-servers/${id}/logs`, {params: {lines}})
+}
+
+export async function getProcessStatus(id: string): Promise<ApiResponse<ProcessStatus>> {
+    return client.get(`/mcp-servers/${id}/process/status`)
+}
+
+export async function restartProcess(id: string): Promise<ApiResponse<boolean>> {
+    return client.post(`/mcp-servers/${id}/process/restart`)
+}

@@ -118,4 +118,41 @@ public interface McpServerService {
      * @return Agent 信息列表（id, name）
      */
     List<AgentInfoDTO> getReferencingAgents(String id);
+
+    /**
+     * 获取 MCP Server 进程日志（DOCKER 模式）
+     *
+     * @param id    MCP Server ID
+     * @param lines 返回的日志行数
+     * @return 日志内容
+     */
+    String getProcessLogs(String id, int lines);
+
+    /**
+     * 重启 MCP Server 进程（DOCKER 模式）
+     *
+     * @param id MCP Server ID
+     * @return 是否成功
+     */
+    boolean restartProcess(String id);
+
+    /**
+     * 获取 MCP Server 进程状态（DOCKER 模式）
+     *
+     * @param id MCP Server ID
+     * @return 进程状态
+     */
+    ProcessStatusDTO getProcessStatus(String id);
+
+    /**
+     * 进程状态 DTO
+     */
+    @lombok.Data
+    @lombok.Builder
+    class ProcessStatusDTO {
+        private String serverId;
+        private String status;
+        private Integer pid;
+        private Double uptimeSeconds;
+    }
 }
