@@ -291,6 +291,7 @@ public class AgentExecutionEngine {
                     .success(false)
                     .errorMessage("Tool not found: " + toolName)
                     .durationMs(System.currentTimeMillis() - startTime)
+                    .toolCallId(toolCall.id())
                     .build();
         }
 
@@ -304,6 +305,7 @@ public class AgentExecutionEngine {
                     .success(false)
                     .errorMessage("Executor not found: " + tool.getExecutor())
                     .durationMs(System.currentTimeMillis() - startTime)
+                    .toolCallId(toolCall.id())
                     .build();
         }
 
@@ -337,6 +339,7 @@ public class AgentExecutionEngine {
                     .success(result.isSuccess())
                     .errorMessage(result.getErrorMessage())
                     .durationMs(result.getDurationMs() > 0 ? result.getDurationMs() : System.currentTimeMillis() - startTime)
+                    .toolCallId(toolCall.id())
                     .build();
 
         } catch (Exception e) {
@@ -349,6 +352,7 @@ public class AgentExecutionEngine {
                     .success(false)
                     .errorMessage(e.getMessage())
                     .durationMs(System.currentTimeMillis() - startTime)
+                    .toolCallId(toolCall.id())
                     .build();
         }
     }

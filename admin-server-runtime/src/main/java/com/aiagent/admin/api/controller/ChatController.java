@@ -286,15 +286,37 @@ public class ChatController {
                         case SYSTEM -> org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage.Role.SYSTEM;
                         default -> org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage.Role.USER;
                     };
-                // 添加工具调用结果到消息中
-                String content = msg.getContent();
+                // 添加助手消息（不包含工具调用结果）
+                messages.add(new org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage(
+                        msg.getContent(), role));
+                
+                // 如果有工具调用，单独添加工具结果消息（使用 TOOL 角色）
                 if (msg.getToolCalls() != null && !msg.getToolCalls().isEmpty()) {
-                    content += "\n\n[工具调用结果]: " + msg.getToolCalls();
+                    try {
+                        List<ToolCallRecord> toolCallRecords = objectMapper.readValue(msg.getToolCalls(),
+                                objectMapper.getTypeFactory().constructCollectionType(List.class, ToolCallRecord.class));
+                        for (ToolCallRecord record : toolCallRecords) {
+                            if (record.getSuccess() && record.getResult() != null) {
+                                String toolResult = objectMapper.writeValueAsString(record.getResult());
+                                messages.add(new org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage(
+                                        toolResult,
+                                        org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage.Role.TOOL,
+                                        record.getToolCallId(),
+                                        record.getToolName(),
+                                        null
+                                ));
+                                log.debug("Added tool result message: tool={}, contentLength={}", 
+                                        record.getToolName(), toolResult.length());
+                            }
+                        }
+                    } catch (Exception e) {
+                        log.warn("Failed to parse toolCalls JSON: {}", e.getMessage());
+                    }
                 }
-                messages.add(new org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage(content, role));
-                log.debug("Added message {}: role={}, contentLength={}", i, role, content.length());
+                
+                log.debug("Added message {}: role={}, contentLength={}", i, role, msg.getContent().length());
             }
-            log.info("Total messages in prompt: {} (system + {} history + current)", 
+            log.info("Total messages in prompt: {} (system + {} history + tool results + current)", 
                     messages.size(), historyMessages.size() - startIndex);
             
             // 2.3 添加当前用户消息

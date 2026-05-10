@@ -53,4 +53,9 @@ public class ToolCallRecord {
      * 错误信息（失败时）
      */
     private String errorMessage;
+
+    /**
+     * 工具调用ID（用于关联工具调用和结果）
+     */
+    private String toolCallId;
 }
