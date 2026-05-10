@@ -101,25 +101,54 @@ const McpServerPage: React.FC = () => {
     }
 
     const handleStartRuntime = async () => {
+        setRuntimeLoading(true)
         try {
             const res = await startRuntime()
             if (res.success) {
                 message.success('MCP Runtime 容器已启动')
-                fetchRuntimeStatus()
+                // 轮询刷新状态，直到容器真正运行
+                await pollRuntimeStatus(true, 10, 1000)
             }
         } catch (error) {
             message.error('启动容器失败')
+        } finally {
+            setRuntimeLoading(false)
         }
     }
 
     const handleStopRuntime = async () => {
+        setRuntimeLoading(true)
         try {
             await stopRuntime()
             message.success('MCP Runtime 容器已停止')
-            fetchRuntimeStatus()
+            // 轮询刷新状态，直到容器真正停止
+            await pollRuntimeStatus(false, 10, 1000)
         } catch (error) {
             message.error('停止容器失败')
+        } finally {
+            setRuntimeLoading(false)
         }
+    }
+
+    // 轮询检查容器状态
+    const pollRuntimeStatus = async (expectedRunning: boolean, maxAttempts: number, interval: number) => {
+        for (let i = 0; i < maxAttempts; i++) {
+            await new Promise(resolve => setTimeout(resolve, interval))
+            try {
+                const res = await getRuntimeStatus()
+                if (res.success && res.data) {
+                    setRuntimeStatus(res.data)
+                    // 检查状态是否达到预期
+                    if (res.data.running === expectedRunning) {
+                        return
+                    }
+                }
+            } catch (e) {
+                // 忽略错误，继续轮询
+            }
+        }
+        // 轮询结束，最后一次刷新
+        await fetchRuntimeStatus()
     }
 
     const handleViewRuntimeLogs = async () => {
@@ -367,7 +396,15 @@ const McpServerPage: React.FC = () => {
         RUNNING: {text: '运行中', color: 'green', icon: <ContainerOutlined/>},
         STOPPED: {text: '已停止', color: 'red', icon: <StopOutlined/>},
         ERROR: {text: '异常', color: 'orange', icon: <ExclamationCircleOutlined/>},
-        NOT_FOUND: {text: '未启动', color: 'gray', icon: <ContainerOutlined/>}
+        NOT_FOUND: {text: '未启动', color: 'gray', icon: <ContainerOutlined/>},
+        INSTALLING: {text: '安装中', color: 'blue', icon: <ContainerOutlined/>},
+        // 小写状态映射
+        running: {text: '运行中', color: 'green', icon: <ContainerOutlined/>},
+        stopped: {text: '已停止', color: 'red', icon: <StopOutlined/>},
+        error: {text: '异常', color: 'orange', icon: <ExclamationCircleOutlined/>},
+        not_found: {text: '未启动', color: 'gray', icon: <ContainerOutlined/>},
+        installing: {text: '安装中', color: 'blue', icon: <ContainerOutlined/>},
+        unknown: {text: '未知', color: 'gray', icon: <ContainerOutlined/>}
     }
 
     const columns: ColumnsType<McpServer> = [
@@ -538,6 +575,7 @@ const McpServerPage: React.FC = () => {
                                 danger
                                 icon={<StopOutlined/>}
                                 onClick={handleStopRuntime}
+                                loading={runtimeLoading}
                             >
                                 停止容器
                             </Button>
@@ -547,6 +585,7 @@ const McpServerPage: React.FC = () => {
                                 type="primary"
                                 icon={<PlayCircleOutlined/>}
                                 onClick={handleStartRuntime}
+                                loading={runtimeLoading}
                             >
                                 启动容器
                             </Button>
@@ -564,8 +603,18 @@ const McpServerPage: React.FC = () => {
                                 {runtimeStatus.running ? '运行中' : '已停止'}
                             </Tag>
                         </Descriptions.Item>
-                        <Descriptions.Item label="状态">{runtimeStatus.state}</Descriptions.Item>
-                        <Descriptions.Item label="健康检查">{runtimeStatus.health}</Descriptions.Item>
+                        <Descriptions.Item label="状态">
+                            {runtimeStatus.state === 'running' ? '运行中' : 
+                             runtimeStatus.state === 'not_available' ? '不可用' : 
+                             runtimeStatus.state === 'exited' ? '已退出' : 
+                             runtimeStatus.state}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="健康检查">
+                            {runtimeStatus.health === 'healthy' ? '健康' : 
+                             runtimeStatus.health === 'unhealthy' ? '不健康' : 
+                             runtimeStatus.health === 'unknown' ? '未知' : 
+                             runtimeStatus.health || '-'}
+                        </Descriptions.Item>
                     </Descriptions>
                 )}
                 {!runtimeStatus && (

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestTemplate;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -37,6 +38,7 @@ public class DockerMcpClient implements McpClient {
 
     private final ObjectMapper objectMapper;
     private final McpRuntimeManager runtimeManager;
+    private final RestTemplate restTemplate;
     private final AtomicInteger requestIdCounter = new AtomicInteger(1);
 
     private McpServerConfig config;
@@ -44,9 +46,10 @@ public class DockerMcpClient implements McpClient {
     private JsonNode serverCapabilities;
     private Integer processPid;
 
-    public DockerMcpClient(ObjectMapper objectMapper, McpRuntimeManager runtimeManager) {
+    public DockerMcpClient(ObjectMapper objectMapper, McpRuntimeManager runtimeManager, RestTemplate restTemplate) {
         this.objectMapper = objectMapper;
         this.runtimeManager = runtimeManager;
+        this.restTemplate = restTemplate;
     }
 
     @Override
@@ -76,9 +79,11 @@ public class DockerMcpClient implements McpClient {
             startRequest.put("env", env);
 
             String startJson = objectMapper.writeValueAsString(startRequest);
+            log.info("Sending start request to MCP Runtime: {}", startJson);
 
             // 使用 HTTP 客户端发送请求
             String response = sendHttpPost(startUrl, startJson);
+            log.info("MCP Runtime response: {}", response);
             JsonNode startResponse = objectMapper.readTree(response);
 
             if (!"started".equals(startResponse.path("status").asText()) &&
@@ -109,13 +114,9 @@ public class DockerMcpClient implements McpClient {
 
     @Override
     public boolean isConnected() {
-        if (!connected) {
-            return false;
-        }
-
-        // 检查进程状态
-        McpRuntimeManager.ProcessStatus status = runtimeManager.getProcessStatus(config.getName());
-        return "running".equals(status.getStatus());
+        // 简化判断：只要 connected 为 true 就认为已连接
+        // 因为进程状态已经通过 HTTP API 验证
+        return connected;
     }
 
     @Override
@@ -206,6 +207,31 @@ public class DockerMcpClient implements McpClient {
         connected = false;
         processPid = null;
         log.info("Disconnected from MCP Server: {}", config.getName());
+    }
+
+    /**
+     * 只关闭连接，不停止进程（用于 refreshTools 等场景）
+     */
+    public void closeConnection() {
+        if (!connected) {
+            return;
+        }
+
+        log.info("Closing connection to MCP Server without stopping process: {}", config.getName());
+
+        try {
+            // 发送 shutdown 通知（可选，不强制要求）
+            if (isConnected()) {
+                sendJsonRpcNotification("notifications/shutdown", Map.of());
+            }
+        } catch (Exception e) {
+            log.debug("Error sending shutdown notification: {}", e.getMessage());
+        }
+
+        // 不调用 stopServerProcess，保持进程运行
+        connected = false;
+        processPid = null;
+        log.info("Closed connection to MCP Server: {}", config.getName());
     }
 
     @Override
@@ -309,28 +335,13 @@ public class DockerMcpClient implements McpClient {
     }
 
     private String sendHttpPost(String url, String body) throws IOException {
-        java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
-                .connectTimeout(java.time.Duration.ofSeconds(30))
-                .build();
-
-        java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
-                .uri(java.net.URI.create(url))
-                .header("Content-Type", "application/json")
-                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body))
-                .build();
-
         try {
-            java.net.http.HttpResponse<String> response = client.send(
-                    request, java.net.http.HttpResponse.BodyHandlers.ofString());
-
-            if (response.statusCode() >= 400) {
-                throw new IOException("HTTP error " + response.statusCode() + ": " + response.body());
-            }
-
-            return response.body();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Request interrupted", e);
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            org.springframework.http.HttpEntity<String> request = new org.springframework.http.HttpEntity<>(body, headers);
+            return restTemplate.postForObject(url, request, String.class);
+        } catch (Exception e) {
+            throw new IOException("HTTP request failed: " + e.getMessage(), e);
         }
     }
 

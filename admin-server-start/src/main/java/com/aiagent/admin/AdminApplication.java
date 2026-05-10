@@ -5,11 +5,13 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication(scanBasePackages = "com.aiagent.admin")
 @EntityScan(basePackages = "com.aiagent.admin.domain.entity")
 @EnableJpaRepositories(basePackages = "com.aiagent.admin.domain.repository")
 @EnableEncryptableProperties
+@EnableScheduling
 public class AdminApplication {
 
     public static void main(String[] args) {

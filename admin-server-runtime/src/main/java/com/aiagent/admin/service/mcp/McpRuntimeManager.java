@@ -1,6 +1,7 @@
 package com.aiagent.admin.service.mcp;
 
 import com.aiagent.admin.domain.entity.McpServer;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.model.Container;
@@ -86,6 +87,12 @@ public class McpRuntimeManager {
     public void init() {
         log.info("Initializing MCP Runtime Manager, docker host: {}", dockerHost != null ? dockerHost : "(auto-detect)");
 
+        // 初始化 RestClient（不依赖 Docker）
+        this.restClient = RestClient.builder()
+                .baseUrl(getMcpHostBaseUrl())
+                .build();
+        log.info("RestClient initialized for MCP Runtime at {}", getMcpHostBaseUrl());
+
         try {
             DefaultDockerClientConfig.Builder configBuilder = DefaultDockerClientConfig.createDefaultConfigBuilder();
             if (dockerHost != null && !dockerHost.isBlank()) {
@@ -107,21 +114,9 @@ public class McpRuntimeManager {
             dockerClient.pingCmd().exec();
             log.info("Docker connection established successfully");
 
-            // 初始化 RestClient
-            this.restClient = RestClient.builder()
-                    .baseUrl(getMcpHostBaseUrl())
-                    .build();
-
-            // 检查/启动容器
-            ensureContainerRunning();
-
-            this.initialized = true;
         } catch (Exception e) {
-            log.error("Failed to initialize Docker client: {}. MCP Runtime features will be disabled.", e.getMessage());
-            log.error("On Windows, please ensure Docker Desktop is running and TCP port 2375 is exposed in settings, " +
-                    "or configure mcp.docker.host property.");
+            log.error("Failed to initialize Docker client: {}. Docker-related features will be disabled.", e.getMessage());
             this.dockerClient = null;
-            this.initialized = false;
         }
     }
 
@@ -147,61 +142,128 @@ public class McpRuntimeManager {
     /**
      * 确保容器正在运行
      * <p>
-     * 检查容器状态，如果不存在则创建，如果停止则启动。
+     * 检查 MCP Runtime HTTP 服务是否可用，如果不可用则尝试通过 Docker 命令启动容器。
      * </p>
      *
      * @return 容器 ID
      */
     public synchronized String ensureContainerRunning() {
-        if (dockerClient == null) {
-            log.warn("Docker client is not available. Cannot ensure container running.");
+        // 首先检查 MCP Runtime HTTP 服务是否可用
+        if (isMcpHostAvailable()) {
+            log.info("MCP Runtime is already running and accessible via HTTP");
+            // 如果 Docker 客户端可用，尝试获取容器 ID
+            if (dockerClient != null) {
+                return getContainerId().orElse(null);
+            }
             return null;
         }
-        // 检查容器是否存在
-        List<Container> containers = dockerClient.listContainersCmd()
-                .withShowAll(true)
-                .withNameFilter(List.of(CONTAINER_NAME))
-                .exec();
-
-        if (containers.isEmpty()) {
-            // 创建新容器
-            return createAndStartContainer();
+        
+        // MCP Runtime 不可用，尝试通过 Docker 命令启动容器
+        log.info("MCP Runtime is not available. Trying to start container via Docker command...");
+        
+        try {
+            // 先尝试启动已存在的容器
+            ProcessBuilder startBuilder = new ProcessBuilder("docker", "start", CONTAINER_NAME);
+            startBuilder.inheritIO();
+            Process startProcess = startBuilder.start();
+            int startExitCode = startProcess.waitFor();
+            
+            if (startExitCode == 0) {
+                log.info("Successfully started MCP runtime container: {}", CONTAINER_NAME);
+                // 不等待服务就绪，直接返回
+                // 前端会轮询检查状态
+                
+                // 获取容器 ID
+                if (dockerClient != null) {
+                    return getContainerId().orElse(null);
+                }
+                return CONTAINER_NAME;
+            } else {
+                // 容器可能不存在，尝试创建并启动
+                log.info("Container not found or failed to start. Trying to create and run...");
+                return createAndRunContainerViaDockerCommand();
+            }
+        } catch (Exception e) {
+            log.error("Failed to start MCP runtime container via Docker command: {}", e.getMessage(), e);
+            return null;
         }
-
-        Container container = containers.get(0);
-        this.containerId = container.getId();
-
-        // 检查容器状态
-        if (!"running".equals(container.getState())) {
-            log.info("Starting stopped MCP runtime container: {}", containerId);
-            dockerClient.startContainerCmd(containerId).exec();
-
-            // 等待服务就绪
-            waitForMcpHostReady();
+    }
+    
+    /**
+     * 通过 Docker 命令创建并运行容器
+     */
+    private String createAndRunContainerViaDockerCommand() {
+        try {
+            ProcessBuilder runBuilder = new ProcessBuilder(
+                "docker", "run", "-d",
+                "--name", CONTAINER_NAME,
+                "-p", hostPort + ":8080",
+                "-v", "mcp-servers:/mcp-servers",
+                "ai-agent-admin/mcp-runtime:latest"
+            );
+            runBuilder.inheritIO();
+            Process runProcess = runBuilder.start();
+            int runExitCode = runProcess.waitFor();
+            
+            if (runExitCode == 0) {
+                log.info("Successfully created and started MCP runtime container");
+                // 不等待服务就绪，直接返回
+                // 前端会轮询检查状态
+                return CONTAINER_NAME;
+            } else {
+                log.error("Failed to create MCP runtime container via Docker command");
+                return null;
+            }
+        } catch (Exception e) {
+            log.error("Failed to create MCP runtime container via Docker command: {}", e.getMessage(), e);
+            return null;
         }
-
-        return containerId;
+    }
+    
+    /**
+     * 检查 MCP Runtime HTTP 服务是否可用
+     */
+    private boolean isMcpHostAvailable() {
+        try {
+            RestClient restClient = RestClient.builder()
+                    .baseUrl(getMcpHostBaseUrl())
+                    .build();
+            ResponseEntity<String> response = restClient.get()
+                    .uri("/health")
+                    .retrieve()
+                    .toEntity(String.class);
+            return response.getStatusCode().is2xxSuccessful();
+        } catch (Exception e) {
+            log.debug("MCP Runtime health check failed: {}", e.getMessage());
+            return false;
+        }
     }
 
     /**
      * 获取当前容器 ID
      */
     public Optional<String> getContainerId() {
-        if (dockerClient == null) {
-            return Optional.empty();
-        }
         if (containerId != null) {
             return Optional.of(containerId);
         }
 
-        List<Container> containers = dockerClient.listContainersCmd()
-                .withShowAll(true)
-                .withNameFilter(List.of(CONTAINER_NAME))
-                .exec();
-
-        if (!containers.isEmpty()) {
-            this.containerId = containers.get(0).getId();
-            return Optional.of(containerId);
+        try {
+            // 使用 Docker 命令获取容器 ID
+            ProcessBuilder psBuilder = new ProcessBuilder("docker", "ps", "-q", "--filter", "name=" + CONTAINER_NAME);
+            psBuilder.redirectErrorStream(true);
+            Process psProcess = psBuilder.start();
+            
+            java.io.InputStream inputStream = psProcess.getInputStream();
+            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(inputStream));
+            String line = reader.readLine();
+            
+            int exitCode = psProcess.waitFor();
+            if (exitCode == 0 && line != null && !line.isEmpty()) {
+                this.containerId = line.trim();
+                return Optional.of(containerId);
+            }
+        } catch (Exception e) {
+            log.debug("Failed to get container ID via Docker command: {}", e.getMessage());
         }
 
         return Optional.empty();
@@ -211,6 +273,34 @@ public class McpRuntimeManager {
      * 获取容器状态
      */
     public ContainerStatus getContainerStatus() {
+        // 首先尝试通过 HTTP 直接检查 MCP Runtime 是否可用
+        try {
+            RestClient restClient = RestClient.builder()
+                    .baseUrl(getMcpHostBaseUrl())
+                    .build();
+            ResponseEntity<String> response = restClient.get()
+                    .uri("/health")
+                    .retrieve()
+                    .toEntity(String.class);
+            
+            if (response.getStatusCode().is2xxSuccessful()) {
+                // MCP Runtime 正在运行，尝试获取容器 ID
+                Optional<String> optId = getContainerId();
+                String containerId = optId.orElse(null);
+                
+                return ContainerStatus.builder()
+                        .containerId(containerId)
+                        .running(true)
+                        .state("running")
+                        .health("healthy")
+                        .statusText(response.getBody())
+                        .build();
+            }
+        } catch (Exception e) {
+            log.debug("MCP Runtime health check failed: {}", e.getMessage());
+        }
+        
+        // 如果 HTTP 检查失败，尝试通过 Docker API 获取状态
         if (dockerClient == null) {
             return ContainerStatus.notAvailable();
         }
@@ -252,16 +342,27 @@ public class McpRuntimeManager {
 
     /**
      * 停止容器
+     * <p>
+     * 通过 Docker 命令停止 MCP Runtime 容器。
+     * </p>
      */
     public void stopContainer() {
-        if (dockerClient == null) {
-            log.warn("Docker client is not available. Cannot stop container.");
-            return;
+        log.info("Stopping MCP runtime container via Docker command...");
+        
+        try {
+            ProcessBuilder stopBuilder = new ProcessBuilder("docker", "stop", CONTAINER_NAME);
+            stopBuilder.inheritIO();
+            Process stopProcess = stopBuilder.start();
+            int stopExitCode = stopProcess.waitFor();
+            
+            if (stopExitCode == 0) {
+                log.info("Successfully stopped MCP runtime container: {}", CONTAINER_NAME);
+            } else {
+                log.error("Failed to stop MCP runtime container: {}", CONTAINER_NAME);
+            }
+        } catch (Exception e) {
+            log.error("Failed to stop MCP runtime container via Docker command: {}", e.getMessage(), e);
         }
-        getContainerId().ifPresent(id -> {
-            log.info("Stopping MCP runtime container: {}", id);
-            dockerClient.stopContainerCmd(id).exec();
-        });
     }
 
     /**
@@ -285,25 +386,28 @@ public class McpRuntimeManager {
      * 获取容器日志
      */
     public String getContainerLogs(int tailLines) {
-        if (dockerClient == null) {
-            return "Docker client is not available";
-        }
-
-        Optional<String> optId = getContainerId();
-        if (optId.isEmpty()) {
-            return "Container not found";
-        }
-
         try {
-            return dockerClient.logContainerCmd(optId.get())
-                    .withStdOut(true)
-                    .withStdErr(true)
-                    .withTail(tailLines)
-                    .exec(new LogContainerResultCallback())
-                    .awaitCompletion()
-                    .toString();
+            ProcessBuilder logsBuilder = new ProcessBuilder("docker", "logs", "--tail", String.valueOf(tailLines), CONTAINER_NAME);
+            logsBuilder.redirectErrorStream(true);
+            Process logsProcess = logsBuilder.start();
+            
+            // 读取输出
+            java.io.InputStream inputStream = logsProcess.getInputStream();
+            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(inputStream));
+            StringBuilder logs = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                logs.append(line).append("\n");
+            }
+            
+            int exitCode = logsProcess.waitFor();
+            if (exitCode == 0) {
+                return logs.toString();
+            } else {
+                return "Failed to get container logs. Exit code: " + exitCode;
+            }
         } catch (Exception e) {
-            log.error("Failed to get container logs: {}", e.getMessage());
+            log.error("Failed to get container logs via Docker command: {}", e.getMessage());
             return "Error: " + e.getMessage();
         }
     }
@@ -411,6 +515,7 @@ public class McpRuntimeManager {
                 return ProcessStatus.builder()
                         .serverId(body.getServerId())
                         .status(body.getStatus())
+                        .installStatus(body.getInstallStatus())
                         .pid(body.getPid())
                         .uptimeSeconds(body.getUptimeSeconds())
                         .build();
@@ -595,6 +700,7 @@ public class McpRuntimeManager {
     public static class ProcessStatus {
         private String serverId;
         private String status;
+        private String installStatus;  // installing, ready, error
         private Integer pid;
         private double uptimeSeconds;
 
@@ -628,9 +734,13 @@ public class McpRuntimeManager {
 
     @Data
     private static class ProcessStatusResponse {
+        @JsonProperty("server_id")
         private String serverId;
         private String status;
+        @JsonProperty("install_status")
+        private String installStatus;
         private Integer pid;
+        @JsonProperty("uptime_seconds")
         private double uptimeSeconds;
         private List<String> command;
     }

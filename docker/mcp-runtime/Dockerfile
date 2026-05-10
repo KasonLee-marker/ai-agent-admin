@@ -34,13 +34,15 @@ RUN apt-get update && apt-get install -y \
     supervisor \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 uv (使用代理)
-RUN pip3 install --proxy="${HTTP_PROXY}" uv
-
 # 配置国内镜像源
-RUN npm config set registry https://registry.npmmirror.com \
-    && pip3 config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple \
-    && pip3 config set global.trusted-host pypi.tuna.tsinghua.edu.cn
+RUN npm config set registry https://registry.npmmirror.com
+
+# 使用 pipx 安装 uv（避免系统 Python 污染）
+RUN pip3 install --break-system-packages pipx && \
+    pipx install uv
+
+# 将 pipx 路径添加到 PATH
+ENV PATH="/root/.local/bin:${PATH}"
 
 # uv 使用国内镜像
 ENV UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
@@ -50,7 +52,7 @@ WORKDIR /mcp-host
 
 # 先复制依赖文件（利用 Docker 缓存层）
 COPY requirements.txt .
-RUN pip3 install --proxy="${HTTP_PROXY}" --no-cache-dir -r requirements.txt
+RUN pip3 install --break-system-packages --no-cache-dir -r requirements.txt
 
 # 复制 MCP Host 服务代码
 COPY . .

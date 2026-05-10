@@ -397,13 +397,41 @@ public class ChatServiceImpl implements ChatService {
         // 1. 加载Agent配置
         Agent agent = executionEngine.getAgent(session.getAgentId());
 
-        // 2. 构建消息列表
+        // 2. 构建消息列表（包含历史对话）
         List<ChatCompletionMessage> messages = new ArrayList<>();
+        
+        // 2.1 添加 System 消息
         String systemPrompt = executionEngine.buildSystemPrompt(agent);
         if (systemPrompt != null && !systemPrompt.isEmpty()) {
             String enhancedPrompt = buildSystemMessageWithRag(systemPrompt, sources);
             messages.add(new ChatCompletionMessage(enhancedPrompt, Role.SYSTEM));
         }
+        
+        // 2.2 加载历史对话消息（最近20条，避免超出上下文限制）
+        List<ChatMessage> historyMessages = chatMessageRepository.findBySessionIdOrderByCreatedAtAsc(session.getId());
+        int startIndex = Math.max(0, historyMessages.size() - 20); // 只取最近20条
+        log.info("Loading {} history messages for session {}, using last {}", 
+                historyMessages.size(), session.getId(), historyMessages.size() - startIndex);
+        for (int i = startIndex; i < historyMessages.size(); i++) {
+            ChatMessage msg = historyMessages.get(i);
+            Role role = switch (msg.getRole()) {
+                case USER -> Role.USER;
+                case ASSISTANT -> Role.ASSISTANT;
+                case SYSTEM -> Role.SYSTEM;
+                default -> Role.USER;
+            };
+            // 添加工具调用结果到消息中
+            String content = msg.getContent();
+            if (msg.getToolCalls() != null && !msg.getToolCalls().isEmpty()) {
+                content += "\n\n[工具调用结果]: " + msg.getToolCalls();
+            }
+            messages.add(new ChatCompletionMessage(content, role));
+            log.debug("Added message {}: role={}, contentLength={}", i, role, content.length());
+        }
+        log.info("Total messages in prompt: {} (system + {} history + current)", 
+                messages.size(), historyMessages.size() - startIndex);
+        
+        // 2.3 添加当前用户消息
         String userMessage = buildUserMessageWithRag(userContent, sources);
         messages.add(new ChatCompletionMessage(userMessage, Role.USER));
 
@@ -865,15 +893,42 @@ public class ChatServiceImpl implements ChatService {
         // 1. 加载Agent配置
         Agent agent = executionEngine.getAgent(session.getAgentId());
 
-        // 2. 构建消息列表
+        // 2. 构建消息列表（包含历史对话）
         List<ChatCompletionMessage> messages = new ArrayList<>();
+        
+        // 2.1 添加 System 消息
         String systemPrompt = executionEngine.buildSystemPrompt(agent);
         if (systemPrompt != null && !systemPrompt.isEmpty()) {
             // 如果有RAG来源，注入到系统消息
             String enhancedPrompt = buildSystemMessageWithRag(systemPrompt, sources);
             messages.add(new ChatCompletionMessage(enhancedPrompt, Role.SYSTEM));
         }
-        // 用户消息（含RAG上下文）
+        
+        // 2.2 加载历史对话消息（最近20条，避免超出上下文限制）
+        List<ChatMessage> historyMessages = chatMessageRepository.findBySessionIdOrderByCreatedAtAsc(session.getId());
+        int startIndex = Math.max(0, historyMessages.size() - 20); // 只取最近20条
+        log.info("Loading {} history messages for session {}, using last {}", 
+                historyMessages.size(), session.getId(), historyMessages.size() - startIndex);
+        for (int i = startIndex; i < historyMessages.size(); i++) {
+            ChatMessage msg = historyMessages.get(i);
+            Role role = switch (msg.getRole()) {
+                case USER -> Role.USER;
+                case ASSISTANT -> Role.ASSISTANT;
+                case SYSTEM -> Role.SYSTEM;
+                default -> Role.USER;
+            };
+            // 添加工具调用结果到消息中
+            String content = msg.getContent();
+            if (msg.getToolCalls() != null && !msg.getToolCalls().isEmpty()) {
+                content += "\n\n[工具调用结果]: " + msg.getToolCalls();
+            }
+            messages.add(new ChatCompletionMessage(content, role));
+            log.debug("Added message {}: role={}, contentLength={}", i, role, content.length());
+        }
+        log.info("Total messages in prompt: {} (system + {} history + current)", 
+                messages.size(), historyMessages.size() - startIndex);
+        
+        // 2.3 添加当前用户消息
         String userMessage = buildUserMessageWithRag(userContent, sources);
         messages.add(new ChatCompletionMessage(userMessage, Role.USER));
 

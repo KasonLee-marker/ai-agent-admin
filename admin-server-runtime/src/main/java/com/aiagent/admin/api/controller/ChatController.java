@@ -2,8 +2,11 @@ package com.aiagent.admin.api.controller;
 
 import com.aiagent.admin.api.dto.*;
 import com.aiagent.admin.domain.entity.Agent;
+import com.aiagent.admin.domain.entity.ChatMessage;
 import com.aiagent.admin.domain.entity.ChatSession;
+import com.aiagent.admin.domain.enums.MessageRole;
 import com.aiagent.admin.domain.repository.AgentRepository;
+import com.aiagent.admin.domain.repository.ChatMessageRepository;
 import com.aiagent.admin.domain.repository.ChatSessionRepository;
 import com.aiagent.admin.service.ChatService;
 import com.aiagent.admin.service.impl.AgentExecutionEngine;
@@ -52,6 +55,7 @@ public class ChatController {
     private final AgentExecutionEngine executionEngine;
     private final AgentRepository agentRepository;
     private final ChatSessionRepository chatSessionRepository;
+    private final ChatMessageRepository chatMessageRepository;
     private final ObjectMapper objectMapper;
 
     /**
@@ -258,13 +262,42 @@ public class ChatController {
         try {
             Agent agent = executionEngine.getAgent(session.getAgentId());
 
-            // 2. 构建消息列表
+            // 2. 构建消息列表（包含历史对话）
             List<org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage> messages = new java.util.ArrayList<>();
+            
+            // 2.1 添加 System 消息
             String systemPrompt = executionEngine.buildSystemPrompt(agent);
             if (systemPrompt != null && !systemPrompt.isEmpty()) {
                 messages.add(new org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage(
                         systemPrompt, org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage.Role.SYSTEM));
             }
+            
+            // 2.2 加载历史对话消息（最近20条，避免超出上下文限制）
+            List<ChatMessage> historyMessages = chatMessageRepository.findBySessionIdOrderByCreatedAtAsc(session.getId());
+            int startIndex = Math.max(0, historyMessages.size() - 20); // 只取最近20条
+            log.info("Loading {} history messages for session {}, using last {}", 
+                    historyMessages.size(), session.getId(), historyMessages.size() - startIndex);
+            for (int i = startIndex; i < historyMessages.size(); i++) {
+                ChatMessage msg = historyMessages.get(i);
+                org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage.Role role = 
+                    switch (msg.getRole()) {
+                        case USER -> org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage.Role.USER;
+                        case ASSISTANT -> org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage.Role.ASSISTANT;
+                        case SYSTEM -> org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage.Role.SYSTEM;
+                        default -> org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage.Role.USER;
+                    };
+                // 添加工具调用结果到消息中
+                String content = msg.getContent();
+                if (msg.getToolCalls() != null && !msg.getToolCalls().isEmpty()) {
+                    content += "\n\n[工具调用结果]: " + msg.getToolCalls();
+                }
+                messages.add(new org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage(content, role));
+                log.debug("Added message {}: role={}, contentLength={}", i, role, content.length());
+            }
+            log.info("Total messages in prompt: {} (system + {} history + current)", 
+                    messages.size(), historyMessages.size() - startIndex);
+            
+            // 2.3 添加当前用户消息
             messages.add(new org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage(
                     request.getContent(), org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage.Role.USER));
 

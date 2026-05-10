@@ -24,9 +24,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import psutil
-from fastapi import FastAPI, HTTPException, BackgroundTasks
-from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel, Field
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
+from fastapi.responses import PlainTextResponse, JSONResponse
+from pydantic import BaseModel, Field, ValidationError
 
 # 配置日志
 logging.basicConfig(
@@ -53,12 +53,15 @@ class McpProcess:
     process: subprocess.Popen
     command: List[str]
     env: Dict[str, str]
-    start_time: float = field(default_factory=time.time)
-    request_id_counter: int = 0
+    request_id_counter: int = field(default=0)
     pending_requests: Dict[int, asyncio.Future] = field(default_factory=dict)
-    reader_task: Optional[asyncio.Task] = None
-    writer_task: Optional[asyncio.Task] = None
+    reader_task: Optional[asyncio.Task] = field(default=None)
+    writer_task: Optional[asyncio.Task] = field(default=None)
     lock: threading.RLock = field(default_factory=threading.RLock)
+    install_status: str = field(default="installing")  # installing, ready, error
+    install_error: Optional[str] = field(default=None)
+    install_start_time: float = field(default_factory=time.time)
+    start_time: float = field(default_factory=time.time)  # 进程启动时间
 
     @property
     def pid(self) -> int:
@@ -93,6 +96,7 @@ class ServerStatusResponse(BaseModel):
     """服务器状态响应"""
     server_id: str
     status: str  # running, stopped, error
+    install_status: Optional[str] = None  # installing, ready, error
     pid: Optional[int]
     uptime_seconds: float
     command: List[str]
@@ -120,6 +124,7 @@ def get_log_file(server_id: str) -> Path:
 async def read_process_output(server_id: str, proc: McpProcess):
     """持续读取进程 stdout，处理 JSON-RPC 响应"""
     log_file = get_log_file(server_id)
+    first_output = True
 
     try:
         while proc.is_running:
@@ -138,6 +143,12 @@ async def read_process_output(server_id: str, proc: McpProcess):
                 # 记录到日志文件
                 with open(log_file, 'a', encoding='utf-8') as f:
                     f.write(f'{line_str}\n')
+
+                # 第一次收到输出，标记为就绪
+                if first_output:
+                    first_output = False
+                    proc.install_status = "ready"
+                    logger.info(f'[{server_id}] MCP Server is ready (first output received)')
 
                 # 解析 JSON-RPC 响应
                 try:
@@ -220,6 +231,17 @@ app = FastAPI(
 )
 
 
+@app.exception_handler(ValidationError)
+async def validation_exception_handler(request: Request, exc: ValidationError):
+    """处理 Pydantic 验证错误"""
+    logger.error(f'Validation error: {exc}')
+    logger.error(f'Request body: {await request.body()}')
+    return JSONResponse(
+        status_code=422,
+        content={'detail': exc.errors()}
+    )
+
+
 @app.get('/health')
 async def health_check():
     """健康检查"""
@@ -229,7 +251,8 @@ async def health_check():
 @app.post('/servers/{server_id}/start')
 async def start_server(server_id: str, request: StartServerRequest):
     """启动一个新的 MCP Server 进程"""
-
+    logger.info(f'Received start request for server: {server_id}, command: {request.command}, env: {request.env}')
+    
     with process_lock:
         if server_id in processes:
             existing = processes[server_id]
@@ -254,6 +277,44 @@ async def start_server(server_id: str, request: StartServerRequest):
         # 准备环境变量
         env = os.environ.copy()
         env.update(request.env)
+
+        # 如果是 npx 命令，检查本地是否已有该包
+        if full_command and full_command[0] == 'npx':
+            # 提取包名（通常是第二个参数）
+            package_name = None
+            package_index = -1
+            for i, arg in enumerate(full_command):
+                if arg.startswith('@') and '/' in arg:
+                    package_name = arg
+                    package_index = i
+                    break
+            
+            if package_name:
+                # 检查本地 node_modules 中是否有该包
+                # 首先检查是否有 index.js（JavaScript 包）
+                local_js_path = f'/mcp-servers/node_modules/{package_name}/dist/index.js'
+                if os.path.exists(local_js_path):
+                    logger.info(f'Using local JS package for {server_id}: {local_js_path}')
+                    # 替换命令为本地路径
+                    full_command = ['node', local_js_path] + full_command[package_index+1:]
+                else:
+                    # 检查是否有二进制文件（如 excel-mcp-server）
+                    package_base_name = package_name.split('/')[-1]
+                    binary_paths = [
+                        f'/mcp-servers/node_modules/{package_name}/dist/{package_base_name}_linux_amd64_v1/{package_base_name}',
+                        f'/mcp-servers/node_modules/{package_name}/dist/{package_base_name}_linux_arm64_v8.0/{package_base_name}',
+                        f'/mcp-servers/node_modules/{package_name}/dist/{package_base_name}_linux_386_sse2/{package_base_name}',
+                    ]
+                    binary_found = False
+                    for binary_path in binary_paths:
+                        if os.path.exists(binary_path):
+                            logger.info(f'Using local binary package for {server_id}: {binary_path}')
+                            full_command = [binary_path] + full_command[package_index+1:]
+                            binary_found = True
+                            break
+                    
+                    if not binary_found:
+                        logger.info(f'Local package not found for {server_id}, will use npx')
 
         # 启动进程
         log_file = get_log_file(server_id)
@@ -296,8 +357,10 @@ async def start_server(server_id: str, request: StartServerRequest):
 
         return {
             'status': 'started',
+            'install_status': 'installing',
             'pid': process.pid,
-            'command': full_command
+            'command': full_command,
+            'message': 'MCP Server is starting, please wait for installation to complete'
         }
 
 
@@ -395,10 +458,11 @@ async def get_server_status(server_id: str) -> ServerStatusResponse:
         proc = processes[server_id]
 
         if proc.is_running:
-            uptime = time.time() - proc.start_time
+            uptime = time.time() - proc.install_start_time
             return ServerStatusResponse(
                 server_id=server_id,
                 status='running',
+                install_status=proc.install_status,
                 pid=proc.pid,
                 uptime_seconds=uptime,
                 command=proc.command
@@ -407,6 +471,7 @@ async def get_server_status(server_id: str) -> ServerStatusResponse:
             return ServerStatusResponse(
                 server_id=server_id,
                 status='stopped',
+                install_status=proc.install_status if proc.install_status != 'installing' else 'error',
                 pid=proc.pid,
                 uptime_seconds=0,
                 command=proc.command

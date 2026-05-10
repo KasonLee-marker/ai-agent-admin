@@ -15,13 +15,19 @@ import com.aiagent.admin.domain.repository.McpServerRepository;
 import com.aiagent.admin.domain.repository.ToolRepository;
 import com.aiagent.admin.service.IdGenerator;
 import com.aiagent.admin.service.McpServerService;
+import com.aiagent.admin.service.event.McpServerRefreshEvent;
 import com.aiagent.admin.service.mcp.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -48,6 +54,7 @@ public class McpServerServiceImpl implements McpServerService {
     private final ObjectMapper objectMapper;
     private final McpClientFactory mcpClientFactory;
     private final McpRuntimeManager mcpRuntimeManager;
+    private final ApplicationEventPublisher eventPublisher;
 
     public McpServerServiceImpl(McpServerRepository mcpServerRepository,
                                 ToolRepository toolRepository,
@@ -56,7 +63,8 @@ public class McpServerServiceImpl implements McpServerService {
                                 IdGenerator idGenerator,
                                 ObjectMapper objectMapper,
                                 McpClientFactory mcpClientFactory,
-                                McpRuntimeManager mcpRuntimeManager) {
+                                McpRuntimeManager mcpRuntimeManager,
+                                ApplicationEventPublisher eventPublisher) {
         this.mcpServerRepository = mcpServerRepository;
         this.toolRepository = toolRepository;
         this.agentToolRepository = agentToolRepository;
@@ -65,6 +73,7 @@ public class McpServerServiceImpl implements McpServerService {
         this.objectMapper = objectMapper;
         this.mcpClientFactory = mcpClientFactory;
         this.mcpRuntimeManager = mcpRuntimeManager;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -107,11 +116,40 @@ public class McpServerServiceImpl implements McpServerService {
 
             // 创建 MCP Server，传入 request 中的 description（优先级高于 JSON 中的 description）
             McpServer server = createMcpServerFromConfig(serverName, serverConfig, transportType, request.getDescription());
-            created.add(toResponseWithToolCount(server));
             log.info("Created MCP Server '{}' (transport: {}, description: {})", serverName, transportType,
                     request.getDescription() != null ? "from request" : "from JSON/config");
-            // 刷新工具列表
-            refreshTools(server.getId());
+            
+            // 对于 stdio + DOCKER 模式，异步刷新工具列表（避免 npx 安装超时）
+            if ("stdio".equals(transportType) && "DOCKER".equals(server.getRuntimeMode())) {
+                final String serverId = server.getId();
+                log.info("Scheduling async tool refresh event for MCP Server: {}", serverId);
+                log.info("Transaction active: {}", TransactionSynchronizationManager.isActualTransactionActive());
+                
+                // 在事务提交后发布事件
+                if (TransactionSynchronizationManager.isActualTransactionActive()) {
+                    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            log.info("Publishing async tool refresh event for MCP Server after commit: {}", serverId);
+                            eventPublisher.publishEvent(new McpServerRefreshEvent(serverId));
+                        }
+                    });
+                } else {
+                    // 如果没有事务，直接发布事件
+                    log.warn("No active transaction, publishing event immediately for MCP Server: {}", serverId);
+                    eventPublisher.publishEvent(new McpServerRefreshEvent(serverId));
+                }
+            } else {
+                // 对于其他模式，同步刷新工具列表
+                refreshTools(server.getId());
+            }
+            
+            // 重新加载 server 以获取更新后的状态
+            final String serverId = server.getId();
+            McpServer updatedServer = mcpServerRepository.findById(serverId)
+                    .orElseThrow(() -> new IllegalArgumentException("MCP Server not found after refresh: " + serverId));
+            
+            created.add(toResponseWithToolCount(updatedServer));
         }
 
         return created;
@@ -326,8 +364,55 @@ public class McpServerServiceImpl implements McpServerService {
     @Override
     @Transactional(readOnly = true)
     public Optional<McpServerResponse> getById(String id) {
-        return mcpServerRepository.findById(id)
-                .map(this::toResponseWithToolCount);
+        Optional<McpServer> serverOpt = mcpServerRepository.findById(id);
+        if (serverOpt.isEmpty()) {
+            return Optional.empty();
+        }
+        
+        McpServer server = serverOpt.get();
+        
+        // 对于 stdio + DOCKER 模式，同步进程状态
+        if ("stdio".equals(server.getTransportType()) && "DOCKER".equals(server.getRuntimeMode())) {
+            try {
+                syncProcessStatus(server);
+            } catch (Exception e) {
+                log.warn("Failed to sync process status for MCP Server {}: {}", id, e.getMessage());
+            }
+        }
+        
+        return Optional.of(toResponseWithToolCount(server));
+    }
+    
+    /**
+     * 同步 MCP Server 进程状态
+     */
+    private void syncProcessStatus(McpServer server) {
+        McpRuntimeManager.ProcessStatus status = mcpRuntimeManager.getProcessStatus(server.getName());
+        if (status == null) {
+            return;
+        }
+        
+        String installStatus = status.getInstallStatus();
+        String processStatus = status.getStatus();
+        
+        // 根据 install_status 判断进程状态
+        if ("installing".equals(installStatus)) {
+            processStatus = "INSTALLING";
+        } else if ("ready".equals(installStatus)) {
+            processStatus = "RUNNING";
+        } else if ("error".equals(installStatus)) {
+            processStatus = "ERROR";
+        } else if ("unknown".equals(status.getStatus()) || "not_found".equals(status.getStatus())) {
+            // 进程不存在或未知状态
+            processStatus = "STOPPED";
+        } else if ("running".equals(status.getStatus()) && installStatus == null) {
+            // 兼容旧版本
+            processStatus = "RUNNING";
+        }
+        
+        // 更新数据库状态（不保存，因为方法是 readOnly）
+        server.setProcessStatus(processStatus);
+        server.setProcessId(status.getPid());
     }
 
     @Override
@@ -465,8 +550,23 @@ public class McpServerServiceImpl implements McpServerService {
                 registerMcpTool(mcpTool, server);
             }
 
-            // 断开连接
-            client.disconnect();
+            // 对于 Docker 模式，只关闭连接而不停止进程
+            // 进程由 MCP Runtime 管理，保持运行状态
+            if ("stdio".equals(server.getTransportType()) && "DOCKER".equals(server.getRuntimeMode())) {
+                // 只发送 shutdown 通知，不停止进程
+                try {
+                    if (client instanceof DockerMcpClient) {
+                        ((DockerMcpClient) client).closeConnection();
+                    } else {
+                        client.disconnect();
+                    }
+                } catch (Exception e) {
+                    log.warn("Error closing connection: {}", e.getMessage());
+                }
+            } else {
+                // 断开连接（会停止进程）
+                client.disconnect();
+            }
 
             // 更新进程状态（Docker 模式下）
             if ("stdio".equals(server.getTransportType()) && "DOCKER".equals(server.getRuntimeMode())) {
@@ -673,13 +773,71 @@ public class McpServerServiceImpl implements McpServerService {
      */
     private void updateProcessStatus(McpServer server) {
         if (!"DOCKER".equals(server.getRuntimeMode())) {
+            log.debug("Server {} is not DOCKER mode, skipping process status update", server.getName());
             return;
         }
 
-        McpRuntimeManager.ProcessStatus status = mcpRuntimeManager.getProcessStatus(server.getName());
-        server.setProcessStatus(status.getStatus());
-        server.setProcessId(status.getPid());
-        mcpServerRepository.save(server);
+        try {
+            // 直接从 MCP Runtime HTTP API 获取进程状态
+            String statusUrl = String.format("%s/servers/%s/status",
+                    mcpRuntimeManager.getMcpHostBaseUrl(), server.getName());
+            
+            log.info("Updating process status for {} from URL: {}", server.getName(), statusUrl);
+            
+            RestTemplate restTemplate = new RestTemplate();
+            ResponseEntity<Map> response = restTemplate.getForEntity(statusUrl, Map.class);
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Map<String, Object> status = response.getBody();
+                String rawStatus = (String) status.get("status");
+                String installStatus = (String) status.get("install_status");  // 注意：JSON 字段名是 install_status
+                Object pidObj = status.get("pid");
+                Integer processId = null;
+                if (pidObj instanceof Integer) {
+                    processId = (Integer) pidObj;
+                } else if (pidObj instanceof Long) {
+                    processId = ((Long) pidObj).intValue();
+                } else if (pidObj instanceof Number) {
+                    processId = ((Number) pidObj).intValue();
+                }
+                
+                // 调试日志
+                log.info("Raw status from MCP Runtime: status={}, install_status={}, pid={}", 
+                        rawStatus, installStatus, pidObj);
+                
+                // 根据状态映射到标准状态
+                String processStatus;
+                if (("running".equals(rawStatus) || "already_running".equals(rawStatus)) && "ready".equals(installStatus)) {
+                    processStatus = "RUNNING";
+                } else if (("running".equals(rawStatus) || "already_running".equals(rawStatus)) && "installing".equals(installStatus)) {
+                    processStatus = "INSTALLING";
+                } else if ("not_found".equals(rawStatus) || "stopped".equals(rawStatus) || "unknown".equals(rawStatus)) {
+                    processStatus = "STOPPED";
+                } else if ("error".equals(installStatus)) {
+                    processStatus = "ERROR";
+                } else if ("running".equals(rawStatus) || "already_running".equals(rawStatus)) {
+                    // 如果正在运行但 install_status 不是 ready，也认为是 RUNNING
+                    processStatus = "RUNNING";
+                } else {
+                    processStatus = rawStatus != null ? rawStatus.toUpperCase() : "UNKNOWN";
+                }
+                
+                log.info("Mapped process status: {} -> {}", rawStatus, processStatus);
+                
+                server.setProcessStatus(processStatus);
+                server.setProcessId(processId);
+                mcpServerRepository.save(server);
+                
+                log.info("Updated process status for {}: status={}, pid={}", 
+                        server.getName(), processStatus, processId);
+            } else {
+                log.warn("Failed to get process status for {}: HTTP {}", 
+                        server.getName(), response.getStatusCode());
+            }
+        } catch (Exception e) {
+            log.warn("Failed to update process status for {}: {}", server.getName(), e.getMessage());
+            // 不抛出异常，避免影响主流程
+        }
     }
 
     @Override
@@ -741,15 +899,33 @@ public class McpServerServiceImpl implements McpServerService {
         McpRuntimeManager.ProcessStatus status = mcpRuntimeManager.getProcessStatus(server.getName());
 
         // 同步数据库状态
-        if (!status.getStatus().equals(server.getProcessStatus())) {
-            server.setProcessStatus(status.getStatus());
+        String installStatus = status.getInstallStatus();
+        String processStatus = status.getStatus();
+        
+        // 根据 install_status 判断进程状态
+        if ("installing".equals(installStatus)) {
+            processStatus = "INSTALLING";
+        } else if ("ready".equals(installStatus)) {
+            processStatus = "RUNNING";
+        } else if ("error".equals(installStatus)) {
+            processStatus = "ERROR";
+        } else if ("unknown".equals(status.getStatus()) || "not_found".equals(status.getStatus())) {
+            // 进程不存在或未知状态
+            processStatus = "STOPPED";
+        } else if ("running".equals(status.getStatus()) && installStatus == null) {
+            // 兼容旧版本
+            processStatus = "RUNNING";
+        }
+        
+        if (!processStatus.equals(server.getProcessStatus())) {
+            server.setProcessStatus(processStatus);
             server.setProcessId(status.getPid());
             mcpServerRepository.save(server);
         }
 
         return ProcessStatusDTO.builder()
                 .serverId(id)
-                .status(status.getStatus())
+                .status(processStatus)
                 .pid(status.getPid())
                 .uptimeSeconds(status.getUptimeSeconds())
                 .build();
