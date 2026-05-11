@@ -61,7 +61,6 @@ const McpServerPage: React.FC = () => {
 
     // 进程日志 Modal
     const [logModalVisible, setLogModalVisible] = useState(false)
-    const [logServerId, setLogServerId] = useState<string>('')
     const [logServerName, setLogServerName] = useState<string>('')
     const [processLogs, setProcessLogs] = useState<string>('')
     const [logsLoading, setLogsLoading] = useState(false)
@@ -306,7 +305,6 @@ const McpServerPage: React.FC = () => {
 
     // 查看进程日志
     const handleViewLogs = async (record: McpServer) => {
-        setLogServerId(record.id)
         setLogServerName(record.name)
         setLogModalVisible(true)
         setLogsLoading(true)
