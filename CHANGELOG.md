@@ -1,5 +1,49 @@
 # AI Agent Admin - 变更日志
 
+## v1.0.2 (2026-05-11) MCP Server 稳定性与 Agent 对话修复
+
+### 功能概述
+
+修复 MCP Server 创建超时问题、进程状态管理、Agent 对话历史上下文传递问题。
+
+### 修复内容
+
+#### MCP Server 稳定性
+
+- **异步创建 MCP Server** - 使用 `@Async` 和 `ApplicationEventPublisher` 实现异步创建，避免 HTTP 504 超时
+- **事务同步** - 使用 `TransactionSynchronization` 确保数据库事务提交后才触发事件
+- **进程状态轮询** - 添加 `pollAndUpdateStatus` 方法，自动跟踪 MCP Server 安装状态
+- **定时任务保活** - 每 30 秒检查进程状态，自动重启停止的进程
+- **刷新工具不停止进程** - 添加 `closeConnection()` 方法，刷新工具列表时只关闭连接不停止进程
+- **状态映射修复** - 支持 `already_running` 状态映射到 `RUNNING`
+
+#### Agent 对话历史上下文
+
+- **添加 `toolCallId` 字段** - 用于关联工具调用和结果
+- **修复历史消息加载** - 将工具调用结果作为独立的 TOOL 角色消息添加
+- **修复 `ChatController`** - `executeAgentStreamWithEvents` 方法使用 TOOL 角色
+- **修复 `ChatServiceImpl`** - `executeAgent` 和 `executeAgentStream` 方法使用 TOOL 角色
+
+### 新增文件
+
+- `McpServerAsyncService.java` - MCP Server 异步服务
+- `McpServerRefreshEvent.java` - MCP Server 刷新事件
+- `RestTemplateConfig.java` - RestTemplate 配置
+- `Dockerfile.windows` - Windows Docker 构建
+- `build-windows.bat` - Windows 构建脚本
+
+### 修改文件
+
+- `McpServerServiceImpl.java` - 异步创建、状态同步、刷新工具修复
+- `McpRuntimeManager.java` - 状态映射、JSON 解析修复
+- `DockerMcpClient.java` - 添加 `closeConnection()` 方法
+- `ChatController.java` - 历史消息加载修复
+- `ChatServiceImpl.java` - 历史消息加载修复
+- `ToolCallRecord.java` - 添加 `toolCallId` 字段
+- `AgentExecutionEngine.java` - 设置 `toolCallId`
+
+---
+
 ## v2.0.0 (2026-04-25) Agent MVP 版本
 
 ### 功能概述
